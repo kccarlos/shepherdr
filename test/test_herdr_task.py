@@ -1994,6 +1994,7 @@ class GateReview(unittest.TestCase):
         self.assertEqual(len(self.task["review_runs"]), 2)  # min 2: round 2 started
         code2 = self.commands.round_code(self.task["review_runs"][1])
         self.assertNotEqual(code, code2)
+        self.assertEqual(self.commands.read_verdict(f"`{code2} changes 0`\n", code2), (True, 0, ""))  # only minor findings: a pass
         self.screen(f"{code} pass\n")  # round 1's code on round 2's screen: no verdict
         self.commands.gate_reads(self.store, self.task)
         self.assertEqual(len(self.task["reviews"]), 1)
@@ -2034,15 +2035,18 @@ class GateReview(unittest.TestCase):
             f.write('#!/bin/sh\necho "home=$HOME"; ls -A "$HOME/.gemini/antigravity-cli" "$HOME/.gemini/antigravity-cli/cache"\n'
                     'touch "$HOME/ok" && echo wrote-tmp\ntouch gate2.txt 2>/dev/null || echo no-write-worktree\n'
                     'cat gate.txt >/dev/null && echo read-worktree\ngit log -1 --format=%s\n'
-                    f'cat {g}/settings.json 2>/dev/null || echo no-read-home\n')
+                    f'cat {g}/settings.json 2>/dev/null || echo no-read-home\n'
+                    'cat .env 2>/dev/null || echo no-read-env\n')
         os.chmod(fake, 0o755)
+        with open(os.path.join(self.wt, ".env"), "w") as f:  # herdr-secret env writes one: never readable in there
+            f.write("TOKEN=x\n")
         with mock.patch.object(launch, "SANDBOX_ROOT", os.path.join(root, "r")), mock.patch.object(launch, "HOME", home):
             argv = launch.sandboxed([fake, "-i", "hi"], self.wt)
         out = subprocess.run(argv, cwd=self.wt, capture_output=True, text=True, timeout=60,
                              env={**os.environ, "HOME": home, "PATH": bindir + ":/usr/bin:/bin:/usr/sbin"}).stdout
         self.assertRegex(out, rf"home={os.path.join(root, 'r')}/\d+\.\w+\n")
         for words in ("antigravity-oauth-token", "onboarding.json", "wrote-tmp", "no-write-worktree", "read-worktree", "gate",
-                      "no-read-home"):
+                      "no-read-home", "no-read-env"):
             self.assertIn(words, out)
         self.assertNotIn("settings.json", out)  # only the sign-in and onboarding are copied
         self.assertFalse(os.path.exists(os.path.join(self.wt, "gate2.txt")))

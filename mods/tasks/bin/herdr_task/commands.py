@@ -476,8 +476,8 @@ def gate_step(s, t):
            f"$TMPDIR, and can't reach Herdr. When done, end your last message with your findings, each with its level and "
            f"proof, between two lines of their own: first one holding only this round's code and the word begin, last one "
            f"holding only the code and your verdict: pass, or changes and how many findings are at or above Must fix. Herdr "
-           f"reads it from this terminal while {head[:7]} is the worktree's HEAD with nothing uncommitted. This round's "
-           f"code is {code}." if sand else
+           f"reads it from this terminal while {head[:7]} is the worktree's HEAD with nothing uncommitted, and runs this "
+           f"folder's check itself, outside the sandbox: don't run it here. This round's code is {code}." if sand else
         f"When done, record your verdict with one of "
         f"`{cmd} --pass` or `{cmd} --changes \"<each finding with its level and proof>\" --must-fix <how many are at or above "
         f"Must fix>`. It is taken only from this terminal while {head[:7]} is the worktree's HEAD with nothing uncommitted. "
@@ -822,15 +822,17 @@ def round_code(rn):
 
 def read_verdict(screen, code):
     """(passed, must_fix, findings) from a sandboxed reviewer's screen: its last line holding only
-    `code pass` or `code changes N`, the findings above it up to its `code begin` line (else its last 80 lines); else None."""
+    `code pass` or `code changes N` (0: a pass), the findings above it up to its `code begin` line
+    (else its last 80 lines); else None."""
     lines = screen.split("\n")
-    mark = re.compile(rf"^\W*{code}\s+(?:(begin)|(pass)|changes\s+([1-9]\d*))\W*$")
+    mark = re.compile(rf"^\W*{code}\s+(?:(begin)|(pass)|changes\s+(\d+))\W*$")
     ends = [(i, m) for i, m in enumerate(map(mark.match, lines)) if m and not m.group(1)]
     if not ends:
         return None
     end, m = ends[-1]
     begin = max((i for i, x in enumerate(lines[:end]) if (y := mark.match(x)) and y.group(1)), default=max(0, end - 80))
-    return bool(m.group(2)), 0 if m.group(2) else int(m.group(3)), "\n".join(x.strip() for x in lines[begin + 1:end]).strip()
+    must = 0 if m.group(2) else int(m.group(3))
+    return not must, must, "\n".join(x.strip() for x in lines[begin + 1:end]).strip()
 
 
 def gate_reads(s, t):

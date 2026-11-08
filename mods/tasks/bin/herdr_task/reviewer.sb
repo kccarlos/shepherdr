@@ -25,6 +25,8 @@
   (subpath (param "DEVDIR"))
   (subpath "/private/etc")
   (subpath "/dev"))
+;; Not even there: .env files (herdr-secret env writes secrets into one). After the allows: the last match wins.
+(deny file-read-data (regex #"/\.env(\.[^/]*)?$"))
 
 ;; Writes: only this run's temp dir, /dev/null and the terminal; the worktree and repo stay read-only.
 (deny file-write*)

@@ -4178,7 +4178,7 @@ class Checks(unittest.TestCase):
         rec = self.t["checks"][0]
         validate_check(rec)
         self.assertNotEqual(rec["exit"], 0)
-        self.assertIn("Killed", rec["output_tail"])
+        self.assertTrue(rec["output_tail"].endswith("Killed: ran longer than 20 minutes."))
 
     def test_a_run_whose_head_moved_or_task_left_ready_is_dropped_without_a_record(self):
         self.tick()
@@ -4214,3 +4214,14 @@ class Checks(unittest.TestCase):
         self.tick()
         self.assertEqual((self.t.get("checks"), self.t.get("check_run")), (None, None))
         self.assertFalse(os.path.exists(self.cwds[0]))
+
+    def test_a_run_killed_as_stale_is_never_recorded_even_if_ready_again(self):
+        self.tick()
+        self.terms["t1"]["state"] = "live"
+        self.t["state"] = "running"
+        self.tick()  # killed
+        self.t["state"] = "ready"
+        self.tick()  # reaped: dropped, then run again at the same head
+        self.assertIsNone(self.t.get("checks"))
+        self.tick()
+        self.assertEqual(len(self.cwds), 2)

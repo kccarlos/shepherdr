@@ -59,11 +59,11 @@ def checks_pass(s, t):
         if k is None and now() - c["started_at"] <= LIMIT_MS:
             return  # hc didn't answer: ask again next tick
         k = k or {}
-        stale = not ok or sha != c["sha"] or not k  # a terminal hc no longer knows: dropped, checked again
+        stale = not ok or sha != c["sha"] or not k or c.get("stale")  # a terminal hc no longer knows: dropped, checked again
         if k.get("state") == "live":
             if not stale and now() - c["started_at"] <= LIMIT_MS:
                 return
-            c["over"] = not stale
+            c["over"], c["stale"] = not stale, stale
             run(["hc", "kill", c["address"]])  # recorded or dropped once it has exited (hc rm needs that)
             s.dirty = True
             return
@@ -72,7 +72,7 @@ def checks_pass(s, t):
             code = k.get("exit_code")
             t.setdefault("checks", []).append({
                 "sha": c["sha"], "command": c["command"], "exit": 124 if c.get("over") else code if isinstance(code, int) else 1,
-                "output_tail": ((f"Killed: ran longer than {LIMIT_MS // 60000} minutes.\n" if c.get("over") else "") + tail)[-TAIL:],
+                "output_tail": (tail + (f"\nKilled: ran longer than {LIMIT_MS // 60000} minutes." if c.get("over") else ""))[-TAIL:],
                 "started_at": c["started_at"], "finished_at": now(), "by": c["address"], "ci": ci_of(t, c["sha"])})
         clean(s, c["tmp"])
         run(["hc", "rm", c["address"]])

@@ -50,8 +50,8 @@ facts only: no visual design and no implementation split. The screenshots are in
   from the task store at `service/model.ts:239` and mapped at `service/compat.ts:372-404`, with the status mapping at
   `service/compat.ts:44`.
 - Missing: each worker's CLI and model. Every live worker is labelled `cli: "claude"` (`service/compat.ts:403`), so
-  an agy or codex worker shows as claude. Snapshot rows have no model field. A model reaches the web only in a watched
-  Claude or Codex chat's `Chat.agent.model` (`service/compat.ts:684`), not for agy.
+  an agy or codex worker shows as claude. Snapshot rows have no model field. A model reaches the web only per watched
+  chat (`Chat.agent.model`, `compat.ts:684`; for agy too, as kind "claude", `compat.ts:677`) or per action (model-menu, restart-info, evidence argv).
 
 ### 3. Agent tree (Assistant → workers → reviewers, verifier)
 - Today: a task's header names at most one active subagent by role and CLI ("Reviewer · Codex at work",

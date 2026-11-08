@@ -73,3 +73,10 @@ answer (2026-11-08). It becomes the role allow lists in phase 3 (docs/factory.md
   herdr-core, although briefs say a throwaway core. A sheepdog watching that core would turn them into phone
   questions. FAC-28 was told to stop exactly those three and to move every ask-pane test and real run to a throwaway
   core (HC_SESSION shim plus HC_SOCKET). The real ask t79 (FAC-31 design approval) stays.
+- Size calls the Assistant made (overruns that were review fixes): FAC-32's usage plan at 117 lines (limit ~80; the
+  review's 5 majors changed the floor design); FAC-34's sheepdog note at 98 (~80, the orchestrator agreed).
+- Stale reviewers replaced (started before FAC-36's allow list): t6y, t6w, t75, t7b, t7n, t7p ended; their workers
+  rebase onto origin/kc-factory and say ready again. Starts of FAC-15, 28, 29, 35, 37, 38 reset to the merge-base
+  c9abed45 (G2's gate_step diffs from the stored start, which a rebase doesn't move).
+- Workers branch from the main folder's local kc-factory, so the Assistant's unpushed AGENTS.md/trial-log commits
+  end up in task branches and conflict once origin has them under other SHAs (FAC-11, 15, 28, 29, 35, 37, 38).

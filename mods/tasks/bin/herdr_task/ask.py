@@ -53,15 +53,15 @@ def news_line(rec):
 
 
 def cmd_ask(args):
-    if args.show:
+    if args.show is not None:
         rec = load(args.show)
         return say(args, rec, f"{rec['question']}\n" + (f"Answer: {rec['answer']}" if "answer" in rec else "Not answered yet."))
     question = " ".join((args.question or "").split())
     options = [" ".join(o.split()) for o in args.option or []]
     recommend = None if args.recommend is None else " ".join(args.recommend.split())
-    if not question or not all(options):
-        raise Fail('Say the question and each option: herdr-task ask "<question>" --option A --option B --recommend A')
-    if recommend is not None and recommend not in options:
+    if not question or len(options) < 2 or not all(options):
+        raise Fail('Say the question and at least two options: herdr-task ask "<question>" --option A --option B --recommend A')
+    if recommend not in options:
         raise Fail(f"--recommend must be one of the options: {', '.join(options) or 'none given'}")
     rec = {"id": secrets.token_hex(3), "question": question, "options": options, "recommend": recommend,
            "task": args.task, "to": os.environ.get("HC_TERMINAL_ID"), "at": now()}
@@ -71,7 +71,7 @@ def cmd_ask(args):
     try:
         r = run(["hc", "run", "--bg", "--json", "--no-notify", "--outlive-parent", "--name", f"ask-{rec['id']}", *labels, "--",
                  "env", f"HERDR_TASK_STORE={STORE}", sys.executable, ENTRY, "_ask-pane", rec["id"]])
-        rec["terminal"] = json.loads(r.stdout)["address"]
+        rec = {**load(rec["id"]), "terminal": json.loads(r.stdout)["address"]}  # the pane may have saved since
     except (Fail, OSError, ValueError, KeyError, TypeError) as e:
         os.unlink(path_of(rec["id"]))  # no pane, no ask
         raise Fail(f"couldn't start the ask pane: {e if isinstance(e, (Fail, OSError)) else (r.stderr or r.stdout).strip()}")
@@ -96,7 +96,7 @@ def cmd_ask_pane(args):
     print(rec["question"])
     for i, o in enumerate(rec["options"], 1):
         print(f"  {i}. {o}" + ("  (recommended)" if o == rec.get("recommend") else ""))
-    print(("Answer with a number or" if rec["options"] else "Answer in") + " your own words, then Enter:")
+    print("Answer with a number or your own words, then Enter:")
     report("blocked", "question", rec["question"])
     answer = ""
     while not answer:
@@ -104,10 +104,10 @@ def cmd_ask_pane(args):
             answer = " ".join(input("> ").split())
         except EOFError:
             raise Fail("no answer: the ask stays open")
-        if answer.isdigit() and 1 <= int(answer) <= len(rec["options"]):
+        if answer.isascii() and answer.isdigit() and 1 <= int(answer) <= len(rec["options"]):
             answer = rec["options"][int(answer) - 1]
     report("working")
-    rec.update(answer=answer, answered_at=now())
+    rec = {**load(args.id), "answer": answer, "answered_at": now()}  # as saved now (ask adds its terminal)
     save(rec)
     if rec.get("to"):
         # To the core this pane runs in (a throwaway core's terminals also carry its HC_SESSION).
@@ -116,7 +116,7 @@ def cmd_ask_pane(args):
             os.environ["HC_SOCKET"] = os.environ["HC_TERMINAL_SOCKET"]
         try:
             sent = send_or_hold(rec["to"], news_line(rec), "news")
-        except Fail:
+        except (Fail, OSError):  # no hc here: held all the same
             sent = None
         if not sent:  # held for the scheduler's next pass (news.held_pass)
             hold(rec["to"], news_line(rec), "news")

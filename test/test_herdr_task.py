@@ -3606,23 +3606,34 @@ class Asks(unittest.TestCase):
         self.assertEqual(msg["how"], "news")
         self.assertEqual(msg["text"], '<herdr-news task="FAC-3" event="answer" key="ab12cd">'
                                       'Ask ab12cd answered: No (asked: Ship ‹it› tonight?)</herdr-news>')
-        # Words of one's own are an answer too; no stdin leaves the ask open.
-        p = subprocess.run([sys.executable, self.entry, "_ask-pane", "ab12cd"], input="maybe later\n", capture_output=True, text=True, env=self.env)
-        self.assertEqual(self.record("ab12cd")["answer"], "maybe later", p.stderr)
+        # Words of one's own are an answer too (a digit hc can't count is words); no hc on PATH: held all the same.
+        p = subprocess.run([sys.executable, self.entry, "_ask-pane", "ab12cd"], input="² maybe later\n", capture_output=True, text=True,
+                           env={**self.env, "PATH": "/usr/bin:/bin", "HC_TERMINAL_SOCKET": "/nonexistent.sock"})
+        self.assertEqual(self.record("ab12cd")["answer"], "² maybe later", p.stderr)
+        self.assertEqual(len(self.held()["t5"]), 2)
+        # The ask saves the pane's terminal after the pane read the record: answering keeps it.
+        pane = subprocess.Popen([sys.executable, self.entry, "_ask-pane", "ab12cd"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, env=self.env)
+        pane.stdout.readline()  # the question: the record is read
+        rec = {**self.record("ab12cd"), "terminal": "t9"}
+        with open(os.path.join(self.store, "asks", "ab12cd.json"), "w") as f:
+            json.dump(rec, f)
+        pane.communicate("1\n")
+        self.assertEqual((self.record("ab12cd")["answer"], self.record("ab12cd")["terminal"]), ("Yes", "t9"))
         p = subprocess.run([sys.executable, self.entry, "ask", "--show", "ab12cd", "--json"], capture_output=True, text=True, env=self.env)
-        self.assertEqual(json.loads(p.stdout)["answer"], "maybe later", p.stderr)
+        self.assertEqual(json.loads(p.stdout)["answer"], "Yes", p.stderr)
 
     def test_recommend_must_be_an_option(self):
-        p = subprocess.run([sys.executable, self.entry, "ask", "Ship?", "--option", "Yes", "--recommend", "Maybe"],
+        p = subprocess.run([sys.executable, self.entry, "ask", "Ship?", "--option", "Yes", "--option", "No", "--recommend", "Maybe"],
                            capture_output=True, text=True, env=self.env)
         self.assertEqual(p.returncode, 1)
-        self.assertIn("--recommend must be one of the options: Yes", p.stderr)
+        self.assertIn("--recommend must be one of the options: Yes, No", p.stderr)
         self.assertFalse(os.path.exists(os.path.join(self.store, "asks")))
-        p = subprocess.run([sys.executable, self.entry, "ask", "Ship?", "--option", "  ", "--option", "No"],
-                           capture_output=True, text=True, env=self.env)
-        self.assertIn("Say the question and each option", p.stderr)
+        for opts in (["--option", "  ", "--option", "No", "--recommend", "No"], ["--option", "Yes", "--recommend", "Yes"],
+                     ["--option", "Yes", "--option", "No"]):
+            p = subprocess.run([sys.executable, self.entry, "ask", "Ship?", *opts], capture_output=True, text=True, env=self.env)
+            self.assertEqual(p.returncode, 1, opts)
         # hc refusing the pane leaves no ask behind.
-        p = subprocess.run([sys.executable, self.entry, "ask", "Ship?", "--option", " Yes ", "--recommend", " Yes"],
+        p = subprocess.run([sys.executable, self.entry, "ask", "Ship?", "--option", " Yes ", "--option", "No", "--recommend", " Yes"],
                            capture_output=True, text=True, env=self.env)
         self.assertIn("couldn't start the ask pane", p.stderr)
         self.assertEqual(os.listdir(os.path.join(self.store, "asks")), [])

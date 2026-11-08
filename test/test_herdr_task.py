@@ -3921,7 +3921,7 @@ class Asks(unittest.TestCase):
                        "task": "FAC-3", "to": "t5", "at": 1}, f)
         p = subprocess.run([sys.executable, self.entry, "_ask-pane", "ab12cd"], input="\n2\n", capture_output=True, text=True, env=self.env)
         self.assertEqual(p.returncode, 0, p.stderr)
-        self.assertIn("  1. Yes  (recommended)\n  2. No\nAnswer with a number or your own words", p.stdout)
+        self.assertIn("❯ 1. Yes  (recommended)\n  2. No\nAnswer with a number or your own words", p.stdout)
         self.assertIn("\x1b]7501;state=blocked:kind=question:msg=U2hpcCA8aXQ+IHRvbmlnaHQ/\x07", p.stdout)
         self.assertEqual(self.record("ab12cd")["answer"], "No")
         [msg] = self.held()["t5"]

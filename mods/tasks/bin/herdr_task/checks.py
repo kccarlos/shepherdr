@@ -80,7 +80,7 @@ def checks_pass(s, t):
         shutil.rmtree(tmp, ignore_errors=True)
         return
     try:
-        r = run(["hc", "run", "--bg", "--json", "--keep", "--no-parent", "--no-notify", "--cwd", tmp,
+        r = run(["hc", "run", "--bg", "--json", "--keep", "--outlive-parent", "--no-notify", "--cwd", tmp,
                  "--label", "herdr.role=checks", "--label", f"herdr.task={s.key(t)}", "--", "sh", "-c", cmd])
         address = json.loads(r.stdout)["address"] if r.returncode == 0 else None
     except (ValueError, KeyError):

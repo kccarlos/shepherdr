@@ -3574,7 +3574,14 @@ class Asks(unittest.TestCase):
 
     def setUp(self):
         self.store = tempfile.mkdtemp()
-        self.env = {**os.environ, "HERDR_TASK_STORE": self.store}
+        # No hc reaches a core here: a fake one that refuses everything, and no terminal of ours.
+        fake = os.path.join(self.store, "bin")
+        os.makedirs(fake)
+        with open(os.path.join(fake, "hc"), "w") as f:
+            f.write("#!/bin/sh\nexit 1\n")
+        os.chmod(os.path.join(fake, "hc"), 0o755)
+        self.env = {k: v for k, v in os.environ.items() if not k.startswith("HC_")}
+        self.env.update(HERDR_TASK_STORE=self.store, PATH=f"{fake}:/usr/bin:/bin")
         self.entry = os.path.join(BIN, "herdr-task")
 
     def record(self, ask_id):
@@ -3592,7 +3599,7 @@ class Asks(unittest.TestCase):
                        "task": "FAC-3", "to": "t5", "at": 1}, f)
         p = subprocess.run([sys.executable, self.entry, "_ask-pane", "ab12cd"], input="\n2\n", capture_output=True, text=True, env=self.env)
         self.assertEqual(p.returncode, 0, p.stderr)
-        self.assertIn("  1. Yes  (recommended)\n  2. No\n", p.stdout)
+        self.assertIn("  1. Yes  (recommended)\n  2. No\nAnswer with a number or your own words", p.stdout)
         self.assertIn("\x1b]7501;state=blocked:kind=question:msg=U2hpcCA8aXQ+IHRvbmlnaHQ/\x07", p.stdout)
         self.assertEqual(self.record("ab12cd")["answer"], "No")
         [msg] = self.held()["t5"]
@@ -3611,6 +3618,14 @@ class Asks(unittest.TestCase):
         self.assertEqual(p.returncode, 1)
         self.assertIn("--recommend must be one of the options: Yes", p.stderr)
         self.assertFalse(os.path.exists(os.path.join(self.store, "asks")))
+        p = subprocess.run([sys.executable, self.entry, "ask", "Ship?", "--option", "  ", "--option", "No"],
+                           capture_output=True, text=True, env=self.env)
+        self.assertIn("Say the question and each option", p.stderr)
+        # hc refusing the pane leaves no ask behind.
+        p = subprocess.run([sys.executable, self.entry, "ask", "Ship?", "--option", " Yes ", "--recommend", " Yes"],
+                           capture_output=True, text=True, env=self.env)
+        self.assertIn("couldn't start the ask pane", p.stderr)
+        self.assertEqual(os.listdir(os.path.join(self.store, "asks")), [])
 
     @unittest.skipUnless(shutil.which("hc") and not CI, "needs herdr-core (hc) on this machine")
     def test_ask_pane_end_to_end(self):
@@ -3627,7 +3642,7 @@ class Asks(unittest.TestCase):
             return json.loads(hc("get", t, "--json").stdout or "{}")
 
         def until(test, what):
-            for _ in range(100):
+            for _ in range(200):
                 if test():
                     return
                 time.sleep(0.1)
@@ -3645,7 +3660,7 @@ class Asks(unittest.TestCase):
         # herdr-task inside it reaches that core, with HC_SESSION unset (base.not_real allows it).
         sock_file = os.path.join(self.store, "sock")
         asker = json.loads(hc("run", "--bg", "--json", "--name", "asker", "--", "sh", "-c",
-                              f'echo "$HC_TERMINAL_SOCKET" > {sock_file}; exec sleep 120').stdout)["address"]
+                              f'echo "$HC_TERMINAL_SOCKET" > {sock_file}; exec cat').stdout)["address"]
         until(lambda: os.path.getsize(sock_file) if os.path.exists(sock_file) else 0, "the asker didn't start")
         with open(sock_file) as f:
             sock = f.read().strip()
@@ -3668,5 +3683,7 @@ class Asks(unittest.TestCase):
         self.assertEqual(get(t)["exit_code"], 0)
         rec = self.record(out["id"])
         self.assertEqual((rec["answer"], rec["to"], rec["terminal"]), ("Ship", asker, t))
-        [msg] = self.held()[asker]
-        self.assertIn(f'event="answer" key="{out["id"]}">Ask {out["id"]} answered: Ship', msg["text"])
+        # The news reached the asker at once (typed into it, as news goes to an Assistant), none held.
+        news = f'<herdr-news task="FAC-9" event="answer" key="{out["id"]}">Ask {out["id"]} answered: Ship (asked: Ship it tonight?)</herdr-news>'
+        until(lambda: news in hc("read", "asker").stdout, f"no news at the asker: {hc('read', 'asker').stdout}")
+        self.assertFalse(os.path.exists(os.path.join(self.store, ".held.json")) and self.held().get(asker))

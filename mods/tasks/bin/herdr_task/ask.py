@@ -5,8 +5,9 @@
 numbered prompt and reports itself blocked on a question over OSC 7501, as agents report to
 herdr-core, so whatever watches terminals (sheepdog, hc get) sees a question waiting. The answer
 (an option's number, or words of one's own) goes into the record, the pane exits, and the answer
-reaches the asker as news, on the same held path as feedback's reports. `ask --show <id>` reads a
-record: held news goes when its Assistant has ended, so a restarted one can still find the answer.
+reaches the asker as news: sent at once, or held for the scheduler while it can't take it (the
+person is writing to it, hc refused). `ask --show <id>` reads a record: held news goes when its
+Assistant has ended, so a restarted one can still find the answer.
 """
 
 import base64
@@ -57,22 +58,23 @@ def cmd_ask(args):
         return say(args, rec, f"{rec['question']}\n" + (f"Answer: {rec['answer']}" if "answer" in rec else "Not answered yet."))
     question = " ".join((args.question or "").split())
     options = [" ".join(o.split()) for o in args.option or []]
-    if not question:
-        raise Fail('Say the question: herdr-task ask "<question>" --option A --option B --recommend A')
-    if args.recommend is not None and args.recommend not in options:
+    recommend = None if args.recommend is None else " ".join(args.recommend.split())
+    if not question or not all(options):
+        raise Fail('Say the question and each option: herdr-task ask "<question>" --option A --option B --recommend A')
+    if recommend is not None and recommend not in options:
         raise Fail(f"--recommend must be one of the options: {', '.join(options) or 'none given'}")
-    rec = {"id": secrets.token_hex(3), "question": question, "options": options, "recommend": args.recommend,
+    rec = {"id": secrets.token_hex(3), "question": question, "options": options, "recommend": recommend,
            "task": args.task, "to": os.environ.get("HC_TERMINAL_ID"), "at": now()}
     save(rec)
     # The pane gets the core's environment, not ours: the store goes along in its command.
     labels = ["--label", "herdr.role=ask", "--label", f"herdr.ask={rec['id']}"]
-    r = run(["hc", "run", "--bg", "--json", "--no-notify", "--outlive-parent", "--name", f"ask-{rec['id']}", *labels, "--",
-             "env", f"HERDR_TASK_STORE={STORE}", sys.executable, ENTRY, "_ask-pane", rec["id"]])
     try:
+        r = run(["hc", "run", "--bg", "--json", "--no-notify", "--outlive-parent", "--name", f"ask-{rec['id']}", *labels, "--",
+                 "env", f"HERDR_TASK_STORE={STORE}", sys.executable, ENTRY, "_ask-pane", rec["id"]])
         rec["terminal"] = json.loads(r.stdout)["address"]
-    except (ValueError, KeyError, TypeError):
-        os.unlink(path_of(rec["id"]))
-        raise Fail(f"couldn't start the ask pane: {(r.stderr or r.stdout).strip()}")
+    except (Fail, OSError, ValueError, KeyError, TypeError) as e:
+        os.unlink(path_of(rec["id"]))  # no pane, no ask
+        raise Fail(f"couldn't start the ask pane: {e if isinstance(e, (Fail, OSError)) else (r.stderr or r.stdout).strip()}")
     save(rec)
     say(args, {"id": rec["id"], "terminal": rec["terminal"]},
         f"Asked ({rec['id']}): its pane is {rec['terminal']}. The answer comes to you as news; carry on with other work.")
@@ -89,12 +91,12 @@ def report(state, kind=None, msg=None):
 
 def cmd_ask_pane(args):
     """The ask pane's program: the prompt, one answer into the record, news to the asker."""
-    from .news import hold
+    from .news import hold, send_or_hold
     rec = load(args.id)
     print(rec["question"])
     for i, o in enumerate(rec["options"], 1):
         print(f"  {i}. {o}" + ("  (recommended)" if o == rec.get("recommend") else ""))
-    print("Answer with a number" + (" or your own words" if rec["options"] else "") + ", then Enter:")
+    print(("Answer with a number or" if rec["options"] else "Answer in") + " your own words, then Enter:")
     report("blocked", "question", rec["question"])
     answer = ""
     while not answer:
@@ -108,5 +110,14 @@ def cmd_ask_pane(args):
     rec.update(answer=answer, answered_at=now())
     save(rec)
     if rec.get("to"):
-        hold(rec["to"], news_line(rec), "news")
+        # To the core this pane runs in (a throwaway core's terminals also carry its HC_SESSION).
+        if os.environ.get("HC_TERMINAL_SOCKET"):
+            os.environ.pop("HC_SESSION", None)
+            os.environ["HC_SOCKET"] = os.environ["HC_TERMINAL_SOCKET"]
+        try:
+            sent = send_or_hold(rec["to"], news_line(rec), "news")
+        except Fail:
+            sent = None
+        if not sent:  # held for the scheduler's next pass (news.held_pass)
+            hold(rec["to"], news_line(rec), "news")
     print(f"Answered: {answer}")

@@ -10,7 +10,7 @@ export const APPEARANCES: Appearance[] = ['system', 'light', 'dark']
 /** where the pick is kept (index.html reads the same key) */
 const KEY = 'shepherdr.appearance'
 /** the bars over the app, as the top of the screen under them (--bg) */
-const BAR = { light: '#ffffff', dark: '#0b0b0d' }
+const BAR = { light: '#ffffff', dark: '#1f2126' }
 
 const system = typeof matchMedia === 'function' ? matchMedia('(prefers-color-scheme: dark)') : null
 const listeners = new Set<() => void>()

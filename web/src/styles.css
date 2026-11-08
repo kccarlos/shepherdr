@@ -161,16 +161,16 @@
   /* a scrollbar's thumb, and while you hold it */
   --thumb: color-mix(in srgb, var(--sd-fg) 20%, transparent);
   --thumb-held: color-mix(in srgb, var(--sd-fg) 36%, transparent);
-  --need: var(--sd-blocked);
+  --need: var(--sd-danger);
   --ready: var(--sd-done);
   --work: var(--sd-working);
   --muted: var(--sd-slate);
   /* the status colours as small words on the page: a shade deeper in light mode, so they read */
   --ready-fg: var(--sd-done);
   --work-fg: var(--sd-working);
-  --need-fg: var(--sd-blocked-text);
+  --need-fg: var(--sd-danger);
   --accent: var(--sd-primary-text);
-  --focus: var(--sd-focus);
+  --focus: #3b82f6;
   --term: #0b0b0d;
   --term-fg: #e4e4e7;
   /* the terminal's ANSI colours, and their bright twins */
@@ -228,32 +228,6 @@
 
 :root[data-theme=dark] {
   color-scheme: dark;
-  --canvas: var(--sd-bg);
-  --bg: var(--sd-card);
-  --fg: var(--sd-fg);
-  --fg2: color-mix(in srgb, var(--sd-fg) 35%, var(--sd-muted));
-  --fg3: var(--sd-muted);
-  --line: var(--sd-line);
-  --line2: color-mix(in srgb, var(--sd-line), var(--sd-fg) 12%);
-  --hover: color-mix(in srgb, var(--sd-fg) 4%, transparent);
-  --sel: var(--sd-sel-bg);
-  --well: var(--sd-code);
-  --bubble: var(--sd-code);
-  --reply: var(--sd-bubble);
-  --seg-on: var(--sd-sel);
-  --thumb: color-mix(in srgb, var(--sd-fg) 20%, transparent);
-  --thumb-held: color-mix(in srgb, var(--sd-fg) 36%, transparent);
-  --need: var(--sd-blocked);
-  --ready: var(--sd-done);
-  --work: var(--sd-working);
-  --muted: var(--sd-slate);
-  --ready-fg: var(--sd-done);
-  --work-fg: var(--sd-working);
-  --need-fg: var(--sd-blocked-text);
-  --accent: var(--sd-primary-text);
-  --merged: var(--sd-thinking);
-  --add: var(--sd-diff-add-fill);
-  --del: var(--sd-diff-remove-fill);
   --syn-kw: #c4b5fd;
   --syn-str: #86efac;
   --syn-num: #fcd34d;
@@ -767,7 +741,7 @@
   initial-value: 50%;
 }
 
-/* Status marks, drawn in CSS: red needs you, green ready, green turning ring with a gap merging, amber working, grey ring idle, grey clock queued, grey
+/* Status marks, drawn in CSS: amber needs you, green ready, green turning ring with a gap merging, amber working, grey ring idle, grey clock queued, grey
    check done, dashed ring a machine Shepherdr can't reach */
 @layer components {
   .dot {
@@ -798,7 +772,7 @@
     width: 10px;
     height: 10px;
     margin: 2px;
-    background: var(--need);
+    background: var(--sd-blocked);
     box-shadow: none;
   }
   [data-device="phone"] .dot.need {
@@ -810,7 +784,7 @@
     position: absolute;
     inset: -3px;
     border-radius: 50%;
-    box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--need) 30%, transparent);
+    box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--sd-blocked) 30%, transparent);
   }
   .dot.ready,
   .dot.done {

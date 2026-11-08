@@ -20,7 +20,7 @@ drops the space's own, and it inherits again. A few settings are one for every s
 | Page | Setting | Level | Why |
 |---|---|---|---|
 | Agents | Assistant (CLI, model, effort, fast, permissions) | Everywhere, space | A repo may want a stronger model or another CLI |
-| Agents | Workers | Everywhere, space | The same: what a task in this space runs on |
+| Agents | Workers | Everywhere, space | The same: what a task in this space runs on ([agents](agents.md)) |
 | Agents | Reviewer | Everywhere, space | The same |
 | Agents | Backup agent | Everywhere, space | A space whose work shouldn't move to the other CLI |
 | Agents | Reactions (every agent reacts with an emoji; on) | Everywhere, space | A space may want a plainer chat |

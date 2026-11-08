@@ -70,6 +70,8 @@ How to run, build and lay out the code: [docs/develop.md](docs/develop.md).
 
 - In a throwaway core's terminal, unsetting `HC_SESSION` alone makes hc reach the live core: also set
   `HC_SOCKET=$HC_TERMINAL_SOCKET` (herdr-task's guard allows that).
+- An agy reviewer in a task worktree can't run git (the worktree's `.git` points outside its trusted folder): put the
+  diff in its prompt. Its startup briefly shows `blocked (auth)`, then it works.
 - `herdr-task --on <machine>` copies its bundle there, and a hub (the Mac mini) copies it on: running a branch's
   herdr-task against other machines spreads that branch fleet-wide until the next update. Prefer local tests.
 - herdr-task's scheduler re-execs itself within 15 s when its code changes. Its live code is either the zipapp

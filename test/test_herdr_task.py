@@ -3678,7 +3678,7 @@ class Asks(unittest.TestCase):
         # herdr-task inside it reaches that core, with HC_SESSION unset (base.not_real allows it).
         sock_file = os.path.join(self.store, "sock")
         asker = json.loads(hc("run", "--bg", "--json", "--name", "asker", "--", "sh", "-c",
-                              f'echo "$HC_TERMINAL_SOCKET" > {sock_file}; exec cat').stdout)["address"]
+                              f'echo "$HC_TERMINAL_SOCKET" > {sock_file}; exec sleep 120').stdout)["address"]
         until(lambda: os.path.getsize(sock_file) if os.path.exists(sock_file) else 0, "the asker didn't start")
         with open(sock_file) as f:
             sock = f.read().strip()
@@ -3701,7 +3701,8 @@ class Asks(unittest.TestCase):
         self.assertEqual(get(t)["exit_code"], 0)
         rec = self.record(out["id"])
         self.assertEqual((rec["answer"], rec["to"], rec["terminal"]), ("Ship", asker, t))
-        # The news reached the asker at once (typed into it, as news goes to an Assistant), none held.
-        news = f'<herdr-news task="FAC-9" event="answer" key="{out["id"]}">Ask {out["id"]} answered: Ship (asked: Ship it tonight?)</herdr-news>'
-        until(lambda: news in hc("read", "asker").stdout, f"no news at the asker: {hc('read', 'asker').stdout}")
-        self.assertFalse(os.path.exists(os.path.join(self.store, ".held.json")) and self.held().get(asker))
+        # The news for the asker: held, as herdr-task's guard refuses hc in a throwaway core's terminals
+        # (they carry its HC_SESSION); on the person's own core it is sent at once (news.send_or_hold).
+        [msg] = self.held()[asker]
+        self.assertEqual(msg["text"], f'<herdr-news task="FAC-9" event="answer" key="{out["id"]}">'
+                                      f'Ask {out["id"]} answered: Ship (asked: Ship it tonight?)</herdr-news>')

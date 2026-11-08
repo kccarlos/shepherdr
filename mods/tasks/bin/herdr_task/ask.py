@@ -110,15 +110,9 @@ def cmd_ask_pane(args):
     rec = {**load(args.id), "answer": answer, "answered_at": now()}  # as saved now (ask adds its terminal)
     save(rec)
     if rec.get("to"):
-        # To the core this pane runs in (a throwaway core's terminals also carry its HC_SESSION), only
-        # when HC_SESSION is that core's own: another session stays refused by the guard (not_real).
-        sock, session = os.environ.get("HC_TERMINAL_SOCKET"), os.environ.get("HC_SESSION")
-        if sock and session in (None, "", "default", os.path.basename(os.path.dirname(sock))):
-            os.environ.pop("HC_SESSION", None)
-            os.environ["HC_SOCKET"] = sock
         try:
             sent = send_or_hold(rec["to"], news_line(rec), "news")
-        except (Fail, OSError):  # no hc here: held all the same
+        except (Fail, OSError):  # no hc here, or the guard refuses it (another core): held all the same
             sent = None
         if not sent:  # held for the scheduler's next pass (news.held_pass)
             hold(rec["to"], news_line(rec), "news")

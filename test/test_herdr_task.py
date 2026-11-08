@@ -1662,6 +1662,7 @@ class Scheduled(unittest.TestCase):
                    mock.patch.object(commands, "begin", begin), mock.patch.object(tick, "begin", begin),
                    mock.patch.object(commands, "ensure_scheduler", lambda quiet=False: {}),
                    mock.patch.object(commands, "default_space", lambda: "sp1"),
+                   mock.patch.object(tick, "default_space", lambda: "sp1"),
                    mock.patch.object(commands, "caller_space", lambda: None),
                    mock.patch.object(commands, "worker_argv", lambda s, t, space, key=None: ["claude"]),
                    mock.patch.object(tick, "worker_argv", lambda s, t, space, key=None: ["claude"]),
@@ -1813,7 +1814,7 @@ class Scheduled(unittest.TestCase):
         os.makedirs(fakebin)
         real = subprocess.run(["which", "git"], capture_output=True, text=True).stdout.strip()
         with open(os.path.join(fakebin, "git"), "w") as f:  # rev-parse hangs while `block` exists
-            f.write(f'#!/bin/sh\ncase "$*" in *rev-parse*) [ -e {block} ] && touch {hung} && sleep 8;; esac\nexec {real} "$@"\n')
+            f.write(f'#!/bin/sh\ncase "$*" in *rev-parse*) [ -e {block} ] && touch {hung} && exec sleep 8;; esac\nexec {real} "$@"\n')
         os.chmod(os.path.join(fakebin, "git"), 0o755)
         open(block, "w").close()
         quiet = lambda *a, **k: None
@@ -1842,7 +1843,15 @@ class Scheduled(unittest.TestCase):
                 break
             time.sleep(0.05)
         self.assertTrue(os.path.exists(hung), "the service's tick never reached git")
-        os.remove(block)  # the scheduler's own git gets in
+        service.join(5)
+        self.assertFalse(service.is_alive(), "the service's tick still holds the lock")
+        # the same folder again within the minute fails at once (a tick finds it several times)
+        began = time.monotonic()
+        with self.assertRaises(self.Fail):
+            self.store_mod.locate(self.folder)
+        self.assertLess(time.monotonic() - began, 0.5)
+        os.remove(block)  # the scheduler (its own process, no memory of the hang) gets in
+        self.store_mod._hung.clear()
         report = {"started": [], "done": [], "attention": [], "fired": []}
         au.one_pass(report)
         self.assertEqual([x["ref"] for x in report["started"]], ["APP-4"], "the scheduler's round never got the tick lock")

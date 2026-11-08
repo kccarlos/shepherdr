@@ -6,6 +6,7 @@ import json
 import os
 import re
 import subprocess
+import time
 
 from .base import Fail, git, hc_json, HOME, LEGACY, MAX_RUNNING, now, run, STORE
 from .settings import settings_for
@@ -17,18 +18,24 @@ from .launch import retag_tabs
 # ---- where a folder's tasks live ------------------------------------------------------------
 
 # FAC-10: git can hang in a folder (macOS kept the service from ~/Documents), and a tick stuck there
-# holds the tick lock, so no scheduler round runs at all. Finding the folder gives up instead.
+# holds the tick lock, so no scheduler round runs at all. Finding the folder gives up instead, and
+# for a minute after, the same folder fails at once (a tick finds it several times).
 GIT_WAIT_S = 10
+_hung = {}  # folder: when its git last didn't answer (time.monotonic())
 
 def locate(path):
     """The task folder for a path: {folder, kind: repo|folder, name, common}."""
     path = os.path.realpath(os.path.expanduser(path or os.getcwd()))
     if not os.path.isdir(path):
         raise Fail(f"No such folder: {path}")
+    hung = f"git didn't answer in {path} for {GIT_WAIT_S} s (on macOS: may this app open that folder?)"
+    if time.monotonic() - _hung.get(path, -60) < 60:
+        raise Fail(hung)
     try:
         ok, out, _ = git(path, "rev-parse", "--path-format=absolute", "--git-common-dir", "--show-toplevel", timeout=GIT_WAIT_S)
     except subprocess.TimeoutExpired:
-        raise Fail(f"git didn't answer in {path} for {GIT_WAIT_S} s (on macOS: may this app open that folder?)")
+        _hung[path] = time.monotonic()
+        raise Fail(hung)
     lines = out.split("\n") if ok else []
     if len(lines) == 2:
         common, top = lines

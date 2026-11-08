@@ -83,11 +83,11 @@ case ${1:-} in
     build sheepdog-qa "${base:?no factory-base-<day> image: build it first}" ;;
   smoke) smoke "${2:?which image?}" ;;
   login)
-    img=${2:?which image?}
-    fresh "$img" "$img-login"
+    img=${2:?which image?} edit=${2}-login
+    fresh "$img" "$edit"
     echo "In the VM window: open Terminal, run gh auth login, claude (then /login) and agy; then Apple menu > Shut Down."
-    tart run "$VM"
-    tart delete "$img"; tart rename "$VM" "$img"; TEMP=''
-    smoke "$img" ;;
+    tart run "$edit"
+    if ! smoke "$edit"; then tart delete "$edit"; echo "smoke test failed: $img left as it was" >&2; exit 1; fi
+    tart delete "$img"; tart rename "$edit" "$img" ;;
   *) sed -n '2,7p' "$0"; exit 2 ;;
 esac

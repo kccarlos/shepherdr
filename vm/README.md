@@ -58,14 +58,17 @@ PATH line is in both `.zprofile` and `.zshrc`; the TCC grants hold (osascript to
 
 ## Using sheepdog-qa (one clone per run)
 
+The gate verifier's commands, as run for the proof (boot to ssh took 19 s):
+
 ```sh
 export TART_HOME=<the Tart folder on the external SSD>
 vm=sdqa-run-$RUN_ID
+key=(-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null
+     -o LogLevel=ERROR -i ~/.ssh/tart_sdqa_ed25519)
 tart clone sheepdog-qa-2026-11-08 "$vm"
 nohup tart run "$vm" --no-graphics >/dev/null 2>&1 &
-until ip=$(tart ip "$vm" 2>/dev/null) && ssh -o BatchMode=yes -o StrictHostKeyChecking=no \
-  -o UserKnownHostsFile=/dev/null -i ~/.ssh/tart_sdqa_ed25519 "admin@$ip" true; do sleep 3; done   # about 20 s
-ssh ... "admin@$ip" 'zsh -lc "cd ~/herdr-sheepdog && git fetch -q && git checkout -q --detach <sha> && ..."'
+for _ in $(seq 30); do ip=$(tart ip "$vm" 2>/dev/null) && ssh "${key[@]}" "admin@$ip" true && break; sleep 5; done
+ssh "${key[@]}" "admin@$ip" 'zsh -lc "cd ~/herdr-sheepdog && git fetch -q && git checkout -q --detach <sha> && <the check>"'
 tart stop "$vm"; tart delete "$vm"
 ```
 

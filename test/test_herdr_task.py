@@ -1961,7 +1961,7 @@ class GateReview(unittest.TestCase):
         self.assertNotIn("--mode", agy)
         self.assertEqual(json.loads(agy[agy.index("--settings") + 1]), {"trustedWorkspaces": [self.wt]})  # no allow list
         prompt = agy[agy.index("-i") + 1]
-        code = self.task["review_runs"][0]["code"]
+        code = self.commands.round_code(self.task["review_runs"][0])
         self.assertIn(f"This round's code is {code}.", prompt)
         self.assertNotIn("review SHEP-13", prompt)
         self.assertIsNone(self.commands.read_verdict(prompt, code))  # its echoed prompt is never a verdict
@@ -1971,7 +1971,7 @@ class GateReview(unittest.TestCase):
         self.sandbox()
         self.ready()
         rn = self.task["review_runs"][0]
-        code = rn["code"]
+        code = self.commands.round_code(rn)
         read = self.screen(f"> Review commit ... This round's code is {code}.\n  Working\n  {code} begin\n  - major: gate.txt says hi"
                            f"\n    twice\n  {code} changes 1\n\n>\n")
         self.commands.gate_reads(self.store, self.task)
@@ -1987,12 +1987,12 @@ class GateReview(unittest.TestCase):
     def test_a_read_pass_starts_the_next_round_and_a_moved_head_records_none(self):
         self.sandbox()
         self.ready()
-        code = self.task["review_runs"][0]["code"]
+        code = self.commands.round_code(self.task["review_runs"][0])
         self.screen(f"**{code} pass**\n")
         self.commands.gate_reads(self.store, self.task)
         self.assertEqual([r["verdict"] for r in self.task["reviews"]], ["pass"])
         self.assertEqual(len(self.task["review_runs"]), 2)  # min 2: round 2 started
-        code2 = self.task["review_runs"][1]["code"]
+        code2 = self.commands.round_code(self.task["review_runs"][1])
         self.assertNotEqual(code, code2)
         self.screen(f"{code} pass\n")  # round 1's code on round 2's screen: no verdict
         self.commands.gate_reads(self.store, self.task)

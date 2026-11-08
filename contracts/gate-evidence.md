@@ -10,8 +10,6 @@ Unknown extra keys are rejected. `review_runs[].model` is a non-empty string, or
 {"round": 1, "head": "0123456789abcdef0123456789abcdef01234567", "address": "term-7", "cli": "agy",
  "model": "gemini-4-argon-high", "at": 1762600000000}
 ```
-A sandboxed agy reviewer (FAC-49) also has `"code": "R0123abcd"` ("R" and 8 hex): the round's code its verdict line
-starts with, which herdr-task reads from its terminal.
 
 ## `t["reviews"][]`: a review round
 ```json

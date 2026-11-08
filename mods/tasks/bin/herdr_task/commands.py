@@ -1,6 +1,7 @@
 """The task commands: add, start, status, ready, accept, merge and the rest."""
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -461,7 +462,8 @@ def gate_step(s, t):
     rv, wt, ref, ht, folder = rows["Reviewer"], t["worktree"], s.ref(t), own_path(), shlex.quote(s.loc["folder"])
     sand = sandboxes([rv["agent"]])  # agy on a Mac: sandboxed, nothing prompts, its verdict read from its terminal
     argv = argv_for({**rv, "perm": "read-only" if rv["agent"] == "codex" else "full" if sand else "plan"})
-    code = "R" + secrets.token_hex(4) if sand else None
+    at = now()
+    code = round_code({"round": len(runs) + 1, "head": head, "at": at}) if sand else None
     diff = git(wt, "diff", f"{t['start']}..{head}")[1]
     cmd = f"{ht} review {ref} --folder {folder}"
     check = (settings_for(s, t.get("space"))["tasks"].get("check") or "").strip()
@@ -487,7 +489,7 @@ def gate_step(s, t):
     a = launch(s, t, argv, t.get("space"), prompt, parent=live[-1]["address"] if live else None, role="reviewer",
                reads=review_reads(check))
     t.setdefault("review_runs", []).append({"round": len(runs) + 1, "head": head, "address": a["address"], "cli": agent_key(argv),
-                                            "model": rv.get("model") or None, "at": now(), **({"code": code} if code else {})})
+                                            "model": rv.get("model") or None, "at": at})
     t["progress"] = {"text": fit("Herdr's reviewer is on it"), "at": now(), "set": now(), "by": "herdr"}
     return f"{s.ref(t)}: Herdr started review round {len(runs) + 1} of {head[:7]} ({a['address']}); its findings come to you as a message."
 
@@ -812,6 +814,12 @@ def record_verdict(s, t, rn, passed, must, text):
     return msg
 
 
+def round_code(rn):
+    """A sandboxed round's code, which its verdict lines start with: from its round, head and start, so it
+    is never in the diff or the store's other words, and no new record field."""
+    return "R" + hashlib.sha256(f"{rn['round']}:{rn['head']}:{rn['at']}".encode()).hexdigest()[:8]
+
+
 def read_verdict(screen, code):
     """(passed, must_fix, findings) from a sandboxed reviewer's screen: its last line holding only
     `code pass` or `code changes N`, the findings above it up to its `code begin` line (else its last 80 lines); else None."""
@@ -830,9 +838,9 @@ def gate_reads(s, t):
     each open round's own terminal (G2: only that run's terminal counts), then that reviewer ends."""
     done = {r["round"] for r in t.get("reviews") or [] if r.get("started_by") == "herdr-task"}
     for rn in t.get("review_runs") or []:
-        if not rn.get("code") or rn["round"] in done or (hc_json("get", rn["address"]) or {}).get("state") != "live":
+        if not sandboxes([rn["cli"]]) or rn["round"] in done or (hc_json("get", rn["address"]) or {}).get("state") != "live":
             continue
-        got = read_verdict(run(["hc", "read", rn["address"], "--lines", "400"]).stdout, rn["code"])
+        got = read_verdict(run(["hc", "read", rn["address"], "--lines", "400"]).stdout, round_code(rn))
         if got:
             try:
                 record_verdict(s, t, rn, *got)

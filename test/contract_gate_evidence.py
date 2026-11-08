@@ -31,9 +31,7 @@ def _check(r, ints=(), strs=(), shas=(), lists=(), enums=None, caps=None, extra=
 
 
 def validate_review_run(r):
-    _check(r, ints=("round", "at"), strs=("address", "cli"), shas=("head",), extra=("model",) + (("code",) if "code" in r else ()))
-    if "code" in r and not (isinstance(r["code"], str) and re.fullmatch(r"R[0-9a-f]{8}", r["code"])):
-        raise ValueError("code is R and 8 hex")
+    _check(r, ints=("round", "at"), strs=("address", "cli"), shas=("head",), extra=("model",))
     if r["model"] is not None and (not isinstance(r["model"], str) or not r["model"]):
         raise ValueError("model is a non-empty string or null")
     if r["round"] < 1:

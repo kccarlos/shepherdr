@@ -81,3 +81,5 @@ answer (2026-11-08). It becomes the role allow lists in phase 3 (docs/factory.md
   c9abed45 (G2's gate_step diffs from the stored start, which a rebase doesn't move).
 - Workers branch from the main folder's local kc-factory, so the Assistant's unpushed AGENTS.md/trial-log commits
   end up in task branches and conflict once origin has them under other SHAs (FAC-11, 15, 28, 29, 35, 37, 38).
+- Size call: FAC-49 (agy reviewer sandbox) at ~154 production lines incl. a 40-line profile, limit ~120; growth from
+  the read confinement and per-run agy state the person added mid-task. Accepted by the Assistant.

@@ -189,6 +189,14 @@ Evidence: an agy experiment ([agent-comm.md](agent-comm.md)). Contract-first agr
 | codexbar fails | Pool unknown: short jobs only, re-read in 5 minutes |
 | Orchestrator out of context or quota | It writes state to disk and sleeps to the reset. In the sheepdog version this role is code. |
 
+## 11a. Where each role runs
+
+- **Implementers:** on the host, in their own worktree (sandboxed from G7).
+- **Reviewers:** on the host under `sandbox-exec`, confined to the worktree.
+- **Gate verifier and GUI checks** (board, Herdr panel, fresh install, reboot recovery): in a Tart macOS VM cloned from the snapshot `sd-qa-base` for each run and deleted afterwards. The clone is instant, and parallel runs each get their own clone (the owner's wiki `env/tart-macos-vm.md`).
+- **The verifier never calls a failure a flake** until it has reproduced it on a fresh clone, with before and after screenshots.
+- **No unattended part depends on a path that needs a macOS consent prompt** (Documents, Desktop, Downloads, removable volumes), unless access was granted beforehand and a probe at start proves it. This bit twice: the factory stalled 3 hours on Documents (2026-11-08), and a nightly waited 53 minutes on the external SSD.
+
 ## 12. Rules that are only prompts (known)
 
 These depend on the model, and no code backs them yet:

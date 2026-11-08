@@ -470,8 +470,9 @@ def gate_step(s, t):
         f"Must fix: {MUST_WORDS[rows['Must fix']]}. Herdr started you, not the worker: when done, record your verdict with one of "
         f"`{cmd} --pass` or `{cmd} --changes \"<each finding with its level and proof>\" --must-fix <how many are at or above "
         f"Must fix>`. It is taken only from this terminal while {head[:7]} is the worktree's HEAD with nothing uncommitted. "
-        f"Then end with your findings as your last message. Your shell runs without asking only {', '.join(REVIEW_READS)}"
-        + (f" and this folder's check, `{check}`" if check else "") + ": anything else waits on a prompt nobody here can answer."
+        f"Then end with your findings as your last message."
+        + (f" Your shell runs without asking only {', '.join(REVIEW_READS)}" + (f" and this folder's check, `{check}`" if check else "")
+           + ": anything else waits on a prompt nobody here can answer." if rv["agent"] in ("agy", "claude") else "")
         + (" Codex's sandbox can't reach Herdr: give that command sandbox_permissions \"require_escalated\"." if rv["agent"] == "codex" else "")])
     live = workers(s, t)
     a = launch(s, t, argv, t.get("space"), prompt, parent=live[-1]["address"] if live else None, role="reviewer",

@@ -21,6 +21,7 @@ herdr-app	codesign --verify ~/Applications/Herdr.app && defaults read ~/Applicat
 claude	claude --version
 agy	agy --version
 timeout	timeout 5 echo works
+no-self-update	grep -c '^0.0.0.0 releases.herdr.dev' /etc/hosts
 EOF
     ;;
     sheepdog-qa) cat <<'EOF'
@@ -33,6 +34,10 @@ EOF
 
 case $1 in
   base)
+    # Herdr would update itself and herdr-core from releases.herdr.dev, so every clone would drift from the manifest.
+    grep -q releases.herdr.dev /etc/hosts || echo '0.0.0.0 releases.herdr.dev # factory: no self-updates' | sudo tee -a /etc/hosts >/dev/null
+    pkill -x Herdr || true
+    rm -rf Applications/Herdr.app.*
     go=$(basename "$(ls -d sdk/go* | tail -1)")
     for f in .zprofile .zshrc; do
       grep -q '# factory PATH' "$f" 2>/dev/null ||

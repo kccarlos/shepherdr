@@ -25,6 +25,9 @@ vm/provision.sh smoke sheepdog-qa-2026-11-08
 - The CLIs (herdr-core/hc, herdr, claude, agy, bun) and Herdr.app are copied from this Mac: the VM runs what the host
   runs. git, gh, Go, node, python and jq come with sd-qa-base. New needs go into the scripts, never into a hand-edited
   image.
+- Herdr updates itself and herdr-core from `releases.herdr.dev`, which made a clone drift from its manifest within a
+  boot. factory-base points that host at 0.0.0.0 in `/etc/hosts`; a check that installs Herdr from the internet
+  removes that line in its own clone first.
 - ssh uses `~/.ssh/tart_sdqa_ed25519` (override with `VM_KEY`); `tart exec` would skip `.zprofile`.
 
 ## Manifest

@@ -49,10 +49,10 @@ app() { # the host's Herdr.app (only the app: no staged update beside it), when 
 
 # The layers. The CLIs come from this Mac (all standalone arm64), so the VM runs what the host runs.
 layer_factory_base() {
+  step base
   for b in herdr-core herdr claude agy; do put "$HOME/.local/bin/$b" ".local/bin/$b"; done
   put "$(command -v bun)" .local/bin/bun
   app
-  step base
 }
 layer_sheepdog_qa() { step sheepdog "${SHEEPDOG_REPO:-https://github.com/kccarlos/herdr-sheepdog}"; }
 

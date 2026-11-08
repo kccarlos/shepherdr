@@ -15,6 +15,7 @@ import { WorktreeDialog } from './screens/Worktree.tsx'
 import { RoleSheet } from './screens/Role.tsx'
 import { AddMachineButton, AddMachineDialog } from './screens/AddMachine.tsx'
 import { ServeFromDialog } from './screens/ServeFrom.tsx'
+import { Preview } from './screens/Preview.tsx'
 
 /** a bar across the top: the first one keeps clear of a phone's notch (the screen's own top under it then doesn't) */
 const topBar = 'shrink-0 bg-bubble px-4 py-1.5 text-center text-[0.8125rem] text-fg2 phone:text-[0.9375rem] [[data-device=phone]>&:first-child]:pt-[calc(env(safe-area-inset-top)+6px)]'
@@ -112,8 +113,10 @@ watchViewport((keyboard) => setUI({ keyboard }))
 watchScrolling()
 watchKeys()
 
+// a deliverable's preview (screens/Preview.tsx previewUrl): its own screen, with a way back
+const q = new URLSearchParams(location.search)
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    {q.get('preview') && q.get('folder')?.startsWith('/') ? <Preview id={q.get('preview')!} folder={q.get('folder')!} on={q.get('on')} /> : <App />}
   </StrictMode>,
 )

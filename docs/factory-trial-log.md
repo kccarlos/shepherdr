@@ -20,6 +20,7 @@ answer (2026-11-08). It becomes the role allow lists in phase 3 (docs/factory.md
 | 2026-11-08 | FAC-1 | audit (agy argon-high, accept-edits) | `zsh -lc 'command -v node; command -v bun; echo PATH'` + `ls` of node install dirs (read-only; node wasn't on its PATH) | once |
 | 2026-11-08 | FAC-1 | audit (agy argon-high, accept-edits) | `python3 -c` globbing node install paths (read-only, read in full) | once |
 | 2026-11-08 | FAC-1 | audit (agy argon-high, accept-edits) | the quick checks again with nvm's node put on PATH | once |
+| 2026-11-08 | FAC-37 | gate reviewer t8c (agy) | the repo node --check loop with nvm/homebrew PATH prefix | always, this conversation |
 | 2026-11-08 | all | every role | any command that only reads local state (no writes outside the worktree or temp folders, no network, no process control of other terminals); the Assistant decides and logs each | standing (orchestrator) |
 | 2026-11-08 | all | every role | temp folders (`mktemp`, `/tmp`, `$TMPDIR`) are scratch space: writes there allowed | standing (orchestrator) |
 

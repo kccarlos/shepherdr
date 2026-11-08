@@ -206,5 +206,5 @@ Merges stay on Accept (orchestrator or person) through phase 3.
 3. **Gate and sandbox:** code merge (local and PR), the gate running checks itself, reviewer and verifier started by herdr-task, role `--settings`, the worker sandbox. Then auto-merge on.
 4. **Usage:** codexbar pools, the pick, stop lines, interrupt, handoff and sleep.
 5. **Agents agreeing** (section 10).
-6. **Board**, then the sheepdog iPhone app.
+6. **Board**, then the sheepdog iPhone app: once the factory's features settle, bring the board into the iOS app following the person's iOS design canvas "Sheepdog iOS — UI refresh" (claude.ai artifact 1EmnSHAtmBAxcnkENsjwMP).
 7. **Rewrite in sheepdog.**

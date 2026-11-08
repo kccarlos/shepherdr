@@ -11,6 +11,7 @@ import { kindOf as kindOfTerm } from "../core/chat-reader.js";
 import * as CL from "../core/chat-log.js";
 import * as CV from "../core/chat-view.js";
 import { taskArtifacts } from "../core/task-artifacts.js";
+import { deliverables } from "./deliverables.ts";
 const { summary, names, pilotLine } = CL as any;
 const { senderName, briefLabel, firstUser, firstKeys, newsTimeline, resolveArtifacts, unsigned, fromName, sentTo, selfName, subagentsOf, isHelper } = CV as any;
 import { mentionedIn } from "../core/send.js";
@@ -209,6 +210,15 @@ export class Compat {
 
   taskOf(id: string) { return this.tasks.get(id) ?? null; }
 
+  /** A task's artifact ids (core/task-artifacts.js), proof first; its chat logs as the fallback (this machine's). */
+  private artsOf(r: Row): string[] {
+    return taskArtifacts(this.rawArts, { ref: r.ref, folder: r.folder, machine: r.machine ?? null, agents: r.agents, proof: r.proof },
+      r.machine ? [] : (r.logs ?? []).flatMap((p: string) => this.taskLogs?.ids(p) ?? []));
+  }
+
+  /** A folder's deliverables for the board (service/deliverables.ts), from the last build. */
+  deliverables(folder: string, machine: string | null) { return deliverables(this.rows, this.rawArts, folder, machine, (r) => this.artsOf(r)); }
+
   private rows: Row[] = [];
   /** the artifacts' registries as herdr-artifact lists them (versions with who published them), for a chat's publishes */
   private rawArts: any[] = [];
@@ -388,8 +398,7 @@ export class Compat {
         ...(r.pr ? { pr: { number: r.pr.number, url: r.pr.url } } : {}),
         ...(r.branch ? { branch: r.branch } : {}), ...(r.base ? { base: r.base } : {}),
         // its Artifacts tab (SHEP-60): its proof first, then newest first; its chat logs as the fallback (this machine's)
-        ...((arts) => (arts.length ? { artifacts: arts } : {}))(taskArtifacts(this.rawArts, { ref: r.ref, folder: r.folder, machine: r.machine ?? null, agents: r.agents, proof: r.proof },
-          r.machine ? [] : (r.logs ?? []).flatMap((p: string) => this.taskLogs?.ids(p) ?? []))),
+        ...((arts) => (arts.length ? { artifacts: arts } : {}))(this.artsOf(r)),
         ...(r.proof ? { proof: r.proof } : {}),
         // the task's browser (agent-browser), relayed for this machine's tasks
         ...(r.machine ? { browser: { ready: false, hint: `This task runs on ${r.machine}. Its browser can be watched only from that machine's Herdr for now.` } } : { browser: { ready: true } }),

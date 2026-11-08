@@ -263,7 +263,7 @@ export class Model {
         // its worker's own helper agents (SHEP-54), for the task's detail
         subagents: worker ? subagentsOf(terminals as any[], worker) : [],
         // what finds its artifacts (core/task-artifacts.js): its proof, its agents' terminals while they ran, their logs
-        proof: task.proof?.id ?? null,
+        proof: task.proof?.id ?? null, proofTitle: task.proof?.title ?? null,
         agents: (Array.isArray(task.agents) ? task.agents : []).map((a: any) => ({ address: a.address ?? null, at: a.at ?? 0, ended: a.ended ?? null })),
         logs: (Array.isArray(task.agents) ? task.agents : []).map((a: any) => a.log).filter((x: unknown) => typeof x === "string"),
       };

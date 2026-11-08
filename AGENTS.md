@@ -10,6 +10,8 @@ How to run, build and lay out the code: [docs/develop.md](docs/develop.md).
   chat-log test. One test module runs from `test/` (`cd test && python3 -m unittest test_herdr_task.Revive`).
 - Agent shells on the Mac mini lack PIL and ImageMagick: `sips` resizes and crops; `swiftc` with CoreGraphics/ImageIO
   does the rest (alpha cutouts, composites).
+- On macOS, bun and its children see no TCP sockets through netstat or the pcblist sysctl (0 bytes); nettop still lists
+  them with their pids.
 - Agent shells may lack `bun` on PATH too: it's `/opt/homebrew/bin/bun`. A scratch bun test that imports
   `service/compat.ts` must sit inside `service/` to resolve its imports.
 - Never run herdr-app or herdr-task with a changed `HOME` or `HERDR_APP_HOME`, never start a second herdr-app window,

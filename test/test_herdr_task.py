@@ -1856,7 +1856,7 @@ class FolderTrustQuestion(unittest.TestCase):
         def read(argv, **kw):
             self.reads.append(argv)
             return subprocess.CompletedProcess(argv, 0, self.screen, "")
-        r = mock.patch.object(agents, "run", read, create=True)
+        r = mock.patch.object(agents, "run", read)
         r.start()
         self.addCleanup(r.stop)
         # Started 10 minutes ago: past STARTING_MS, so only its agents' status speaks.

@@ -8,21 +8,22 @@ import os
 from .agents import agent_log
 from .settings import argv_model
 from .takeover import handover
+from .usage import _AG
 
 
 def pool_of(agent):
-    """The usage pool an agent record ({agent, argv}) spends, named as usage.py (FAC-20) names them:
-    claude, codex, antigravity-gemini or antigravity-claude-gpt. None when it can't be told (agy on
-    its own default model). Defined here until FAC-20 merges."""
+    """The usage pool an agent record ({agent, argv}) spends, by usage.py's names: claude, codex, or
+    for agy its model's Antigravity pool (Gemini, or Claude/GPT). None when it can't be told (agy on
+    its own default model)."""
     kind = (agent or {}).get("agent")
     if kind in ("claude", "codex"):
         return kind
     if kind == "agy":
         model = (argv_model([str(x) for x in agent.get("argv") or []])[0] or "").lower()
         if model.startswith("gemini"):
-            return "antigravity-gemini"
+            return _AG["gemini"]
         if model.startswith(("claude", "gpt")):
-            return "antigravity-claude-gpt"
+            return _AG["3p"]
     return None
 
 

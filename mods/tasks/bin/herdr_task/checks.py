@@ -79,13 +79,16 @@ def checks_pass(s, t):
     if not git(wt, "worktree", "add", "--detach", tmp, sha)[0]:
         shutil.rmtree(tmp, ignore_errors=True)
         return
-    r = run(["hc", "run", "--bg", "--json", "--keep", "--no-parent", "--no-notify", "--cwd", tmp,
-             "--label", "herdr.role=checks", "--label", f"herdr.task={s.key(t)}", "--", "sh", "-c", cmd])
     try:
-        address = json.loads(r.stdout)["address"]
+        r = run(["hc", "run", "--bg", "--json", "--keep", "--no-parent", "--no-notify", "--cwd", tmp,
+                 "--label", "herdr.role=checks", "--label", f"herdr.task={s.key(t)}", "--", "sh", "-c", cmd])
+        address = json.loads(r.stdout)["address"] if r.returncode == 0 else None
     except (ValueError, KeyError):
         address = None
-    if r.returncode != 0 or not address:
+    except BaseException:
+        git(wt, "worktree", "remove", "--force", tmp)
+        raise
+    if not address:
         git(wt, "worktree", "remove", "--force", tmp)
         return
     t["check_run"] = {"sha": sha, "command": cmd, "address": address, "tmp": tmp, "started_at": now()}

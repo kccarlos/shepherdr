@@ -13,7 +13,7 @@ from .base import hc_json, HOME, now, RANK, run, SHELLS
 # A worker's own helper agents (SHEP-54): hc children of its terminal it starts itself (`hc run`), labelled
 # herdr.task (its task) and herdr.role reviewer or helper. Never one of the task's agents: no second worker, no
 # status of their own; a working one keeps its quiet worker Working (own_work).
-HELPER_ROLES = ("reviewer", "helper", "checks")
+HELPER_ROLES = ("reviewer", "helper")
 
 
 def parent_of(k):
@@ -54,6 +54,8 @@ def detail(k):
 
 
 def agent_running(k):
+    if (k.get("labels") or {}).get("herdr.role") == "checks":
+        return False  # herdr-task's own check run, never a worker
     fg = (k.get("foreground") or {}).get("name") or ""
     if fg:
         return os.path.basename(fg) not in SHELLS

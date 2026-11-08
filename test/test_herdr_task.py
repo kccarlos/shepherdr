@@ -4169,8 +4169,32 @@ class Checks(unittest.TestCase):
         self.tick()
         self.terms["t1"]["state"] = "live"
         self.clock[0] += self.c.LIMIT_MS + 1
+        self.tick()  # killed; recorded once it has exited
+        self.assertFalse(self.t.get("checks"))
         self.tick()
+        self.assertEqual(self.terms, {})
         rec = self.t["checks"][0]
         validate_check(rec)
         self.assertNotEqual(rec["exit"], 0)
         self.assertIn("Killed", rec["output_tail"])
+
+    def test_a_run_whose_head_moved_or_task_left_ready_is_dropped_without_a_record(self):
+        self.tick()
+        self.terms["t1"]["state"] = "live"
+        tmp = self.cwds[0]
+        self.commit("two")
+        self.tick(), self.tick()  # kill, then drop
+        self.assertEqual((self.t.get("check_run"), self.t.get("checks"), self.terms), (None, None, {}))
+        self.assertFalse(os.path.exists(tmp))
+        self.tick()  # the new head gets its run
+        self.assertEqual(len(self.cwds), 2)
+
+    def test_a_pending_ci_state_is_refreshed(self):
+        self.t["pr"] = {"repo": "o/r", "url": "https://x/1"}
+        states = iter(["pending", "success"])
+        self.mock.patch.object(self.c, "ci_of", lambda t, sha: {"state": next(states), "url": "https://x/1"}).start()
+        self.addCleanup(self.mock.patch.stopall)
+        self.tick(), self.tick()
+        self.assertEqual(self.t["checks"][0]["ci"]["state"], "pending")
+        self.tick()
+        self.assertEqual(self.t["checks"][0]["ci"]["state"], "success")

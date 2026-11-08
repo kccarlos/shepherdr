@@ -19,7 +19,7 @@ def gate_on(s, t):
     n = 0
     for layer in settings_layers(s, t.get("space")):
         n = (layer.get("review") or {}).get("min", n)
-    return isinstance(n, int) and n > 0
+    return type(n) is int and n > 0
 
 
 def ci_of(t, sha):
@@ -27,7 +27,7 @@ def ci_of(t, sha):
     pr = t.get("pr")
     if not pr:
         return None
-    ok, out, _ = gh("api", f"repos/{pr['repo']}/commits/{sha}/check-runs")
+    ok, out, _ = gh("api", f"repos/{pr['repo']}/commits/{sha}/check-runs?per_page=100")
     try:
         runs = json.loads(out)["check_runs"] if ok else None
     except (ValueError, KeyError):
@@ -42,55 +42,61 @@ def ci_of(t, sha):
     return {"state": state, "url": pr.get("url")}
 
 
-def drop(t, wt, c):
-    git(wt, "worktree", "remove", "--force", c["tmp"])
-    shutil.rmtree(c["tmp"], ignore_errors=True)
-    run(["hc", "rm", c["address"]])
-    t.pop("check_run", None)
+def clean(s, tmp):
+    git(s.loc["folder"], "worktree", "remove", "--force", tmp)
+    shutil.rmtree(tmp, ignore_errors=True)
 
 
 def checks_pass(s, t):
-    """One tick's step for one task: record a finished check run, or start one at a head without a record."""
-    wt = t.get("worktree")
-    if t["state"] != "ready" or not wt or not gate_on(s, t):
-        return
-    c = t.get("check_run")
+    """One tick's step for one task: finish a check run (record it, or drop it when the task moved on or its
+    head did), keep the CI state of a record fresh, or start a run at a head without a record."""
+    wt, c = t.get("worktree"), t.get("check_run")
+    on = t["state"] == "ready" and wt and gate_on(s, t)
+    ok, sha, _ = git(wt, "rev-parse", "HEAD") if on else (False, None, None)
     if c:
         k = hc_json("get", c["address"]) or {}
-        over = k.get("state") == "live" and now() - c["started_at"] > LIMIT_MS
-        if k.get("state") == "live" and not over:
+        stale = not ok or sha != c["sha"]
+        if k.get("state") == "live":
+            if not stale and now() - c["started_at"] <= LIMIT_MS:
+                return
+            c["over"] = not stale
+            run(["hc", "kill", c["address"]])  # recorded or dropped once it has exited (hc rm needs that)
+            s.dirty = True
             return
-        if over:
-            run(["hc", "kill", c["address"]])
-        tail = run(["hc", "read", c["address"], "--lines", "200"]).stdout.rstrip()
-        code = k.get("exit_code")
-        t.setdefault("checks", []).append({
-            "sha": c["sha"], "command": c["command"], "exit": 124 if over else code if isinstance(code, int) else 1,
-            "output_tail": ((f"Killed: ran longer than {LIMIT_MS // 60000} minutes.\n" if over else "") + tail)[-TAIL:],
-            "started_at": c["started_at"], "finished_at": now(), "by": c["address"], "ci": ci_of(t, c["sha"])})
-        drop(t, wt, c)
+        if not stale:
+            tail = run(["hc", "read", c["address"], "--lines", "200"]).stdout.rstrip()
+            code = k.get("exit_code")
+            t.setdefault("checks", []).append({
+                "sha": c["sha"], "command": c["command"], "exit": 124 if c.get("over") else code if isinstance(code, int) else 1,
+                "output_tail": ((f"Killed: ran longer than {LIMIT_MS // 60000} minutes.\n" if c.get("over") else "") + tail)[-TAIL:],
+                "started_at": c["started_at"], "finished_at": now(), "by": c["address"], "ci": ci_of(t, c["sha"])})
+        clean(s, c["tmp"])
+        run(["hc", "rm", c["address"]])
+        t.pop("check_run")
         s.dirty = True
         return
-    cmd = settings_for(s, t.get("space"))["tasks"].get("check")
-    ok, sha, _ = git(wt, "rev-parse", "HEAD")
-    if not cmd or not ok or any(r["sha"] == sha for r in t.get("checks") or []):
+    cmd = (settings_for(s, t.get("space"))["tasks"].get("check") or "").strip()
+    mine = [r for r in t.get("checks") or [] if r["sha"] == sha]
+    if mine and t.get("pr") and (mine[-1]["ci"] or {}).get("state") == "pending":
+        ci = ci_of(t, sha)
+        if ci != mine[-1]["ci"]:
+            mine[-1]["ci"], s.dirty = ci, True
+    if not cmd or not ok or mine:
         return
     tmp = tempfile.mkdtemp(prefix="herdr-check-")
     if not git(wt, "worktree", "add", "--detach", tmp, sha)[0]:
-        shutil.rmtree(tmp, ignore_errors=True)
-        return
+        return clean(s, tmp)
     try:
-        r = run(["hc", "run", "--bg", "--json", "--keep", "--outlive-parent", "--no-notify", "--cwd", tmp,
+        r = run(["hc", "run", "--bg", "--json", "--outlive-parent", "--no-notify", "--cwd", tmp,
                  "--label", "herdr.role=checks", "--label", f"herdr.task={s.key(t)}", "--", "sh", "-c", cmd])
         address = json.loads(r.stdout)["address"] if r.returncode == 0 else None
     except (ValueError, KeyError):
         address = None
     except BaseException:
-        git(wt, "worktree", "remove", "--force", tmp)
+        clean(s, tmp)
         raise
     if not address:
-        git(wt, "worktree", "remove", "--force", tmp)
-        return
+        return clean(s, tmp)
     t["check_run"] = {"sha": sha, "command": cmd, "address": address, "tmp": tmp, "started_at": now()}
     s.dirty = True
 

@@ -137,6 +137,8 @@ def tick_store(s, report):
                 if not merge_now(s, t):
                     report["done"].append(t["id"])
             t.pop("_pr_fresh", None)
+    for t in s.data["tasks"]:
+        if t.get("worktree") or t.get("check_run"):
             try:
                 checks_pass(s, t)
             except Exception as e:  # never stops the tick

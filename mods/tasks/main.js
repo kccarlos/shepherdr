@@ -218,7 +218,7 @@ export default class Tasks extends View {
     const f = this.frame ?? {};
     const shown = f.agents ??= new Map(agents().map((a) => [a.address, a]));
     return (f.terminals ??= terminals()).filter((k) => k.state === "live" && k.labels?.["herdr.task"] === key && machineOf(k.address) === m)
-      .filter((k) => k.program?.key !== "shell" && !k.program?.shell && !helper(k))
+      .filter((k) => k.program?.key !== "shell" && !k.program?.shell && !helper(k) && k.labels?.["herdr.role"] !== "checks")
       .map((k) => {
         // agents() knows when someone looked at a finished agent (done -> idle), as Herdr shows it.
         const a = shown.get(k.address);

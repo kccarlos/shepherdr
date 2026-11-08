@@ -52,3 +52,5 @@ answer (2026-11-08). It becomes the role allow lists in phase 3 (docs/factory.md
   none went out 04:11-04:43, and FAC-12's ready (04:28) arrived at 04:43:58, about 15 minutes late. The scheduler
   logged backups at 04:18 and 04:29 and then nothing until 04:43:58 (the 04:39 backup is missing), so its round
   was likely stuck about 14 minutes; its log doesn't say why. Not yet investigated.
+
+- 05:04: everything under herdr-core stopped: an `hc run` probe could not even `ls ~/Desktop`, while the orchestrator's own shell (same Xcode git) answered in 13 ms. So macOS privacy access for the app that owns herdr-core's holder was gone or awaiting a prompt. Ticks (herdr-automations), FAC-9's worker and the Assistant hung on git. Parked until the person grants access. Lesson: factory repos live outside ~/Documents, ~/Desktop and ~/Downloads, or the holder's app and the service's bun get Full Disk Access.

@@ -169,6 +169,7 @@ Evidence: an agy experiment ([agent-comm.md](agent-comm.md)). Contract-first agr
 
 | Case | Handling |
 |---|---|
+| macOS privacy (Files and Folders) | herdr-core's holder, Herdr.app and a launchd service each need their own access to ~/Documents, ~/Desktop and ~/Downloads. Without it, every git call in a repo there hangs: ticks, workers and the Assistant all stop, and the person's other agents too (seen 2026-11-08, 05:04). Keep factory repos outside those folders, or grant Full Disk Access to the app that owns the holder and to the service's bun. A probe (`ls ~/Documents` from an hc terminal) tells in a second. |
 | Mac reboot | The service (launchd, KeepAlive) ticks and revive retypes each agent into its kept terminal. Open question: who starts herdr-core at login. Fix: the service runs `hc server start` before its first tick. |
 | herdr-core restart | Holders keep programs. Event `seq` restarts, so the board takes a fresh snapshot. |
 | Same files in two tasks | The Assistant sequences them (`--after`); the gate's fresh-base rule catches the rest |

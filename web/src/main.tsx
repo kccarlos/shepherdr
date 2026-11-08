@@ -1,3 +1,4 @@
+import { opened } from './preview-query.ts'
 import './styles.css'
 import './theme.ts'
 import { StrictMode, useState } from 'react'
@@ -114,7 +115,8 @@ watchScrolling()
 watchKeys()
 
 // a deliverable's preview (screens/Preview.tsx previewUrl): its own screen, with a way back
-const q = new URLSearchParams(location.search)
+const q = new URLSearchParams(opened)
+if (q.get('preview')) history.replaceState(null, '', location.pathname + opened)
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     {q.get('preview') && q.get('folder')?.startsWith('/') ? <Preview id={q.get('preview')!} folder={q.get('folder')!} on={q.get('on')} /> : <App />}

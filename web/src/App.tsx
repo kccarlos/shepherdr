@@ -8,7 +8,6 @@ import clsx from 'clsx'
 import { Fragment, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent, type ReactNode, type RefObject } from 'react'
 import {
   agentChat,
-  boardAsked,
   closePane,
   focusPane,
   onlyPane,
@@ -86,8 +85,8 @@ export default function App() {
   const device = useUI((u) => u.device)
   const search = useUI((u) => u.search)
   const keyboard = useUI((u) => u.keyboard)
-  // the board's home (screens/Home.tsx), on a desktop opened with ?board; opening a task leaves it
-  const [board, setBoard] = useState(boardAsked)
+  // the board's home (screens/Home.tsx), on a desktop opened with ?board, while no task is open
+  const board = useUI((u) => u.board && !u.task)
   useKeyboard()
   if (!snap) return <Loading />
   return (
@@ -105,7 +104,7 @@ export default function App() {
         <Bar key={i} />
       ))}
       <div className="relative flex min-h-0 flex-1 flex-col">
-        {device === 'phone' ? <PhoneLayout snap={snap} /> : board ? <Home leave={() => setBoard(false)} /> : <WideLayout snap={snap} />}
+        {device === 'phone' ? <PhoneLayout snap={snap} /> : board ? <Home /> : <WideLayout snap={snap} />}
         <PanelSheet />
         {registry.overlays.map((O, i) => (
           <O key={i} />

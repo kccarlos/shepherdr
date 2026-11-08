@@ -21,3 +21,8 @@ test('usage tiles: one per window a pool has, empty and unknown say so', () => {
   expect(t[4].note).toBe('refills Thursday')
   expect(t[5].note).toBe('no usage info')
 })
+
+test('only the window at its floor says so', () => {
+  const t = tiles([{ pool: 'claude', five_hour_left: 4, week_left: 80, five_hour_reset: '2026-11-08T20:00:00Z', week_reset: '2026-11-12T09:00:00Z', state: 'floor' }], Date.parse('2026-11-08T18:40:00Z'))
+  expect(t.map((x) => x.note.endsWith(' · at its floor'))).toEqual([true, false])
+})

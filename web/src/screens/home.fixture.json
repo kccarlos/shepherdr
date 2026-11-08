@@ -50,11 +50,11 @@
    "agents": [
     {
      "role": "worker",
-     "cli": "claude",
-     "model": null,
+     "cli": "agy",
+     "model": "gemini-4-argon-high",
      "address": "term-29",
      "parent": null,
-     "state": "done"
+     "state": "ended"
     },
     {
      "role": "reviewer",
@@ -70,7 +70,7 @@
      "model": null,
      "address": "term-29c",
      "parent": null,
-     "state": "done"
+     "state": "working"
     }
    ],
    "size": {

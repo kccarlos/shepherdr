@@ -12,9 +12,10 @@ export function tiles(pools: Pool[], now = Date.now()) {
   return pools.flatMap((p) => {
     const name = NAMES[p.pool] ?? p.pool
     if (p.state === 'unknown') return [{ label: name, left: null as number | null, note: 'no usage info' }]
-    return ([['5 hours', p.five_hour_left, p.five_hour_reset], ['week', p.week_left, p.week_reset]] as const)
+    // each window's own floor (contracts/board-data.md: 5 % in 5 hours, 1 % in the week)
+    return ([['5 hours', p.five_hour_left, p.five_hour_reset, 5], ['week', p.week_left, p.week_reset, 1]] as const)
       .filter(([, left]) => left !== null)
-      .map(([w, left, reset]) => ({ label: `${name} · ${w}`, left, note: !reset ? '' : `${left === 0 ? 'empty until' : 'refills'} ${when(reset, now)}${p.state === 'floor' && left ? ' · at its floor' : ''}` }))
+      .map(([w, left, reset, floor]) => ({ label: `${name} · ${w}`, left, note: !reset ? '' : `${left === 0 ? 'empty until' : 'refills'} ${when(reset, now)}${left && left <= floor ? ' · at its floor' : ''}` }))
   })
 }
 

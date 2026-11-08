@@ -199,6 +199,8 @@ export interface UI {
   place: string
   /** the open task: its agent's chat */
   task: string | null
+  /** a desktop shows the board's home (screens/Home.tsx, ?board) while no task is open */
+  board: boolean
   /** phone: Chat, Needs you, Tasks or Artifacts */
   tab: 'chat' | 'needs' | 'tasks' | 'artifacts'
   /** a wide screen's right-hand column: Needs you, the place's Tasks or its Artifacts, remembered on this device */
@@ -406,8 +408,6 @@ function saveSide(side: UI['side']) {
 }
 
 const params = new URLSearchParams(location.search)
-/** the page was opened with ?board: the board's home (screens/Home.tsx), read before the history rewrites the address */
-export const boardAsked = params.has('board')
 // a reload for a new build draws at once what it showed: the last snapshot and the chats on screen, until the server's
 const { text: keptText, snap: keptSnap, chats: keptChats, ...keptUI } = kept()
 let state: State = {
@@ -446,6 +446,7 @@ let state: State = {
     allDone: loadAllDone(),
     shut: loadShut(),
     archived: null,
+    board: params.has('board'),
     taskFilter: loadTaskFilter(),
     thisSpace: loadThisSpace(),
     filter: {},
@@ -610,7 +611,7 @@ export function useDraft(key: string): [string, (v: string) => void] {
 /* ---------- address bar and Back (nav.ts) ---------- */
 
 /** what of the screen makes a step in the history (nav.ts) */
-const STEP_FIELDS = new Set<keyof UI>(['place', 'task', 'tab', 'sheet', 'viewer', 'settings', 'search', 'drawer', 'photo', 'adding', 'archived'])
+const STEP_FIELDS = new Set<keyof UI>(['place', 'task', 'tab', 'sheet', 'viewer', 'settings', 'search', 'drawer', 'photo', 'adding', 'archived', 'board'])
 
 /** the history entry on screen, as the app wrote it */
 let entry: Entry | null = null

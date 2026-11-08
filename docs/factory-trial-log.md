@@ -54,3 +54,7 @@ answer (2026-11-08). It becomes the role allow lists in phase 3 (docs/factory.md
   was likely stuck about 14 minutes; its log doesn't say why. Not yet investigated.
 
 - 05:04: everything under herdr-core stopped: an `hc run` probe could not even `ls ~/Desktop`, while the orchestrator's own shell (same Xcode git) answered in 13 ms. So macOS privacy access for the app that owns herdr-core's holder was gone or awaiting a prompt. Ticks (herdr-automations), FAC-9's worker and the Assistant hung on git. Parked until the person grants access. Lesson: factory repos live outside ~/Documents, ~/Desktop and ~/Downloads, or the holder's app and the service's bun get Full Disk Access.
+- A worker that leaves a background command running after `ready` (FAC-24: `gh pr checks --watch`) gets a new turn
+  when it ends, so herdr-task moves the task from Ready to "Working again" (Needs you) although nothing changed. The
+  worker had to run ready again. Briefs could say "no background commands after ready", or busy_again could ignore a
+  turn that changes no commit.

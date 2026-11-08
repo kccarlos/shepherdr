@@ -13,7 +13,7 @@
         try { a = localStorage.getItem('shepherdr.appearance') } catch (e) {}
         var dark = a === 'dark' || (a !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches)
         document.documentElement.dataset.theme = dark ? 'dark' : 'light'
-        document.querySelector('meta[name=theme-color]').content = dark ? '#0b0b0d' : '#ffffff'
+        document.querySelector('meta[name=theme-color]').content = dark ? '#1f2126' : '#ffffff'
       })()
       /* a link's #part (#accept=SHEP-7), kept before the app's own address takes the bar */
       window.shepherdrLink = location.hash

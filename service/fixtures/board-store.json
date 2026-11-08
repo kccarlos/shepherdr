@@ -1,0 +1,456 @@
+{
+ "tasks": [
+  {
+   "id": 2,
+   "title": "Claude workers: no invisible trust question",
+   "state": "done",
+   "mode": "worktree",
+   "base": "kc-factory",
+   "branch": "task/2-claude-workers-no-invisible-trust-questi",
+   "start": "c558af72819ab371cd050d7b976239b8fa65c1a1",
+   "head": "21a1e6fede0038415f1cab016a10ed316c7a2bab",
+   "agents": [
+    {
+     "address": "t2r",
+     "agent": "claude",
+     "argv": [
+      "claude",
+      "--model",
+      "opus",
+      "--settings"
+     ],
+     "at": 1794131327959,
+     "parent": "t2p",
+     "ended": 1794136290259
+    }
+   ],
+   "reviews": [
+    {
+     "round": 1,
+     "result": "report",
+     "text": "Round 1 (agy Argon high) on 30b6b810: 2 major fixed in next commit (read only Claude workers' screens; automations got 'failed' instead of 'needs-you'); 1 minor (Ready-state tasks not checked) left",
+     "at": 1794133083109,
+     "head": "21a1e6fede0038415f1cab016a10ed316c7a2bab",
+     "by": "t2r"
+    },
+    {
+     "round": 2,
+     "result": "report",
+     "text": "Round 2 (agy Argon high) on 21a1e6fe: no findings at or above major; 1 minor (Ready/Merging tasks whose new Claude worker hits the question aren't checked) left",
+     "at": 1794133773297,
+     "head": "21a1e6fede0038415f1cab016a10ed316c7a2bab",
+     "by": "t2r"
+    }
+   ],
+   "reviewers": []
+  },
+  {
+   "id": 15,
+   "title": "G4 The gate, and merging in code",
+   "state": "running",
+   "mode": "worktree",
+   "base": "kc-factory",
+   "branch": "task/15-g4-the-gate-and-merging-in-code",
+   "start": "d6722e06cd3c674470f754d90e98c02cbf79c58a",
+   "head": "4bf3b81e646297bf3deb238cc3fcc0931405d11f",
+   "agents": [
+    {
+     "address": "t6n",
+     "agent": "claude",
+     "argv": [
+      "claude",
+      "--model",
+      "opus",
+      "--settings"
+     ],
+     "at": 1794161749382,
+     "parent": "t2p"
+    }
+   ],
+   "reviewers": [
+    {
+     "address": "t86",
+     "agent": "agy",
+     "argv": [
+      "agy",
+      "--model",
+      "gemini-4-argon-high",
+      "--mode",
+      "plan"
+     ],
+     "at": 1794170794882,
+     "parent": "t6n"
+    },
+    {
+     "address": "t8s",
+     "agent": "agy",
+     "argv": [
+      "agy",
+      "--model",
+      "gemini-4-argon-high",
+      "--mode",
+      "plan"
+     ],
+     "at": 1794171797421,
+     "parent": "t6n"
+    },
+    {
+     "address": "t95",
+     "agent": "agy",
+     "argv": [
+      "agy",
+      "--model",
+      "gemini-4-argon-high",
+      "--mode",
+      "plan"
+     ],
+     "at": 1794172628437,
+     "parent": "t6n"
+    },
+    {
+     "address": "t9n",
+     "agent": "agy",
+     "argv": [
+      "agy",
+      "--model",
+      "gemini-4-argon-high",
+      "--mode",
+      "plan"
+     ],
+     "at": 1794173475065,
+     "parent": "t6n"
+    },
+    {
+     "address": "t105",
+     "agent": "agy",
+     "argv": [
+      "agy",
+      "--model",
+      "gemini-4-argon-high",
+      "--mode",
+      "plan"
+     ],
+     "at": 1794174678291,
+     "parent": "t6n"
+    },
+    {
+     "address": "t10j",
+     "agent": "agy",
+     "argv": [
+      "agy",
+      "--model",
+      "gemini-4-argon-high",
+      "--mode",
+      "plan"
+     ],
+     "at": 1794175816757,
+     "parent": "t6n"
+    }
+   ],
+   "review_runs": [
+    {
+     "round": 1,
+     "head": "af51c7395267128d8ef71e506696b29c6cde8329",
+     "address": "t86",
+     "cli": "agy",
+     "model": "gemini-4-argon-high",
+     "at": 1794170794882
+    },
+    {
+     "round": 2,
+     "head": "608709a764162b625d7eca8002b6bd1ce77f6c0d",
+     "address": "t8s",
+     "cli": "agy",
+     "model": "gemini-4-argon-high",
+     "at": 1794171797421
+    },
+    {
+     "round": 3,
+     "head": "88ded9a3c543b9e306a84236ac4551327470441d",
+     "address": "t95",
+     "cli": "agy",
+     "model": "gemini-4-argon-high",
+     "at": 1794172628437
+    },
+    {
+     "round": 4,
+     "head": "5465aaba4cf25fdcfdad263841b97f7cc53d59c2",
+     "address": "t9n",
+     "cli": "agy",
+     "model": "gemini-4-argon-high",
+     "at": 1794173475065
+    },
+    {
+     "round": 5,
+     "head": "e7959c39ebf5008022682cd0ff627fc0183ecd12",
+     "address": "t105",
+     "cli": "agy",
+     "model": "gemini-4-argon-high",
+     "at": 1794174678291
+    },
+    {
+     "round": 6,
+     "head": "4bf3b81e646297bf3deb238cc3fcc0931405d11f",
+     "address": "t10j",
+     "cli": "agy",
+     "model": "gemini-4-argon-high",
+     "at": 1794175816757
+    }
+   ],
+   "reviews": [
+    {
+     "round": 1,
+     "head": "af51c7395267128d8ef71e506696b29c6cde8329",
+     "by": "t86",
+     "started_by": "herdr-task",
+     "verdict": "changes",
+     "must_fix": 6,
+     "report": "1. [blocker] commands.py:1028-1033, 1234-1237 and tick.py:136-139: merge_now runs pr_pending before gate_refusal. On a gated PR with pending GitHub checks, accept sets auto_merge=checks and exits 0 despite failed local checks, missing rounds, out-of-repo links, or stale base, and tick_store drops GATE_REFUSED without setting attention (stuck in Merging). Run gate_refusal first, return GATE_REFUSED for gated pr_pending, and set attention in tick_store. 2. [blocker] commands.py:1055-1068: gated cmd_merge skips state==ready and busy_again, merging a running task at an earlier passed sha1 mid-work (or passing empty sha when head is unset and falsely sending MOVED). Enforce state==ready and busy_again in gated cmd_merge. 3. [blocker] commands.py:1030-1034, github.py:247-252: gated merge_now omits branch_tip(s, t) != sha. If a worker commits sha2 locally after ready at sha1, merge_now merges sha1 and finish runs git branch -D, deleting sha2. Refuse when branch_tip != sha in gated merge_now too. 4. [major] checks.py:69-86: checks_pass clears GATE_REFUSED attention only on local check_run completion, not when PR CI updates to success or ages past CI_WINDOW_MS, leaving real view() stuck in status=needs. Clear GATE_REFUSED attention in lines 82-86 too. 5. [major] commands.py:1142-1147, 1166-1171: PR gate runs unchecked git fetch without timeout or refspec (fetch failure falsely triggers MOVED), gate_refusal says rebase onto local base instead of remote/base, and writes bare herdr-task ready (blocked by launch.py allow rules) plus commit. Use git_quick with refspec, remote/base for PRs, and own_path() ready s.ref(t). 6. [major] commands.py:1120-1130: gate(s, t, sha) with review.min==0 raises IndexError at counted[-1] instead of [] per contracts/gate-evidence.md:45. Return [] when not need. 7. [minor] commands.py:1227, 1254: cmd_accept leaves accepted_at set on refusal.",
+     "at": 1794171577491
+    },
+    {
+     "round": 2,
+     "head": "608709a764162b625d7eca8002b6bd1ce77f6c0d",
+     "by": "t8s",
+     "started_by": "herdr-task",
+     "verdict": "changes",
+     "must_fix": 3,
+     "report": "1. [major] mods/tasks/bin/herdr_task/tick.py:136-148, checks.py:82-87: Auto-merge PRs waiting on gate checks/CI flip to Needs you, and \"none\" CI refusal sticks past CI_WINDOW_MS. In tick_store, merge_now (138) runs before checks_pass (147) and sets t[\"attention\"]=err (142); task_status (agents.py:102) and core/tasks.js:120 check attention before auto_merge, so TickAutoMerge (test_herdr_task.py:2230) yields (\"needs\",\"attention\",...) instead of \"merging\" (and sends needs-you news). In no-CI repos (state==\"none\"), ci!=mine[-1][\"ci\"] is never True, so checks_pass never pops attention after CI_WINDOW_MS. Fix: run checks_pass before facts/merge_now; skip setting attention in tick.py:141-142 while checks run or CI is pending/unstarted; in checks.py:82-87 pop GATE_REFUSED attention once not last[\"exit\"], state==\"none\", and CI_WINDOW_MS elapsed.\n\n2. [major] mods/tasks/bin/herdr_task/commands.py:1024-1031, 1260: merge_now runs pr_problem(v) before gate_refusal, so when origin/<base> moves with conflicts (mergeable==\"CONFLICTING\"), pr_problem returns at 1025 before gate_refusal (1029): stays Ready without rebase prompt, and cmd_accept (1260) leaves accepted_at set. Fix: when gated, check only state==\"CLOSED\" before gate_refusal and run pr_problem after; pop accepted_at on any error in cmd_accept.\n\n3. [major] mods/tasks/bin/herdr_task/commands.py:1053-1074, 1125, 1198: cmd_merge lacks cmd_accept:1214 busy_again check (so finish(..., even_if_busy=True) deletes a working agent worktree/branch), and gate (1125) checks only branch_tip != sha, merging over dirty tracked files or detached HEAD in t[\"worktree\"] (unlike gate_verdict:780). Fix: check busy_again in cmd_merge, and in gate refuse if worktree HEAD != sha or git status --porcelain --untracked-files=no is non-empty.\n\n4. [minor] mods/tasks/bin/herdr_task/commands.py:1120, test/test_herdr_task.py:1945-2205: gate(s, t, None) raises TypeError at sha[:7] (use (sha or \"\")[:7]); add GateMerge tests for last round changes/must_fix>0,",
+     "at": 1794172513127
+    },
+    {
+     "round": 3,
+     "head": "88ded9a3c543b9e306a84236ac4551327470441d",
+     "by": "t95",
+     "started_by": "herdr-task",
+     "verdict": "changes",
+     "must_fix": 2,
+     "report": "1. [major] mods/tasks/bin/herdr_task/commands.py:1024-1031, 1260-1261: merge_now runs pr_problem(v) before gate_refusal. When a gated PR base moves and conflicts (state=OPEN, mergeable=CONFLICTING), line 1027 returns before gate_refusal runs. Proof: in GateMerge run self.pr(), self.passed(), advance main, set state[\"v\"][\"mergeable\"]=\"CONFLICTING\", call self.accept() -> gate() is skipped, self.told gets no rebase message, state stays ready, and accepted_at stays set (line 1260 only pops on GATE_REFUSED). Failing rollup checks likewise skip gate_refusal. Fix: when gated and state != CLOSED, run gate_refusal before pr_problem; pop accepted_at on any error.\n2. [major] mods/tasks/bin/herdr_task/commands.py:1072-1073, 1180-1184: On MOVED via cmd_merge or tick_store (tick.py:138), gate_refusal leaves prior GATE_REFUSED attention set and handed_at unset. With progress.by=herdr, on_it() is False while the worker starts/rests, so task_status and core/tasks.js show the running task as Needs you instead of Working. If tell() raises Fail in tick_store, auto_merge stays set and attention unset, retrying silently every PR_EVERY. Proof: before self.check(), call self.accept(merge=True), advance main, call self.accept(merge=True) -> state is running but task_status(task, []) is needs/attention. Fix: in gate_refusal pop GATE_REFUSED attention and set handed_at=now() on tell() ok; on Fail pop auto_merge and set attention.\n3. [minor] mods/tasks/bin/herdr_task/checks.py:82-87: With ci.state==none, an early accept sets CI-not-started GATE_REFUSED attention, which checks_pass never clears once CI_WINDOW_MS elapses. Pop it once now() - last[\"finished_at\"] >= CI_WINDOW_MS.\n4. [minor] mods/tasks/bin/herdr_task/commands.py:1120, 1179: Line 1120 slices sha[:7] before checking not need / not sha (TypeError on gate(s, t, None)); use (sha or \"\")[:7]. Line 1179 passes None instead of args to tell(), ignoring accept/merge --space/--agent/--argv.",
+     "at": 1794173313138
+    },
+    {
+     "round": 4,
+     "head": "5465aaba4cf25fdcfdad263841b97f7cc53d59c2",
+     "by": "t9n",
+     "started_by": "herdr-task",
+     "verdict": "changes",
+     "must_fix": 4,
+     "report": "1. [major] commands.py:1151 \u2014 git(main, \"fetch\", remote, base, timeout=60): (a) base.git() leaves TimeoutExpired uncaught, crashing accept/merge and cmd_tick (tick.py:138/470 catch only Fail); (b) in a --single-branch clone, git fetch without a refspec exits 0 without updating refs/remotes/<remote>/<base>, passing a stale base ref through merge-base or failing on a missing ref. Reuse launch.git_quick(main, \"fetch\", \"--quiet\", \"--no-tags\", remote, f\"+refs/heads/{base}:refs/remotes/{remote}/{base}\", timeout=60)[0].\n2. [major] commands.py:1185-1187, agents.py:515-516, test_herdr_task.py:2112-2124 \u2014 gate_refusal sets handed_at and pops attention, so task_status never calls on_it(), while agents.starting() ignores handed_at. The test passed only because review_runs[-1][\"at\"] was <90s old; aging started and review_runs[*][\"at\"] by 120s makes task_status return \"needs\". Line 1186 also leaves PR conflict attention on t in cmd_merge. Add task.get(\"handed_at\") to agents.starting(), pop \"attention\" unconditionally in gate_refusal, and age timestamps in the test.\n3. [major] commands.py:1145 \u2014 ci == \"none\" from c[\"finished_at\"] passes gate() after CI_WINDOW_MS without re-querying ci_of(t, sha) (if no tick ran or machine slept, checks.py:82 never refreshes it either). Repro: pr(ci=\"none\"), passed(), set self.ci = \"failure\", accept at finished_at + CI_WINDOW_MS passes gate(). Re-read checks.ci_of(t, sha) when ci == \"none\" past CI_WINDOW_MS.\n4. [major] commands.py:1061-1068 \u2014 cmd_merge skips busy_again(), so a worker mid-turn with untracked files in wt before back_pass gets its old head merged and wt removed by finish(even_if_busy=True). Check busy_again() in cmd_merge as cmd_accept:1217 does.\n5. [minor] commands.py:1121 \u2014 sha[:7] before checking not sha raises TypeError on gate(s, t, None); use (sha or \"\")[:7].",
+     "at": 1794174314668
+    },
+    {
+     "round": 5,
+     "head": "e7959c39ebf5008022682cd0ff627fc0183ecd12",
+     "by": "t105",
+     "started_by": "herdr-task",
+     "verdict": "changes",
+     "must_fix": 3,
+     "report": "1. [blocker] mods/tasks/bin/herdr_task/commands.py:459,434,807,1190-1192 \u2014 Moved-base rebase exhausts review_rounds so the rebased head cannot finish review.\nProof: sed -n \"458,462p\" commands.py checks len(runs)>=rounds where default rounds=max(rounds_cfg or 3,gate)=3 (settings.py:405). After passing sha1 (len(review_runs)=2 for min=2, 3 for min=3), gate_refusal (1189-1192) sends the task to rebase without resetting used rounds (test_herdr_task.py:2069-2078 stops before rebase). On rebased sha2: for min=3, ready hits 3>=3 and starts 0 reviewers; for min=2, ready starts round 3 (len=3), and when it passes, gate_verdict (792)->gate_step hits 3>=3, sets review_out, starts no round 4, and stalls in running.\nFix: In gate_refusal set t[\"rebased_runs\"]=len(t.get(\"review_runs\") or []) and pop \"review_rounds_added\" (pop both on reopen at 807); in rounds_used (434) subtract int(t.get(\"rebased_runs\") or 0); in gate_step (459) check rounds_used(t, True)>=rounds.\n\n2. [major] mods/tasks/bin/herdr_task/commands.py:466,471 \u2014 After rebasing onto a moved base, gate_step diffs {t[\"start\"]}..{head}, including other tasks commits on base in the reviewer diff.\nProof: git diff --stat d6722e06..kc-factory already shows 2 files/19 insertions on kc-factory since start; t[\"start\"] is never updated after launch.py:641, so git diff <start>..<rebased_head> includes every commit landed on base since start.\nFix: Compute base = f\"{remote_of(s.loc[\\\"folder\\\"])}/{t.get(\\\"base\\\") or \\\"main\\\"}\" if t.get(\"pr\") else (t.get(\"base\") or \"main\") and since = git(wt, \"merge-base\", base, head)[1] or t[\"start\"], then diff {since}..{head}.\n\n3. [major] mods/tasks/bin/herdr_task/commands.py:1147-1152 \u2014 gate() neither refreshes ci_of when c[\"ci\"] is failure/pending/None nor saves c[\"ci\"] on a late none re-read.\nProof: checks_pass (checks.py:82) stops polling once state==\"failure\" or \"none\" past CI_WINDOW_MS, and gate() (1149-1150) only calls ci_of on late \"none\" without saving: (a) a re-run green GitHub CI after \"fa",
+     "at": 1794175681483
+    }
+   ]
+  },
+  {
+   "id": 16,
+   "title": "G5 The gate verifier",
+   "state": "queued",
+   "mode": "worktree",
+   "agents": [],
+   "reviewers": []
+  },
+  {
+   "id": 36,
+   "title": "Gate reviewers: read-only allow list at launch",
+   "state": "done",
+   "mode": "worktree",
+   "base": "kc-factory",
+   "branch": "task/36-gate-reviewers-read-only-allow-list-at-l",
+   "start": "228140b332f420ea5b7c32f9aeaa8764aaedefd8",
+   "head": "7e9c8984eb0e301e0e17626bff5ce88943ea0459",
+   "agents": [
+    {
+     "address": "t7c",
+     "agent": "claude",
+     "argv": [
+      "claude",
+      "--model",
+      "opus",
+      "--settings"
+     ],
+     "at": 1794164846051,
+     "parent": "t2p",
+     "ended": 1794167556233
+    }
+   ],
+   "reviewers": [
+    {
+     "address": "t7f",
+     "agent": "agy",
+     "argv": [
+      "agy",
+      "--model",
+      "gemini-4-argon-high",
+      "--mode",
+      "plan"
+     ],
+     "at": 1794165629138,
+     "parent": "t7c"
+    },
+    {
+     "address": "t7g",
+     "agent": "agy",
+     "argv": [
+      "agy",
+      "--model",
+      "gemini-4-argon-high",
+      "--mode",
+      "plan"
+     ],
+     "at": 1794166347959,
+     "parent": "t7c"
+    }
+   ],
+   "review_runs": [
+    {
+     "round": 1,
+     "head": "7e9c8984eb0e301e0e17626bff5ce88943ea0459",
+     "address": "t7f",
+     "cli": "agy",
+     "model": "gemini-4-argon-high",
+     "at": 1794165629138
+    },
+    {
+     "round": 2,
+     "head": "7e9c8984eb0e301e0e17626bff5ce88943ea0459",
+     "address": "t7g",
+     "cli": "agy",
+     "model": "gemini-4-argon-high",
+     "at": 1794166347959
+    }
+   ],
+   "reviews": [
+    {
+     "round": 1,
+     "head": "7e9c8984eb0e301e0e17626bff5ce88943ea0459",
+     "by": "t7f",
+     "started_by": "herdr-task",
+     "verdict": "pass",
+     "must_fix": 0,
+     "report": "0 findings. Skipped shell checks (bin/sync-shared --check, unittest, node --check): launched by pre-FAC-36 herdr-task without the reviewer shell allow list; audited commands.py, launch.py and test_herdr_task.py directly.",
+     "at": 1794166347753
+    },
+    {
+     "round": 2,
+     "head": "7e9c8984eb0e301e0e17626bff5ce88943ea0459",
+     "by": "t7g",
+     "started_by": "herdr-task",
+     "verdict": "pass",
+     "must_fix": 0,
+     "report": "No findings. Shell checks skipped in this pre-FAC-36 agy reviewer session to avoid blocking on an unanswerable permission prompt before FAC-36 merges, verified changed files, call sites, mocks, and repo rules by static inspection.",
+     "at": 1794166741326
+    }
+   ],
+   "checks": [
+    {
+     "sha": "7e9c8984eb0e301e0e17626bff5ce88943ea0459",
+     "command": "export PATH=\"$HOME/.nvm/versions/node/v22.20.0/bin:$PATH\"; bin/sync-shared --check && python3 -m unittest discover -s test",
+     "exit": 0,
+     "output_tail": "location traceback\n./tmp/herdr-check-f4k_4eog/test/test_repo.py:176: ResourceWarning: unclosed file <_io.TextIOWrapper name='/tmp/herdr-check-f4k_4eog/web/plugins/tasks/client.tsx' mode='r' encoding='utf-8'>\n  text = open(path, encoding=\"utf-8\").read()\nResourceWarning: Enable tracemalloc to get the object allocation traceback\n/tmp/herdr-check-f4k_4eog/test/test_repo.py:176: ResourceWarning: unclosed file <_io.TextIOWrapper name='/tmp/herdr-check-f4k_4eog/web/plugins/worktree/client.tsx' mode='r' encoding='utf-8'>\n  text = open(path, encoding=\"utf-8\").read()\nResourceWarning: Enable tracemalloc to get the object allocation traceback\n/tmp/herdr-check-f4k_4eog/test/test_repo.py:176: ResourceWarning: unclosed file <_io.TextIOWrapper name='/tmp/herdr-check-f4k_4eog/service/worktree.ts' mode='r' encoding='utf-8'>\n  text = open(path, encoding=\"utf-8\").read()\nResourceWarning: Enable tracemalloc to get the object allocation traceback\n/tmp/herdr-check-f4k_4eog/test/test_repo.py:179: ResourceWarning: unclosed file <_io.TextIOWrapper name='/tmp/herdr-check-f4k_4eog/web/plugins/worktree/client.tsx' mode='r' encoding='utf-8'>\n  web = open(J(\"web\", \"plugins\", \"worktree\", \"client.tsx\"), encoding=\"utf-8\").read()\nResourceWarning: Enable tracemalloc to get the object allocation traceback\n./tmp/herdr-check-f4k_4eog/test/test_repo.py:288: ResourceWarning: unclosed file <_io.TextIOWrapper name='/tmp/herdr-check-f4k_4eog/bin/shepherdr' mode='r' encoding='UTF-8'>\n  v = re.search(r'^VERSION = \"([^\"]+)\"', open(J(\"bin\", \"shepherdr\")).read(), re.M).group(1)\nResourceWarning: Enable tracemalloc to get the object allocation traceback\n/tmp/herdr-check-f4k_4eog/test/test_repo.py:290: ResourceWarning: unclosed file <_io.TextIOWrapper name='/tmp/herdr-check-f4k_4eog/CHANGELOG.md' mode='r' encoding='UTF-8'>\n  self.assertRegex(open(J(\"CHANGELOG.md\")).read(), rf\"(?m)^## {re.escape(v)}\\b\", \"CHANGELOG's newest entry\")\nResourceWarning: Enable tracemalloc to get the object allocation traceback\n/tmp/herdr-check-f4k_4eog/test/test_repo.py:291: ResourceWarning: unclosed file <_io.TextIOWrapper name='/tmp/herdr-check-f4k_4eog/RECIPE.md' mode='r' encoding='UTF-8'>\n  self.assertIn(v, open(J(\"RECIPE.md\")).read())\nResourceWarning: Enable tracemalloc to get the object allocation traceback\n/tmp/herdr-check-f4k_4eog/test/test_repo.py:292: ResourceWarning: unclosed file <_io.TextIOWrapper name='/tmp/herdr-check-f4k_4eog/README.md' mode='r' encoding='UTF-8'>\n  self.assertIn(v, open(J(\"README.md\")).read())\nResourceWarning: Enable tracemalloc to get the object allocation traceback\n./tmp/herdr-check-f4k_4eog/test/test_repo.py:221: ResourceWarning: unclosed file <_io.TextIOWrapper name='/tmp/herdr-check-f4k_4eog/web/plugins/coordinators/client.tsx' mode='r' encoding='UTF-8'>\n  text = open(J(\"web\", \"plugins\", \"coordinators\", \"client.tsx\")).read()\nResourceWarning: Enable tracemalloc to get the object allocation traceback\n.......................................\n----------------------------------------------------------------------\nRan 313 tests in 31.124s\n\nOK (skipped=3)",
+     "started_at": 1794166779167,
+     "finished_at": 1794166816528,
+     "by": "t7j",
+     "ci": {
+      "state": "success",
+      "url": "https://github.com/kccarlos/shepherdr/pull/21"
+     }
+    }
+   ]
+  }
+ ],
+ "asks": [
+  {
+   "id": "1a065b",
+   "question": "Optional, about 5 min at the Mac mini: log the CLIs in inside the new VM image factory-base-2026-11-08, so agents in its clones can use gh, claude and agy. In a Mac terminal run: cd ~/.herdr/worktrees/factory-run/task-51-layered-tart-vm-image-factory-base-sheep && TART_HOME='/vol/vms/tart' vm/provision.sh login factory-base-2026-11-08 . A VM window opens: open Terminal in it, run gh auth login, then claude (type /login), then agy and sign in; then Apple menu > Shut Down. The script re-snapshots and smoke-tests the image. Skip keeps the image without logins; everything else works.",
+   "options": [
+    "Done",
+    "Skip for now"
+   ],
+   "recommend": "Done",
+   "task": "FAC-51",
+   "to": "t9d",
+   "at": 1794173772857,
+   "terminal": "t9v",
+   "answer": "Done: the person logged in gh (over ssh), codex, agy and claude in factory-base-2026-11-08.",
+   "answered_at": 1794174861394
+  },
+  {
+   "id": "2f684a",
+   "question": "Approve the factory board design (FAC-31)? 9 artboards on the Sheepdog design system: home, one task, a preview, phone, dark, and loading/offline/empty/error. Dashed 'needs:' chips mark data the service doesn't send yet; the merge-gate panel is dropped. https://claude.ai/artifact/x Approve: board implementation starts from it. Comment: tell the Assistant what to change.",
+   "options": [
+    "Approve",
+    "Comment"
+   ],
+   "recommend": "Approve",
+   "task": "FAC-31",
+   "to": "t2p",
+   "at": 1794163822013,
+   "terminal": "t79",
+   "answer": "Comment from the person: the mascot's background colour differs from the web page background, so it looks like a pasted square image, which looks bad. Use the mascot without its own background (transparent cutouts), so it sits on the page surface in light and dark.",
+   "answered_at": 1794164689687
+  },
+  {
+   "id": "487309",
+   "question": "Ship?",
+   "options": [
+    "Wait for review",
+    "Ship now"
+   ],
+   "recommend": "Wait for review",
+   "task": null,
+   "to": "t6q",
+   "at": 1794162162532,
+   "terminal": "t6t"
+  },
+  {
+   "id": "7883bc",
+   "question": "Ship?",
+   "options": [
+    "Wait for review",
+    "Ship now"
+   ],
+   "recommend": "Wait for review",
+   "task": null,
+   "to": "t6q",
+   "at": 1794162025850,
+   "terminal": "t6s"
+  },
+  {
+   "id": "8d18eb",
+   "question": "Ship?",
+   "options": [
+    "Wait for review",
+    "Ship now"
+   ],
+   "recommend": "Wait for review",
+   "task": null,
+   "to": "t6q",
+   "at": 1794162197306,
+   "terminal": "t6v"
+  },
+  {
+   "id": "f7bb58",
+   "question": "Approve the redone factory board design (FAC-31)? Your comment is fixed at the root: four mascot poses are now transparent cutouts (cropped from the brand sheet, the dog untouched), added to the Sheepdog design system as its mascot pictures, and used straight on the page; a new check artboard shows them on light and dark page and card colours. Same canvas, 10 artboards: https://claude.ai/artifact/x Approve: board implementation starts from it. Comment: tell the Assistant what to change.",
+   "options": [
+    "Approve",
+    "Comment"
+   ],
+   "recommend": "Approve",
+   "task": "FAC-31",
+   "to": "t2p",
+   "at": 1794165253393,
+   "terminal": "t7d",
+   "answer": "Approve",
+   "answered_at": 1794166669852
+  }
+ ]
+}

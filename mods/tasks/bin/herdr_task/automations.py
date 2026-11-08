@@ -625,6 +625,7 @@ def one_pass(report):
     lock = open(os.path.join(STORE, ".tick.lock"), "a")
     if not take_lock(lock, LOCK_WAIT_S):
         lock.close()
+        print(f"{time.strftime('%H:%M:%S')} a tick held the lock for {LOCK_WAIT_S} s: skipped this round", flush=True)
         return
     try:
         seen_all = read_list(SEEN) or {}

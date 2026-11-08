@@ -118,6 +118,20 @@ class Install(unittest.TestCase):
                 self.assertEqual(after[k], v, k)
         self.assertFalse(os.path.lexists(self.p(".local/bin/herdr-task")))
 
+    def test_no_hooks_survives_update(self):
+        os.makedirs(self.p(".codex"))
+        run("install", "--root", self.root, "--yes", "--no-hooks")
+        self.assertEqual(json.load(open(self.p(".claude/settings.json"))), {"model": "x"})
+        self.assertFalse(os.path.exists(self.p(".codex/hooks.json")))
+        run("update", "--root", self.root)
+        self.assertEqual(json.load(open(self.p(".claude/settings.json"))), {"model": "x"})
+        self.assertFalse(os.path.exists(self.p(".codex/hooks.json")))
+        # a plain install brings the hooks back, and an update then keeps them
+        run("install", "--root", self.root, "--yes")
+        self.assertIn("ask-hook.sh", json.dumps(json.load(open(self.p(".claude/settings.json")))))
+        run("update", "--root", self.root)
+        self.assertIn("ask-hook.sh", json.dumps(json.load(open(self.p(".codex/hooks.json")))))
+
     def test_service_unit_and_files(self):
         """The service and the shared core land in .local/share/shepherdr; a scratch root gets the unit file only
         (nothing is started), and uninstall takes both away."""

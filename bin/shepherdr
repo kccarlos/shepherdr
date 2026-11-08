@@ -834,7 +834,12 @@ def cmd_install(a, update=False):
     install_service(r, rec, home)
     if a.guard:
         install_guard(r, src, rec)
-    if not a.no_hooks:
+    # --no-hooks is remembered in the record: an update keeps it, a plain install brings the hooks back
+    if not update:
+        rec.pop("no_hooks", None)
+    if a.no_hooks:
+        rec["no_hooks"] = True
+    if not rec.get("no_hooks"):
         rec["hooks"] = add_hooks(r, rec)
     rec.update({"version": VERSION, "source": src, "at": r.stamp, "root": root})
     if a.dry_run:

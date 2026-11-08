@@ -1894,10 +1894,25 @@ class FolderTrustQuestion(unittest.TestCase):
             self.agents.trust_check(self.task, [k])
             self.assertEqual(self.reads, [], change)
             self.assertNotIn("attention", self.task)
+        # Another CLI's worker (agy, Codex): its screen is never read either.
+        self.reads.clear()
+        self.agents.trust_check(self.task, [dict(self.live[0], labels={"herdr.role": "worker", "herdr.agent": "agy"})])
+        self.assertEqual(self.reads, [])
+        self.assertNotIn("attention", self.task)
         # Another problem already shown stays as it is.
         self.task["attention"] = "Checks failing"
         self.agents.trust_check(self.task, self.live)
         self.assertEqual(self.task["attention"], "Checks failing")
+
+    def test_automations_hear_needs_you_not_a_failure(self):
+        from herdr_task.automations import diff_events
+        seen = {}
+        facts = lambda: [{"id": 2, "state": "running", "status": "idle", "needs": self.agents.task_status(self.task, self.live)[1],
+                          "attention": self.task.get("attention"), "merged": False, "automation": None, "starting": False}]
+        diff_events(facts(), seen)
+        self.agents.trust_check(self.task, self.live)
+        self.assertEqual([e for e, _ in diff_events(facts(), seen)], ["needs-you"])
+        self.assertEqual([e for e, _ in diff_events(facts(), seen)], [])  # said once
 
 
 class AgyWorker(unittest.TestCase):

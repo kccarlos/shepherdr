@@ -85,10 +85,10 @@ facts only: no visual design and no implementation split. The screenshots are in
   - G2, G3 and G5, which produce those records, are not on kc-factory yet.
 
 ### 5. Open asks
-- Today: Needs you (the panel group, the filter and the footer count) lists tasks needing the person, blocked
-  Assistants, Claude permission or question cards and secret asks (`service/compat.ts:409-430`).
-- Data and API: the snapshot's `needs` and `asks`. `service/asks.ts` is a different idea: Claude Code
-  PermissionRequest hook cards in `data/chat-asks`, answered through `/api/action`.
+- Today: Needs you (the panel group, the filter and the footer count) lists tasks needing the person, blocked Assistants, permission or question cards and secret asks (`service/compat.ts:409-430`).
+- Data and API: the snapshot's `needs` (its `asks` is always `{}`, `compat.ts:467`). `service/asks.ts` is a different
+  idea: Claude Code and Codex PermissionRequest hook cards in `data/chat-asks` (`mods/chat/ask-hook.sh`), answered by
+  `POST /api/action {type:"answer"}` (`service/actions.ts:220`); secret asks go through `service/main.ts:444`.
 - Missing: FAC-9's ask pane keeps `STORE/asks/<id>.json` and a blocked hc terminal. It exists only on the unmerged
   branch `task/9-herdr-task-ask-and-the-ask-pane` (`mods/tasks/bin/herdr_task/ask.py`). No service code reads those
   records or shows such a pane.
@@ -122,8 +122,8 @@ facts only: no visual design and no implementation split. The screenshots are in
     sets it, and no endpoint serves one.
   - An external-link kind: a claude.ai canvas link is not an artifact record. Only local recipe and GPUI kinds exist
     (`types.ts:466`).
-  - Before/after pairs as a kind, and a per-agent latest deliverable: `publisher` is a terminal address, and the web is
-    not sent which tree node made which artifact.
+  - Before/after as an artifact kind (a recipe already has a `pair` block, `core/recipe.js:12`), and a per-agent latest
+    deliverable: `publisher` is a terminal address, and the web is not sent which tree node made which artifact.
   - A "new to look at" mark per person: read marks exist for chats only (`Snapshot.read`, `types.ts:1220`).
 
 ## Compared with the orchestrator's design

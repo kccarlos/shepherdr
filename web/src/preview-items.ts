@@ -8,7 +8,7 @@ export type Deliverables = { machine?: string | null; tasks: { ref: string; titl
 export function itemsOf(d: Deliverables): Item[] {
   const seen = new Set<string>()
   return d.tasks.flatMap((t) => t.deliverables
-    .filter((x) => (x.kind === 'link' ? !validateLink(x).length : typeof x.id === 'string'))
-    .map((x) => ({ ...x, key: x.kind === 'link' ? x.url : x.id, ref: t.ref, task: t.title })))
+    .filter((x) => (x.kind === 'link' ? !validateLink(x).length && !!URL.parse(x.url)?.host : x.kind === undefined && typeof x.id === 'string'))
+    .map((x) => ({ ...x, url: x.kind === 'link' ? x.url : undefined, key: x.kind === 'link' ? x.url : x.id, ref: t.ref, task: t.title })))
     .sort((a, b) => b.at - a.at).filter((x) => !seen.has(x.key) && seen.add(x.key))
 }

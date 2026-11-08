@@ -115,9 +115,9 @@ const preview = !!q.get('preview') && !!q.get('folder')?.startsWith('/')
 if (!preview) {
   connect()
   watchViewport((keyboard) => setUI({ keyboard }))
-  watchScrolling()
-  watchKeys()
 }
+watchScrolling()
+watchKeys()
 
 if (preview) history.replaceState(null, '', location.pathname + opened)
 createRoot(document.getElementById('root')!).render(

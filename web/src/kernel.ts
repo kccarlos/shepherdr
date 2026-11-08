@@ -842,7 +842,7 @@ function sayLater(at = Date.now()): ReturnType<typeof setTimeout> {
 
 /** back on screen (or on the network): an open link must answer a ping, any other is tried again at once */
 function wake() {
-  if (document.visibilityState !== 'visible') return
+  if (document.visibilityState !== 'visible' || new URLSearchParams(location.search).has('preview')) return
   if (ws?.readyState === WebSocket.OPEN) {
     if (pinging) return
     const sock = ws

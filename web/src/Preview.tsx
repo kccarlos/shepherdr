@@ -31,7 +31,7 @@ function Body({ it, on }: { it: Item; on: string }) {
     return () => { gone = true }
   }, [it.key, on])
   if (it.url) return <a href={it.url} target="_blank" rel="noopener noreferrer" className={`${card} text-[var(--sd-fg)] no-underline`}>
-    <span className="inline-flex items-center gap-1.5 text-[0.8125rem] text-[var(--sd-primary-text)]">opens on {new URL(it.url).host || it.url}<ArrowUpRightIcon aria-hidden className="size-3.5" /></span>
+    <span className="inline-flex items-center gap-1.5 text-[0.8125rem] text-[var(--sd-primary-text)]">opens on {new URL(it.url).host}<ArrowUpRightIcon aria-hidden className="size-3.5" /></span>
     <span className={chip}>A design can't be shown here; only people it's shared with can open it.</span>
   </a>
   if (recipe) return <Recipe recipe={recipe} asset={(s) => `${base}/file/${s.split('/').map(encodeURIComponent).join('/')}?v=${it.version}${on}`} />
@@ -74,13 +74,13 @@ export function Preview({ id: first, folder, on }: { id: string; folder: string;
               </div>
               <h1 className="font-[var(--sd-font-display)] text-[1.75rem]/[1.2] font-semibold">{it.title}</h1>
             </header>
-            <Body it={it} on={d && d.machine ? `&on=${encodeURIComponent(d.machine)}` : ''} />
+            <Body key={it.key} it={it} on={d && d.machine ? `&on=${encodeURIComponent(d.machine)}` : ''} />
           </main>
           <aside className="flex min-w-0 flex-[1_1_300px] flex-col gap-4">
             <section aria-label="Made by" className={card}>
               <h2 className="font-[var(--sd-font-display)] text-[1.125rem] font-semibold">made by</h2>
               <span><span className={mono}>{it.ref}</span> {agent ? `agent ${agent.address}` : 'its task'}</span>
-              <a href={`?task=${encodeURIComponent(it.ref)}`} className="inline-flex min-h-11 items-center text-[var(--sd-primary-text)] no-underline">open the task · {it.task}</a>
+              <a href={`?task=${encodeURIComponent(d && d.machine ? `${d.machine}:${it.ref}` : it.ref)}`} className="inline-flex min-h-11 items-center text-[var(--sd-primary-text)] no-underline">open the task · {it.task}</a>
             </section>
             {items.length > 1 ? <section aria-label="Next" className="flex flex-col gap-2.5">
               <h2 className="text-[0.8125rem] font-semibold tracking-wide text-[var(--sd-muted)] uppercase">next</h2>

@@ -9,7 +9,8 @@ into kc-factory).
 
 - The Assistant pane works with no sheepdog code.
 - The ask pane, as FAC-9 wrote it, does **not** become a card, and a tap would not answer it.
-- Both ask pane fixes go in `ask.py`, so "no sheepdog code" can still hold for asks.
+- Both ask pane fixes go in `ask.py`, so "no sheepdog code" can still hold for asks. One limit remains: the option
+  under the cursor can't be tapped if it starts with a word like "No" or "Wait".
 - Muting the workers needs a sheepdog change.
 
 ## How sheepdog sees an hc terminal
@@ -18,12 +19,11 @@ into kc-factory).
   (herdrcore/mapping.go:29-32, herdrcore/events.go:21).
 - A terminal counts as an agent when it has a status, or runs a known agent program (herdrcore/mapping.go:76-78).
 - An OSC 7501 report maps to herdr's states: idle, working, done, blocked (herdrcore/mapping.go:100-112).
-- New agents come from one unfiltered `events.subscribe`. A terminal is picked up on its first reported status
-  (herdrcore/fleet.go:78-82, 97-123). The watcher then reads a snapshot to get its state (herdr/watcher.go:329-342).
+- New agents come from one unfiltered `events.subscribe` (herdrcore/fleet.go:18). A terminal running something other
+  than a known agent program is picked up on its first reported status (fleet.go:73-84, 99-126). The watcher then
+  reads a snapshot to get its state (herdr/watcher.go:329-342).
 - The status's `kind` and `msg` are decoded (hc/types.go:35-42) but never read: `grep -rn 'Status\.\(Kind\|Msg\)'
   internal cmd` finds no use outside tests. `blocked, kind=question` is just "blocked" to sheepdog.
-- Spaces come only from the `herdr.space` label (herdrcore/spaces.go:18, 33). A terminal without one has no
-  workspace.
 
 ## The ask pane in sheepdog today
 
@@ -33,8 +33,8 @@ into kc-factory).
   reads one line with `input()` (ask.py:104).
 - Sheepdog picks it up as an agent once it reports a status (mapping.go:77). Its kind is the Python program's name,
   because no `app` is reported (mapping.go:36-49).
-- When it reports blocked, the supervisor reads the screen and runs `herdr.ParsePrompt` (supervisor/transitions.go:111-126,
-  393-410, 417-419).
+- When it reports blocked, the supervisor reads the screen and runs `herdr.ParsePrompt`
+  (supervisor/transitions.go:111-127, 393-410, 417-419).
 - **The parse fails.** A numbered menu needs exactly one option with a cursor marker `›`, `❯` or `>`
   (herdr/prompt.go:37, 306). An unnumbered menu needs a marker row with a label (prompt.go:55), and `> ` has no label.
 - On a failed parse, sheepdog says "<name> is waiting at a prompt." It records the block as answered and creates
@@ -48,20 +48,27 @@ into kc-factory).
 
 - `AnswerTap` re-reads the screen, which must still parse to the same prompt (supervisor/inputs.go:605-614,
   supervisor/reprompt.go:296-307). It records the tap as the person's own input (inputs.go:638), so the approval rail
-  passes it as fresh words (inputs.go:644, 458-481). factory.md's "the tap is the person's fresh input" holds.
+  passes it as fresh words (inputs.go:644, 458-481). factory.md's "the tap is the person's fresh input" holds, with
+  one exception below.
+- **A "no" can't approve, and that can block a tap.** When no label starts with "Yes", the option under the cursor
+  becomes the prompt's yes keys (prompt.go:214-216), which `keysLabel` calls "yes" (supervisor/brainhost.go:412-416),
+  so `approves` is true (inputs.go:549-553). The rail refuses an approving answer whose words start with no, wait,
+  hold, stop, cancel, don't and the like (inputs.go:478-479, 526-544), and a tap's words are the option's label
+  (inputs.go:638). So that option can't be tapped or spoken if its label starts with one of those words. A scratch
+  `ParsePrompt` run on `❯ 2. Wait for review  (recommended)` gives yes keys `["2"]`.
 - It then sends the option's keys with `SendKeys`, with no Enter added (supervisor/tools.go:489). A numbered option's
   keys are just its digit, unless its label ends in a plain key hint like `(y)` (prompt.go:40-44, 85-90).
 - **A digit alone doesn't answer FAC-9's pane**, because `input()` waits for Enter (ask.py:104).
 
 ## Smallest fix for the ask pane (in ask.py, no sheepdog code)
 
-1. Put a cursor marker on the recommended option, e.g. `❯ 1. Ship now  (recommended)`. The parser then reads the
-   question and both options, with keys `1` and `2` and the recommendation flagged (prompt.go:62). The cursor's
-   option becomes `Default`, which a spoken "yes" picks when no label starts with "Yes" (prompt.go:214-216). That is
-   why the marker goes on the recommended option.
+1. Put a cursor marker on the recommended option, e.g. `❯ 1. Ship now  (recommended)`, which parses with keys `1`
+   and `2` and the recommendation flagged (prompt.go:62). A spoken "yes" picks it (prompt.go:214-216). If its label
+   starts with a negative word, put the marker on the first option that doesn't (see above). If all of them do, one
+   option stays untappable until sheepdog changes `keysLabel` or the rail.
 2. Read one keypress, so a digit answers without Enter. Words of one's own then need another way in.
 - With both fixes the voice works too: the orchestrator's `send_keys` goes through the same rail as a tap
-  (supervisor/brainhost.go:249-262).
+  (supervisor/brainhost.go:311-326).
 
 ## What works today without the fix
 
@@ -69,8 +76,8 @@ into kc-factory).
   (supervisor/window.go:51-52). With no pending question, the keys go to the pane as they are (window.go:257-260),
   so pressing `1` and then `enter` answers FAC-9's pane as it is.
 - Free text can't reach a blocked pane from sheepdog. A typed prompt is refused while the pane is blocked
-  (window.go:170-173), and hc's send refuses a blocked terminal (herdrcore/terminal.go:33-40, herdrcore/backend.go:115).
-  An option's own words go in only through the live terminal (herdrcore/bridge.go).
+  (window.go:170-173), and hc's send refuses a blocked terminal (herdrcore/terminal.go:33-40, backend.go:115).
+  Words of one's own go in only through the live terminal (herdrcore/bridge.go).
 
 ## The Assistant pane
 
@@ -81,29 +88,26 @@ into kc-factory).
   has been quiet for about 3 s, and is refused while the pane is blocked (hc/client.go:130-140, terminal.go:35-39).
 - Every prompt gets the SignOff trailer added by code, not by the model: three short lines on what changed, what
   needs a decision and what is next (supervisor/journal.go:48, 63). factory.md's "three-line SignOff" holds.
-- Action tools run only on a turn the person's own words started. Event turns are read-only (brain/tools.go:280-286).
+- Action tools run only on a turn the person's own words started. Event turns are read-only
+  (brain/tools.go:94, 113-115, 282-289).
 - A voice turn has 6 steps and 25 s (brain/brain.go:30, 38). An event turn has 6 s (brain.go:41).
-- The orchestrator finds the Assistant by its spoken name or alias (supervisor/tools.go:545-560,
-  supervisor/brainhost.go:81-88).
-- Its own question tool would block its pane, and a blocked pane refuses `prompt` (terminal.go:33-40). That is why
-  the Assistant asks through `herdr-task ask`, as factory.md says.
+- The orchestrator finds the Assistant by its spoken name or alias (supervisor/tools.go:545-560).
 
 ## Needs a change
 
-- **Ask pane** (ask.py): the cursor marker and the one-key read above.
+- **Ask pane** (ask.py): the cursor marker (avoiding negative first words) and the one-key read above.
 - **Muting workers** (sheepdog): factory.md says worker panes labelled `herdr.factory` are muted as a space. Sheepdog
   reads no `herdr.factory`, `herdr.role` or `herdr.task` label (grep of `internal/`). Workers carry
-  `herdr.task.space`, never `herdr.space` (Shepherdr launch.py:629, 642), so on hc they have no space. A mute is per
-  space folder (attention.go:527-533), and herdrcore has no `PaneCwd` fallback (the only one is in
-  `inject/herdr.go`). So a worker can't be muted in v0. Its blocks are heard at every chattiness level, and its
-  finishes only at chatty, since the person never dealt with it (supervisor/settings.go:72-79). This needs a mute by label in sheepdog, or a `herdr.space` on workers, which herdr-app would
-  then show.
-- **Another machine**: an Assistant or ask pane on another machine's core is invisible (mapping.go:29).
+  `herdr.task.space`, never `herdr.space` (Shepherdr launch.py:629, 642), and sheepdog takes a space only from
+  `herdr.space` (herdrcore/spaces.go:33). A mute is per space folder (attention.go:527-533), and herdrcore has no
+  `PaneCwd` fallback (the only one is in `inject/herdr.go`). So a worker can't be muted in v0. Its blocks are heard at every chattiness level, and its
+  finishes only at chatty, since the person never dealt with it (supervisor/settings.go:72-79). Fix: a mute by
+  label in sheepdog, or a `herdr.space` on workers, which herdr-app would then show.
 
 ## Not checked by a run
 
 - After an answer, the pane reports `working` and exits. The watcher then emits a closed transition from
   blocked or working (herdr/watcher.go:346, 562-567). If that happens, the person hears "<name> has gone away; its
   pane closed." at interrupt level (supervisor/transitions.go:81, 89-105). This is read from the code only.
-- The spoken name sheepdog gives an `ask-<id>` terminal and the Assistant.
-- An end-to-end run with the sheepdog daemon. The brief forbids running sheepdog.
+- The spoken name sheepdog gives an `ask-<id>` terminal and the Assistant. No end-to-end run with the sheepdog
+  daemon either: the brief forbids running sheepdog.

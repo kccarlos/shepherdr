@@ -86,3 +86,6 @@ answer (2026-11-08). It becomes the role allow lists in phase 3 (docs/factory.md
 - Size call: FAC-50 (consent-path probe) to ~70 lines (limit ~30) to fix round 1's two blockers (the news never went
   out; a fresh tick process repeated the probe and the news). The separate start-up probe in the scheduler is left for
   a follow-up.
+- Size calls: FAC-51 (VM image scripts) kept at 188 lines (limit ~150; a login step and tool lists, both layers built
+  and smoke-tested; not a review fix, accepted to avoid a 15-minute rebuild for comments). FAC-50 to ~120 lines (limit
+  ~30) for round 3's findings: the start-up probe the brief described plus per-folder skipping in the store sweeps.

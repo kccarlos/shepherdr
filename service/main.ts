@@ -619,6 +619,12 @@ const server = Bun.serve<{ who: string }>({
       try { rel = decodeURIComponent(art[3]); } catch { return json({ error: "not found" }, 404); }
       return artifacts.file(art[1], v, rel, on);
     }
+    if (path === "/api/deliverables" && req.method === "GET") {
+      // the board's deliverables (docs/factory.md section 3): a folder's tasks' artifacts and each agent's latest; &on=<machine>
+      const folder = url.searchParams.get("folder") ?? "", m = url.searchParams.get("on"), on = !m || m === compat.host ? null : m;
+      if (!folder.startsWith("/") || (on && !/^[\w.-]{1,64}$/.test(on))) return json({ error: "Give a folder (and a machine)." }, 400);
+      return json(compat.deliverables(folder, on));
+    }
     if (path === "/api/upload" && req.method === "POST") {
       // a file from the message box (+, the camera, a paste or a drop): kept where the window keeps pasted ones,
       // data/chat-attach, until it goes with a message as its path (another machine's agent gets a copy there)

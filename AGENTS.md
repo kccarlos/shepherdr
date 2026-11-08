@@ -76,6 +76,8 @@ How to run, build and lay out the code: [docs/develop.md](docs/develop.md).
   `HC_SOCKET=$HC_TERMINAL_SOCKET` (herdr-task's guard allows that).
 - herdr-task refuses to run hc with a changed `HC_SESSION`: for a real run on a throwaway core, put a tiny hc shim first
   on PATH that runs `HC_SESSION=<name> hc "$@"`, and leave `HC_SESSION` unset for herdr-task itself.
+- Checks run inside a throwaway core's terminal inherit its `HC_SESSION`, so
+  `AutomationFromAnotherMachine.test_other_events_too` fails there: not a real failure.
 - An agy reviewer in a task worktree can't run git (the worktree's `.git` points outside its trusted folder): put the
   diff in its prompt. Its startup briefly shows `blocked (auth)`, then it works.
 - An agy reviewer that must read another repo asks per file and loops after compacting: tell it to read with `sed -n`

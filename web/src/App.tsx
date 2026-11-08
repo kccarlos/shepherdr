@@ -126,13 +126,40 @@ function Loading() {
     return () => clearTimeout(t)
   }, [])
   const offline = lost || slow
+  const shape = 'bg-bubble rounded-[var(--sd-radius)]'
   return (
-    <div data-device={device} className="grid h-full place-items-center bg-bg px-6 font-sans text-sm/5 text-fg3 antialiased phone:text-base/6">
-      <div role="status" className="flex flex-col items-center gap-3 text-center">
-        <span className="grid size-10 place-items-center overflow-hidden rounded-[11px] bg-fg pt-1 text-bg">
-          <CrookIcon className="size-8 overflow-visible" />
-        </span>
-        {offline ? "Can't reach Shepherdr. Trying again…" : 'Loading…'}
+    <div data-device={device} className="h-full overflow-auto bg-bg px-5 py-6 font-sans text-sm/5 text-fg antialiased phone:text-base/6">
+      <div className="mx-auto flex max-w-xl flex-col gap-4">
+        <div className="flex items-center gap-2.5 font-display text-xl/none">
+          <span className="grid size-7 place-items-center overflow-hidden rounded-[8px] bg-fg pt-0.5 text-bg">
+            <CrookIcon className="size-6 overflow-visible" />
+          </span>
+          <b className="font-bold">sheepdog</b>
+          <span className="font-medium text-fg3">factory</span>
+        </div>
+        <div role="status" className={clsx('flex flex-col gap-3 rounded-[var(--sd-radius)] bg-[var(--sd-card)] p-4', offline ? 'border border-dashed border-[var(--sd-dash)]' : 'border border-line')}>
+          <div className="flex items-center gap-2.5">
+            <span aria-hidden className={clsx('size-2 rounded-full', offline ? 'bg-[var(--sd-idle)]' : 'bg-[var(--sd-working)]')} />
+            <span className={offline ? 'font-medium' : undefined}>{offline ? "Can't reach Shepherdr. Trying again…" : 'Loading the factory…'}</span>
+          </div>
+          {offline ? (
+            <>
+              <p className="text-fg3">The board talks to the Mac mini over Tailscale. Check that this device is on Tailscale and the Mac mini is awake.</p>
+              <button type="button" onClick={() => location.reload()} className="min-h-11 self-start rounded-full border border-fg px-4.5 font-medium">
+                Try now
+              </button>
+            </>
+          ) : null}
+        </div>
+        {/* where the board will be, so nothing jumps when it arrives */}
+        <span aria-hidden className={clsx(shape, 'h-24 rounded-[var(--sd-radius-lg)]')} />
+        {offline ? null : (
+          <span aria-hidden className="flex gap-2.5">
+            <span className={clsx(shape, 'h-30 flex-1')} />
+            <span className={clsx(shape, 'h-30 flex-1')} />
+          </span>
+        )}
+        <span aria-hidden className={clsx(shape, 'h-40')} />
       </div>
     </div>
   )

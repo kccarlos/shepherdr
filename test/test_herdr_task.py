@@ -2062,9 +2062,13 @@ class AgyWorker(unittest.TestCase):
 
     def test_the_brief_gives_an_agy_reviewer_i_and_its_worktree_trusted(self):
         from herdr_task.templates import WORKER_MD
-        self.assertIn("`-i`", WORKER_MD)
-        self.assertIn("trustedWorkspaces", WORKER_MD)
-        self.assertIn("agy rejects a positional prompt", WORKER_MD)
+        with open(os.path.join(ROOT, "templates", "worker.md")) as f:
+            installed = f.read()
+        for words in (WORKER_MD, installed):  # the installed template is what workers get
+            self.assertIn("after `-i`", words)
+            self.assertIn("trustedWorkspaces", words)
+            self.assertIn("agy rejects a positional prompt", words)
+            self.assertIn("herdr.agent=<codex, claude or agy>", words)
 
     def test_resume_by_conversation(self):
         from herdr_task.launch import resume_argv

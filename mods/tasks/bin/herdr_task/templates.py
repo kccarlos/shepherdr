@@ -88,11 +88,12 @@ FEEDBACK_RULE = ("- Shepherdr itself misbehaving, not your task's own code (a Sh
 WORKER_MD_BEFORE_AGY = WORKER_MD_BEFORE_FEEDBACK + FEEDBACK_RULE
 # Since an agy reviewer needs -i for its prompt and your worktree trusted (FAC-5).
 AGY_OLD = "or `claude --permission-mode plan` (never"
-AGY_RULE = ("`claude --permission-mode plan`, or, for agy, `agy --model <model> --settings '{\"trustedWorkspaces\":[\"<your worktree>\"],"
+AGY_RULE = ("`claude --permission-mode plan`, or, for agy, `agy --settings '{\"trustedWorkspaces\":[\"<your worktree>\"],"
             "\"permissions\":{\"allow\":[<the allow list in ~/.gemini/antigravity-cli/settings.json, read only>]}}'` with the prompt "
             "after `-i` (agy rejects a positional prompt, and --settings replaces its own allow list; it gets none of your own rules) "
             "(never")
-WORKER_MD = WORKER_MD_BEFORE_AGY.replace(AGY_OLD, "or " + AGY_RULE)
+AGY_LABEL = ("herdr.agent=<codex or claude>", "herdr.agent=<codex, claude or agy>")
+WORKER_MD = WORKER_MD_BEFORE_AGY.replace(AGY_OLD, "or " + AGY_RULE).replace(*AGY_LABEL)
 
 REVIEWER_MD_BEFORE_SUBAGENT = """You review one Herdr task's work before it can merge. Read only: never edit files, commit or push.
 - Read the task, then the diff of its branch against its base, and run the project's checks.

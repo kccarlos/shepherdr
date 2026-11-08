@@ -102,7 +102,7 @@ Shepherdr's states: todo, scheduled, queued, working, needs, ready, merging, don
 herdr-task merges only after it has checked all of these itself, against the SHA it is about to merge:
 
 1. **Checks:** the gate runs the project's check command itself and records the real output. CI is green on that SHA where the repo has CI.
-2. **Review:** at least 2 rounds by a reviewer of another model or CLI, started by herdr-task, not the worker. The gate reads the last round's report from the reviewer's own terminal: no finding at Must fix (major) or above on that SHA. Nitpicks never block.
+2. **Review:** at least 3 rounds when the reviewer is Argon, or 2 when one of them is by another model such as Opus or Codex (the person's rule, 2026-11-08), by a reviewer of another model or CLI, started by herdr-task, not the worker. The gate reads the last round's report from the reviewer's own terminal: no finding at Must fix (major) or above on that SHA. Nitpicks never block.
 3. **Verifier:** a pass verdict on that SHA, read the same way, from a verifier herdr-task started.
 4. **Fresh base:** the branch fast-forwards onto the current base.
 5. **Scope:** the diff stays in the task's repo and touches no ask-first item.

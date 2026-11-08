@@ -140,7 +140,7 @@ Each role's rules go on the CLI's command line at launch. herdr-task already pas
 - **Reviewer, verifier:** read-only, and for the verifier, running the checks.
 - **agy:** today herdr-task merges the person's own agy allow list into `--settings` (launch.py:104). Factory roles get the role list only.
 
-Deny rules match command text, so `bash -c` or python can get around them. They are guard rails, not a boundary. The boundary is phase 3's worker sandbox: Claude Code's Bash sandbox, with writes limited to the worktree and no access to the `hc` socket or `~/.herdr`. The person's global settings (auto mode) still apply on top; nothing global is changed.
+agy's allow list matches command prefixes literally, so reviewers never compose commands: they use one fixed read-only entry (`herdr-review diff|test|grep|show|checks`), allowed by a single rule, and read checks from G3's record. Deny rules match command text, so `bash -c` or python can get around them. They are guard rails, not a boundary. The boundary is phase 3's worker sandbox: Claude Code's Bash sandbox, with writes limited to the worktree and no access to the `hc` socket or `~/.herdr`. The person's global settings (auto mode) still apply on top; nothing global is changed.
 
 **Rule changes.** When a role needs a rule, or the person says "always allow X", the factory edits the role file for this project (`~/.herdr/factory/<project>/roles/<role>.json`). It keeps a backup and logs a line. Workers cannot write there.
 

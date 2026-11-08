@@ -18,7 +18,7 @@ from .settings import (
     task_settings, worker_argv, worktrees_on,
 )
 from .agents import (
-    agent_running, busy_again, detail, fit, LINE_MAX, live_agents, ready_turns, STATUSES, SUMMARY_MAX, WORKING_AGAIN,
+    agent_running, busy_again, detail, fit, LINE_MAX, live_agents, ready_turns, STATUSES, status_word, SUMMARY_MAX, WORKING_AGAIN,
 )
 from .sessions import refresh_sessions
 from .github import already_merged, finish, gh, github, merged_here, own_work, pr_adopt, pr_open, pr_pending, pr_problem, pr_view, update_main, watch_main
@@ -830,7 +830,7 @@ def read_verdict(screen, code):
     if not ends:
         return None
     end, m = ends[-1]
-    begin = max((i for i, x in enumerate(lines[:end]) if (y := mark.match(x)) and y.group(1)), default=max(0, end - 80))
+    begin = max((i for i, x in enumerate(lines[:end]) if (y := mark.match(x)) and y.group(1)), default=max(-1, end - 81))
     must = 0 if m.group(2) else int(m.group(3))
     return not must, must, "\n".join(x.strip() for x in lines[begin + 1:end]).strip()
 
@@ -840,16 +840,19 @@ def gate_reads(s, t):
     each open round's own terminal (G2: only that run's terminal counts), then that reviewer ends."""
     done = {r["round"] for r in t.get("reviews") or [] if r.get("started_by") == "herdr-task"}
     for rn in t.get("review_runs") or []:
-        if not sandboxes([rn["cli"]]) or rn["round"] in done or (hc_json("get", rn["address"]) or {}).get("state") != "live":
+        k = (hc_json("get", rn["address"]) or {}) if sandboxes([rn["cli"]]) and rn["round"] not in done else {}
+        if k.get("state") != "live" or status_word(k) in ("working", "blocked"):  # read only once its turn is over
             continue
         got = read_verdict(run(["hc", "read", rn["address"], "--lines", "400"]).stdout, round_code(rn))
         if not got:
             continue
-        before = list(t.get("reviews") or [])
+        before, dirty = json.loads(json.dumps(t)), s.dirty
         try:
             record_verdict(s, t, rn, *got)
         except Exception:  # nothing half recorded: a later tick tries again, its reviewer still there
-            t["reviews"] = before
+            t.clear()
+            t.update(before)
+            s.dirty = dirty
             if git(t.get("worktree") or "", "rev-parse", "HEAD")[1] in ("", rn["head"]):
                 raise
         end_reviewer(rn["address"])  # recorded, or its head moved on: its verdict never applies

@@ -1974,6 +1974,10 @@ class GateReview(unittest.TestCase):
         code = self.commands.round_code(rn)
         read = self.screen(f"> Review commit ... This round's code is {code}.\n  Working\n  {code} begin\n  - major: gate.txt says hi"
                            f"\n    twice\n  {code} changes 1\n\n>\n")
+        self.reviewer_term = {"state": "live", "agent": "agy", "status": {"app": "antigravity", "state": "working"}}
+        self.commands.gate_reads(self.store, self.task)
+        self.assertEqual(read, [])  # never read mid-turn
+        self.reviewer_term = {"state": "live", "agent": "agy", "status": {"app": "antigravity", "state": "done"}}
         self.commands.gate_reads(self.store, self.task)
         self.assertEqual(read, [["hc", "read", rn["address"], "--lines", "400"]])  # that run's terminal only
         self.assertEqual([(r["round"], r["by"], r["verdict"], r["must_fix"], r["report"]) for r in self.task["reviews"]],
@@ -1995,6 +1999,7 @@ class GateReview(unittest.TestCase):
         code2 = self.commands.round_code(self.task["review_runs"][1])
         self.assertNotEqual(code, code2)
         self.assertEqual(self.commands.read_verdict(f"`{code2} changes 0`\n", code2), (True, 0, ""))  # only minor findings: a pass
+        self.assertEqual(self.commands.read_verdict(f"- minor: x\n{code2} pass", code2), (True, 0, "- minor: x"))  # no begin line
         self.screen(f"{code} pass\n")  # round 1's code on round 2's screen: no verdict
         self.commands.gate_reads(self.store, self.task)
         self.assertEqual(len(self.task["reviews"]), 1)
@@ -2012,6 +2017,7 @@ class GateReview(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 self.commands.gate_reads(self.store, self.task)
         self.assertEqual(len(self.task["reviews"]), 1)  # rolled back, read again next tick
+        self.assertEqual(self.task["progress"]["text"], "Herdr's reviewer is on it")  # all of it, its progress too
         self.assertFalse(self.commands.subprocess.Popen.called)
         self.change("moved")  # its head moved on: no verdict, and that reviewer ends
         self.commands.gate_reads(self.store, self.task)

@@ -126,6 +126,7 @@ class Install(unittest.TestCase):
         run("update", "--root", self.root)
         self.assertEqual(json.load(open(self.p(".claude/settings.json"))), {"model": "x"})
         self.assertFalse(os.path.exists(self.p(".codex/hooks.json")))
+        self.assertNotIn("hook missing", run("doctor", "--root", self.root).stdout)
         # a plain install brings the hooks back, and an update then keeps them
         run("install", "--root", self.root, "--yes")
         self.assertIn("ask-hook.sh", json.dumps(json.load(open(self.p(".claude/settings.json")))))

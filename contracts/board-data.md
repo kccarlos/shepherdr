@@ -9,7 +9,8 @@ below, in the snapshot keys named, plus the one endpoint.
 
 ## Task: extra fields on each `snapshot.tasks[]` row
 - `agents`: `[{role, cli, model, address, parent, state}]`. `role` is worker, reviewer, verifier or checks; `cli` is
-  claude, codex or agy, or null for `checks` (it runs a shell command); `model` is a string or null (the CLI's default); `address` is the terminal; `parent` is the
+  claude, codex or agy, or null for `checks` and only for it (it runs a shell command; S1 takes `cli` from herdr-task's records of
+  the agents it started, since the chat's `kindOf` gives null for agy); `model` is a string or null (the CLI's default); `address` is the terminal; `parent` is the
   terminal address that started it, or null; `state` is working, idle, blocked, done or ended.
   ```json
   {"role": "reviewer", "cli": "agy", "model": "gemini-4-argon-high", "address": "term-7", "parent": "term-3", "state": "working"}
@@ -35,7 +36,8 @@ S1 maps usage.py's `name`, `five`, `week`, `five_reset`, `week_reset` to the nam
  "week_reset": "2026-11-12T09:00:00Z", "state": "ok"}
 ```
 `*_left` are % left (0..100), or null when that window has none (codex has only a weekly one); both are null when
-`state` is unknown. Resets are ISO strings or null. `state` is ok, floor (a window is at or under its floor) or unknown.
+`state` is unknown. Resets are ISO strings or null. `pool` is one of the four names. S1 sets `state` (usage.py gives only ok or unknown): unknown when both windows are null,
+floor when the 5-hour window is at 5 or under, or the week at 1 or under; else ok. The canvas's "gemini" is `antigravity-gemini`.
 
 ## Deliverables: `GET /api/deliverables?folder=<abs>&on=<machine>` (FAC-24), as it is
 Returns `{folder, machine, tasks: [{ref, title, proof, deliverables}], agents}`. Nothing changes except one added

@@ -23,7 +23,7 @@ const SIZE = { added: int, removed: int, limit: orNull(int) }
 const EVIDENCE: Record<string, Record<string, (x: unknown) => boolean>> = {
   reviews: { round: int, head: sha, by: str, started_by: oneOf('herdr-task'), verdict: oneOf('pass', 'changes'),
     must_fix: int, report: cap(2000), at: int },
-  checks: { sha, command: str, exit: int, output_tail: cap(4000), started_at: int, finished_at: int, by: str,
+  checks: { sha, command: str, exit: Number.isInteger, output_tail: cap(4000), started_at: int, finished_at: int, by: str,
     ci: orNull((c) => isObj(c) && !shape('ci', c, { state: oneOf('success', 'failure', 'pending', 'none'), url: orNull(str) }).length) },
   verdicts: { sha, by: str, verdict: oneOf('pass', 'fail'), commands: (x) => Array.isArray(x) && x.every(str),
     output_tail: cap(4000), at: int },
@@ -34,7 +34,8 @@ export function validateTask(t: unknown): string[] {
   if (!isObj(t)) return ['task is not an object']
   const out: string[] = []
   if (!Array.isArray(t.agents)) out.push('task.agents is not a list')
-  else t.agents.forEach((a, i) => out.push(...shape(`agents[${i}]`, a, AGENT)))
+  else t.agents.forEach((a, i) => out.push(...shape(`agents[${i}]`, a, AGENT),
+    ...(isObj(a) && (a.role === 'checks') !== (a.cli === null) ? [`agents[${i}].cli is null only for checks`] : [])))
   for (const [k, keys] of Object.entries(EVIDENCE)) {
     if (t[k] === undefined) continue
     if (!Array.isArray(t[k])) out.push(`task.${k} is not a list`)
@@ -51,10 +52,16 @@ export function validateAsk(a: unknown): string[] {
   return out
 }
 
-export const validatePool = (p: unknown): string[] =>
-  shape('pool', p, { pool: str, five_hour_left: pct, week_left: pct, five_hour_reset: orNull(str), week_reset: orNull(str),
-    state: oneOf('ok', 'floor', 'unknown') }).concat(
-    isObj(p) && p.state === 'unknown' && [p.five_hour_left, p.week_left].some((x) => x !== null) ? ['pool.state unknown has a number'] : [])
+const POOLS = ['claude', 'codex', 'antigravity-gemini', 'antigravity-claude-gpt']
+// unknown: both windows null; floor: a window at or under its floor (5 % in 5 hours, 1 % in the week); else ok
+export function validatePool(p: unknown): string[] {
+  const out = shape('pool', p, { pool: oneOf(...POOLS), five_hour_left: pct, week_left: pct, five_hour_reset: orNull(str),
+    week_reset: orNull(str), state: oneOf('ok', 'floor', 'unknown') })
+  if (out.length) return out
+  const { five_hour_left: f, week_left: w, state } = p as { five_hour_left: number | null; week_left: number | null; state: string }
+  const want = f === null && w === null ? 'unknown' : (f !== null && f <= 5) || (w !== null && w <= 1) ? 'floor' : 'ok'
+  return state === want ? [] : [`pool.state should be ${want}`]
+}
 
 /** a design link among a task's `deliverables` from GET /api/deliverables */
 export const validateLink = (l: unknown): string[] =>

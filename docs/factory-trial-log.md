@@ -62,3 +62,10 @@ answer (2026-11-08). It becomes the role allow lists in phase 3 (docs/factory.md
   `tasks.check` = sync-shared + unittest with nvm's node on PATH; backup `shepherdr.json.bak-before-gate-*`). The
   window/settings UI had no `spaces` entry for fac before; the Assistant added it. FAC-27..29 are the first tasks
   briefed for it; G4 (FAC-15) was told mid-run.
+- First gated task (FAC-28): herdr-task's own agy reviewer (plan mode) stopped on a permission prompt to run
+  `bin/sync-shared --check && python3 -m unittest discover -s test` in the worktree. Nobody in the factory can answer
+  it: the worker's `hc keys` and the Assistant's were both refused by Claude Code's auto-mode classifier (pressing
+  keys in another agent's terminal). A gate reviewer needs its read-only and test commands allowed at launch
+  (`--settings` allow list, G6), or must not run checks (G3 runs them).
+- G2's gate_step diffs `<stored start>..<head>`, and `start` never moves on a rebase: FAC-15's reviewer would have
+  got 939 lines in 12 files (other tasks' merged work mixed in, cut at 20k characters) for a ~103-line change.

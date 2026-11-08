@@ -58,3 +58,7 @@ answer (2026-11-08). It becomes the role allow lists in phase 3 (docs/factory.md
   when it ends, so herdr-task moves the task from Ready to "Working again" (Needs you) although nothing changed. The
   worker had to run ready again. Briefs could say "no background commands after ready", or busy_again could ignore a
   turn that changes no commit.
+- 2026-11-08 ~10:18: the gate turned on for this folder (space `fac` in ~/.herdr/shepherdr.json: `tasks.review_min` 2,
+  `tasks.check` = sync-shared + unittest with nvm's node on PATH; backup `shepherdr.json.bak-before-gate-*`). The
+  window/settings UI had no `spaces` entry for fac before; the Assistant added it. FAC-27..29 are the first tasks
+  briefed for it; G4 (FAC-15) was told mid-run.

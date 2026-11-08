@@ -9,8 +9,8 @@ into kc-factory).
 
 - The Assistant pane works with no sheepdog code.
 - The ask pane, as FAC-9 wrote it, does **not** become a card, and a tap would not answer it.
-- Both ask pane fixes go in `ask.py`, so "no sheepdog code" can still hold for asks. One limit remains: the option
-  under the cursor can't be tapped if it starts with a word like "No" or "Wait".
+- Both ask pane fixes go in `ask.py`, so "no sheepdog code" can still hold for asks. One limit remains: a
+  recommended option starting with "No" or "Wait" can't be tapped, unless another option starts with "Yes".
 - Muting the workers needs a sheepdog change.
 
 ## How sheepdog sees an hc terminal
@@ -28,9 +28,9 @@ into kc-factory).
 ## The ask pane in sheepdog today
 
 - FAC-9's pane starts with `hc run --bg` and the labels `herdr.role=ask` and `herdr.ask=<id>`, but no `herdr.space`
-  (ask.py:70-73). It prints the question, the options as `  1. <option>` (no cursor marker), then
-  `Answer with a number…` and `> `. It reports `state=blocked:kind=question:msg=<base64>` (ask.py:96-100), then
-  reads one line with `input()` (ask.py:104).
+  (ask.py:72-75). It prints the question, the options as `  1. <option>` (no cursor marker), then
+  `Answer with a number…` and `> `. It reports `state=blocked:kind=question:msg=<base64>` (ask.py:85-91, 98-102), then
+  reads one line with `input()` (ask.py:106).
 - Sheepdog picks it up as an agent once it reports a status (mapping.go:77). Its kind is the Python program's name,
   because no `app` is reported (mapping.go:36-49).
 - When it reports blocked, the supervisor reads the screen and runs `herdr.ParsePrompt`
@@ -54,18 +54,19 @@ into kc-factory).
   becomes the prompt's yes keys (prompt.go:214-216), which `keysLabel` calls "yes" (supervisor/brainhost.go:412-416),
   so `approves` is true (inputs.go:549-553). The rail refuses an approving answer whose words start with no, wait,
   hold, stop, cancel, don't and the like (inputs.go:478-479, 526-544), and a tap's words are the option's label
-  (inputs.go:638). So that option can't be tapped or spoken if its label starts with one of those words. A scratch
-  `ParsePrompt` run on `❯ 2. Wait for review  (recommended)` gives yes keys `["2"]`.
+  (inputs.go:638). So if that option's label starts with one of those words, it can't be tapped, nor answered by
+  speaking its label. A scratch `ParsePrompt` run on `❯ 2. Wait for review  (recommended)` gives yes keys `["2"]`.
 - It then sends the option's keys with `SendKeys`, with no Enter added (supervisor/tools.go:489). A numbered option's
   keys are just its digit, unless its label ends in a plain key hint like `(y)` (prompt.go:40-44, 85-90).
-- **A digit alone doesn't answer FAC-9's pane**, because `input()` waits for Enter (ask.py:104).
+- **A digit alone doesn't answer FAC-9's pane**, because `input()` waits for Enter (ask.py:106).
 
 ## Smallest fix for the ask pane (in ask.py, no sheepdog code)
 
 1. Put a cursor marker on the recommended option, e.g. `❯ 1. Ship now  (recommended)`, which parses with keys `1`
-   and `2` and the recommendation flagged (prompt.go:62). A spoken "yes" picks it (prompt.go:214-216). If its label
-   starts with a negative word, put the marker on the first option that doesn't (see above). If all of them do, one
-   option stays untappable until sheepdog changes `keysLabel` or the rail.
+   and `2` and the recommendation flagged (prompt.go:62). A spoken "yes" picks it (prompt.go:214-216). Keep the marker
+   there: moving it moves "yes" to an option not recommended. A recommended label starting with a negative word
+   (see above) then works only when another option starts with "Yes" (prompt.go:207-208). Any other wording needs
+   ask.py to refuse it, or sheepdog to change `keysLabel` or the rail.
 2. Read one keypress, so a digit answers without Enter. Words of one's own then need another way in.
 - With both fixes the voice works too: the orchestrator's `send_keys` goes through the same rail as a tap
   (supervisor/brainhost.go:311-326).
@@ -95,7 +96,7 @@ into kc-factory).
 
 ## Needs a change
 
-- **Ask pane** (ask.py): the cursor marker (avoiding negative first words) and the one-key read above.
+- **Ask pane** (ask.py): the cursor marker on the recommended option and the one-key read above.
 - **Muting workers** (sheepdog): factory.md says worker panes labelled `herdr.factory` are muted as a space. Sheepdog
   reads no `herdr.factory`, `herdr.role` or `herdr.task` label (grep of `internal/`). Workers carry
   `herdr.task.space`, never `herdr.space` (Shepherdr launch.py:629, 642), and sheepdog takes a space only from

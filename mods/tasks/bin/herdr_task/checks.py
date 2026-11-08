@@ -12,6 +12,7 @@ from .settings import settings_for, settings_layers
 
 LIMIT_MS = 20 * 60000
 TAIL = 4000
+CI_WINDOW_MS = 10 * 60000
 
 
 def gate_on(s, t):
@@ -80,7 +81,10 @@ def checks_pass(s, t):
         return
     cmd = (settings_for(s, t.get("space"))["tasks"].get("check") or "").strip()
     mine = [r for r in t.get("checks") or [] if r["sha"] == sha]
-    if mine and t.get("pr") and (mine[-1]["ci"] or {"state": "pending"}).get("state") == "pending":
+    last = mine[-1] if mine and t.get("pr") else None
+    state = ((last or {}).get("ci") or {}).get("state")
+    # pending (or unknown) until GitHub answers; "none" a while, as GitHub registers a push's runs late
+    if last and (state in (None, "pending") or state == "none" and now() - last["finished_at"] < CI_WINDOW_MS):
         ci = ci_of(t, sha)
         if ci != mine[-1]["ci"]:
             mine[-1]["ci"], s.dirty = ci, True
@@ -91,7 +95,7 @@ def checks_pass(s, t):
         return clean(s, tmp)
     try:
         r = run(["hc", "run", "--bg", "--json", "--no-parent", "--no-notify", "--cwd", tmp,
-                 "--label", "herdr.role=checks", "--label", f"herdr.task={s.key(t)}", "--", "sh", "-c", cmd])
+                 "--label", "herdr.role=checks", "--label", f"herdr.checks={s.key(t)}", "--", "sh", "-c", cmd])
         address = json.loads(r.stdout)["address"] if r.returncode == 0 else None
     except (ValueError, KeyError):
         address = None

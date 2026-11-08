@@ -214,7 +214,7 @@ export class Model {
       const st = typeof k.status === "object" ? k.status?.state ?? null : null;
       if (!st && SHELL.test(String((k as any).foreground?.name ?? ""))) continue;
       // its worker's own helper (SHEP-54: its reviewer, an hc child): never one of its agents (helpersOf)
-      if (isHelper(k) || k.labels?.["herdr.role"] === "checks") continue;
+      if (isHelper(k)) continue;
       // turn: its finished turns, for a Ready task back at work (core busyAgain())
       out.push({ address: k.address, status: st, role: k.labels?.["herdr.role"] ?? "worker", turn: Number((k as any).turn) || 0 });
     }

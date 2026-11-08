@@ -54,8 +54,6 @@ def detail(k):
 
 
 def agent_running(k):
-    if (k.get("labels") or {}).get("herdr.role") == "checks":
-        return False  # herdr-task's own check run, never a worker
     fg = (k.get("foreground") or {}).get("name") or ""
     if fg:
         return os.path.basename(fg) not in SHELLS

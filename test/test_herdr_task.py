@@ -4127,6 +4127,8 @@ class Checks(unittest.TestCase):
         self.assertNotEqual(self.cwds[0], self.repo)
         self.assertFalse(os.path.exists(os.path.join(self.repo, "ran")))
         self.assertIn("herdr.role=checks", self.terms["t1"]["labels"])
+        self.assertIn("herdr.checks=dev#14", self.terms["t1"]["labels"])
+        self.assertNotIn("herdr.task=dev#14", self.terms["t1"]["labels"])
         self.assertIn("running", self.c.checks_line(self.t))
         self.tick()  # finished: recorded, cleaned up
         rec = self.t["checks"][0]
@@ -4191,11 +4193,13 @@ class Checks(unittest.TestCase):
 
     def test_a_pending_ci_state_is_refreshed(self):
         self.t["pr"] = {"repo": "o/r", "url": "https://x/1"}
-        states = iter(["pending", "success"])
+        states = iter(["pending", "none", "success"])
         self.mock.patch.object(self.c, "ci_of", lambda t, sha: {"state": next(states), "url": "https://x/1"}).start()
         self.addCleanup(self.mock.patch.stopall)
         self.tick(), self.tick()
         self.assertEqual(self.t["checks"][0]["ci"]["state"], "pending")
+        self.tick()
+        self.assertEqual(self.t["checks"][0]["ci"]["state"], "none")  # GitHub may not have registered runs yet
         self.tick()
         self.assertEqual(self.t["checks"][0]["ci"]["state"], "success")
 

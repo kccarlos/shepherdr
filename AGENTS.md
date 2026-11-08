@@ -72,6 +72,8 @@ How to run, build and lay out the code: [docs/develop.md](docs/develop.md).
 
 - In a throwaway core's terminal, unsetting `HC_SESSION` alone makes hc reach the live core: also set
   `HC_SOCKET=$HC_TERMINAL_SOCKET` (herdr-task's guard allows that).
+- herdr-task refuses to run hc with a changed `HC_SESSION`: for a real run on a throwaway core, put a tiny hc shim first
+  on PATH that runs `HC_SESSION=<name> hc "$@"`, and leave `HC_SESSION` unset for herdr-task itself.
 - An agy reviewer in a task worktree can't run git (the worktree's `.git` points outside its trusted folder): put the
   diff in its prompt. Its startup briefly shows `blocked (auth)`, then it works.
 - `herdr-task --on <machine>` copies its bundle there, and a hub (the Mac mini) copies it on: running a branch's

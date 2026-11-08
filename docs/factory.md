@@ -212,7 +212,7 @@ The gate's code checks bound the damage. The reviewer's word is the weakest link
 
 ## 13. Phases
 
-Merges stay on Accept (orchestrator or person) through phase 3.
+Merges stay on Accept (orchestrator or person). Decision 2026-11-08: full auto-merge is deferred as over-engineered for now. Review by a reviewer Herdr starts (G2), checks Herdr runs (G3) and the orchestrator's own checks before Accept already catch worker shortcuts. G5–G7 and the gate hardening are cancelled until auto-merge is really wanted. Tasks are sized as one complete change (about 150–300 lines), with no separate plan or doc tasks unless the person must decide.
 
 1. **Layer 3 fixes** (running: FAC-1..4): hooks survive updates; Claude trust in herdr-task worktrees; the agy adapter audit; agy and routing docs.
 2. **Asks:** `herdr-task ask` and the ask pane, end-to-end with sheepdog on the herdr-core backend.

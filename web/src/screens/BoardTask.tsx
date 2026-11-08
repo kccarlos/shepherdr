@@ -1,7 +1,7 @@
 // The board's one-task page (the approved canvas's "one task · ready" artboard): its header with Accept, the verifier's
 // verdict, review rounds, checks, proof, size and agents, from the snapshot's task row (contracts/board-data.md) and
 // the proof's thumbnail from GET /api/deliverables. Accept opens today's Accept card. A link opens it: #board-task=<id>
-import { useEffect, useState, useSyncExternalStore, type ReactNode } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import type { Task } from '@shared/types.ts'
 import { openArtifact, useStore } from '../kernel.ts'
 import { openAccept, useAccepting } from './Accept.tsx'
@@ -30,8 +30,8 @@ const short = (sha: string) => sha.slice(0, 7)
 const Tick = ({ ok }: { ok: boolean }) => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={ok ? 'M5 12l5 5 9-10' : 'M6 6l12 12M18 6L6 18'} /></svg>
 )
-const Section = ({ label, title, children, className = '' }: { label: string; title?: string; children: ReactNode; className?: string }) => (
-  <section aria-label={label} className={`${card} ${className}`}>{title ? <h2 className={h2}>{title}</h2> : null}{children}</section>
+const Section = ({ label, heading, children, className = '' }: { label: string; heading?: string; children: ReactNode; className?: string }) => (
+  <section aria-label={label} className={`${card} ${className}`}>{heading ? <h2 className={h2}>{heading}</h2> : null}{children}</section>
 )
 const Tail = ({ text }: { text: string }) => text ? (
   <details className="text-xs"><summary className="cursor-pointer text-[var(--sd-muted)]">output</summary>
@@ -42,6 +42,9 @@ export function BoardTaskPage() {
   const id = useOpen()
   const t = useStore((s) => (id ? (s.snap?.tasks.find((x) => x.id === id) as BoardTask | undefined) : undefined))
   const accepting = useAccepting(id ?? '')
+  const first = useRef<HTMLButtonElement>(null)
+  // the keyboard starts on the page, on its back link
+  useEffect(() => { if (id) first.current?.focus({ preventScroll: true }) }, [id, !t])
   const [proof, setProof] = useState<{ title: string; thumb?: string | null } | null>(null)
   useEffect(() => {
     setProof(null)
@@ -65,9 +68,10 @@ export function BoardTaskPage() {
   const back = () => { set(null); if (location.hash.startsWith('#board-task=')) history.replaceState(null, '', location.pathname + location.search) }
 
   return (
-    <div className="absolute inset-0 z-20 overflow-y-auto bg-[var(--sd-bg)] text-[15px] text-[var(--sd-fg)]">
+    <div role="dialog" aria-modal="true" aria-label={`${t.id} ${t.name}`} onKeyDown={(e) => e.key === 'Escape' && back()}
+      className="absolute inset-0 z-20 overflow-y-auto bg-[var(--sd-bg)] text-[15px] text-[var(--sd-fg)]">
       <div className="mx-auto flex max-w-[1120px] flex-col gap-5 px-[clamp(16px,3vw,32px)] pt-4 pb-12">
-        <button type="button" onClick={back} className="inline-flex min-h-11 items-center gap-1.5 self-start text-sm text-[var(--sd-primary-text)] hover:text-[var(--sd-fg)]">
+        <button ref={first} type="button" onClick={back} className="inline-flex min-h-11 items-center gap-1.5 self-start text-sm text-[var(--sd-primary-text)] hover:text-[var(--sd-fg)]">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6" /></svg>board
         </button>
         <header className="flex flex-col gap-2.5">
@@ -106,7 +110,7 @@ export function BoardTaskPage() {
               </div>
             </Section>
 
-            <Section label="Review rounds" title="review rounds">
+            <Section label="Review rounds" heading="review rounds">
               {rounds.length ? (
                 <ol className="m-0 flex list-none flex-col p-0">
                   {rounds.map((r, i) => (
@@ -126,7 +130,7 @@ export function BoardTaskPage() {
               ) : <p className={`m-0 ${muted}`}>No review rounds yet.</p>}
             </Section>
 
-            <Section label="Checks" title="checks">
+            <Section label="Checks" heading="checks">
               {checks.length ? checks.map((c, i) => (
                 <div key={i} className="flex flex-col gap-1 rounded-[var(--sd-radius-sm)] bg-[var(--sd-code)] px-3 py-2">
                   <div className="flex min-h-7 flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
@@ -143,7 +147,7 @@ export function BoardTaskPage() {
           </main>
 
           <aside className="flex min-w-0 flex-[1_1_300px] flex-col gap-4">
-            <Section label="Proof" title="proof">
+            <Section label="Proof" heading="proof">
               {t.proof ? (
                 <>
                   {proof?.thumb ? <button type="button" onClick={() => openArtifact(t.proof!)} className="overflow-hidden rounded-[var(--sd-radius-sm)] border border-[var(--sd-line)] bg-[var(--sd-code)] p-0"><img src={proof.thumb} alt="" className="block max-h-56 w-full object-cover object-top" /></button> : null}
@@ -152,7 +156,7 @@ export function BoardTaskPage() {
               ) : <p className={`m-0 ${muted}`}>No proof yet.</p>}
             </Section>
 
-            <Section label="Size" title="size" className="!gap-2">
+            <Section label="Size" heading="size" className="!gap-2">
               {size ? (
                 <>
                   <div className="flex items-baseline gap-2"><span className="font-display text-[30px] font-semibold tabular-nums">{total}</span>
@@ -169,7 +173,7 @@ export function BoardTaskPage() {
               ) : <p className={`m-0 ${muted}`}>Not known yet.</p>}
             </Section>
 
-            <Section label="Who worked on it" title="agents" className="!gap-2">
+            <Section label="Who worked on it" heading="agents" className="!gap-2">
               {(['worker', 'reviewer', 'verifier'] as const).map((role) => (role === 'verifier' && !agent(role) ? null : (
                 <div key={role} className="flex justify-between gap-2 text-sm"><span>{role}</span><span className="text-[var(--sd-muted)]">{named(agent(role))}</span></div>
               )))}

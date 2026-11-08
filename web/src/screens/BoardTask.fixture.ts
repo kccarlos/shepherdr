@@ -4,7 +4,7 @@ const H = (c: string) => c.repeat(40)
 const at = 1762600000000
 export const readyTask = {
   id: 'FAC-12', name: 'G1 · gate evidence contract', status: 'ready', place: 'factory', age: '3h', state: 'ready', on: 'mini', created: '',
-  taskFolder: '/Users/kc/Documents/reference_repo/factory-run', base: 'kc-factory', pr: { number: 11, url: 'https://github.com/kccarlos/shepherdr/pull/11' },
+  taskFolder: '/srv/dev/factory', base: 'kc-factory', pr: { number: 11, url: 'https://github.com/example/shop/pull/11' },
   summary: "A short agreed format for the merge gate's review and check records now exists, with a checker and a test, so later gate pieces can be built to match.",
   proof: 'proof-fac12',
   agents: [
@@ -21,7 +21,7 @@ export const readyTask = {
   ],
   checks: [
     { sha: 'd0674bd' + H('3').slice(7), command: 'python3 -m unittest discover -s test', exit: 0, output_tail: 'Ran 412 tests in 38.214s\n\nOK (skipped=3)', started_at: at + 1300000, finished_at: at + 1338000, by: 'term-9', ci: null },
-    { sha: 'd0674bd' + H('3').slice(7), command: 'bin/sync-shared --check', exit: 0, output_tail: 'all 198 copies match', started_at: at + 1340000, finished_at: at + 1341000, by: 'term-9', ci: { state: 'success', url: 'https://github.com/kccarlos/shepherdr/actions/runs/1' } },
+    { sha: 'd0674bd' + H('3').slice(7), command: 'bin/sync-shared --check', exit: 0, output_tail: 'all 198 copies match', started_at: at + 1340000, finished_at: at + 1341000, by: 'term-9', ci: { state: 'success', url: 'https://github.com/example/shop/actions/runs/1' } },
   ],
   verdicts: [
     { sha: 'd0674bd' + H('3').slice(7), by: 'term-11', verdict: 'pass', commands: ['python3 test/contract_gate_evidence.py'], output_tail: 'checked 4 sample records: OK', at: at + 1400000 },
@@ -31,7 +31,7 @@ export const readyTask = {
 // a task still at work: no rounds, checks or verdict yet, and no limit in its brief
 export const workingTask = {
   id: 'FAC-41', name: 'B3 · Board: one task page with its evidence', status: 'work', place: 'factory', age: '40m', state: 'working', on: 'mini', created: '',
-  taskFolder: '/Users/kc/Documents/reference_repo/factory-run', base: 'kc-factory',
+  taskFolder: '/srv/dev/factory', base: 'kc-factory',
   agents: [{ role: 'worker', cli: 'claude', model: 'claude-opus-5-5', address: 'term-21', parent: null, state: 'working' }],
   size: { added: 38, removed: 2, limit: null },
 }

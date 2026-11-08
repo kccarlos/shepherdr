@@ -439,6 +439,10 @@ def gate_step(s, t):
     need, head = gate_min(s, t), t.get("head")
     if not need or gate_passes(t, head) >= need:
         return None
+    if not head or not os.path.isdir(t.get("worktree") or ""):
+        raise Fail(f"{s.ref(t)} has no worktree to review: start it first.")
+    back_to_work(s, t, "a new commit to review")  # a Ready task's unreviewed commit never stays mergeable
+    t.pop("auto_merge", None)
     mine = [r for r in t.get("reviews") or [] if r.get("started_by") == "herdr-task"]
     runs, done = t.get("review_runs") or [], {r["round"] for r in mine}
     if mine and mine[-1]["head"] == head and mine[-1]["verdict"] == "changes":
@@ -756,6 +760,8 @@ def gate_verdict(s, t, args, text):
     """A verdict from herdr-task's own reviewer (FAC-13): only from its open round's terminal, while
     the worktree's HEAD is still that round's head with nothing uncommitted. That reviewer then ends."""
     me = os.environ.get("HC_TERMINAL_ID")
+    if t["state"] == "done":
+        raise Fail(f"{s.ref(t)} is already done.")
     done = {r["round"] for r in t.get("reviews") or [] if r.get("started_by") == "herdr-task"}
     rn = next((r for r in reversed(t.get("review_runs") or []) if me and r["address"] == me and r["round"] not in done), None)
     if not rn:

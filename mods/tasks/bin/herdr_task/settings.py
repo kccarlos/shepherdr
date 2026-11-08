@@ -402,7 +402,7 @@ def task_settings(s, t, space=None, argv=None):
         add("Reviewer", text, {"agent": who, "model": rv.get("model"), "effort": rv.get("effort")}, rv_by)
         must = sets.get("must_fix") or (k.get("must_fix") if k.get("must_fix") in LEVELS else "major")
         add("Must fix", MUST_WORDS[must], must, "task" if "must_fix" in sets else by_layer(s, space, "tasks", "must_fix", must, "major"))
-        rounds = sets.get("review_rounds") or (rounds_cfg if rounds_cfg > 0 else max(3, gate))
+        rounds = sets.get("review_rounds") or max(rounds_cfg or 3, gate)
         more = int(t.get("review_rounds_added") or 0)
         add("Review rounds", f"at most {rounds + more}" + (f" ({more} added by the assistant)" if more else ""), rounds + more,
             "task" if "review_rounds" in sets else by_layer(s, space, "tasks", "review_rounds", rounds, 3))

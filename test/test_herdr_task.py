@@ -1827,6 +1827,38 @@ class GateReview(unittest.TestCase):
         self.assertEqual(settings.review_limits(self.store, {"id": 4, "title": "x", "mode": "worktree", "agents": [],
                                                              "set": {"review_min": 5}}), (True, 5))
 
+    def test_a_new_commit_on_a_ready_task_is_never_left_mergeable(self):
+        self.ready()
+        self.verdict("term-1")
+        self.verdict("term-2")
+        self.assertEqual(self.task["state"], "ready")
+        self.change("unreviewed")
+        self.ready()
+        self.assertEqual(self.task["state"], "running")  # back at work until its rounds pass
+        self.assertEqual(len(self.runs), 3)
+
+    def test_no_verdict_on_a_done_task_and_no_crash_without_a_worktree(self):
+        self.ready()
+        self.task["state"] = "done"
+        with self.assertRaises(self.commands.Fail):
+            self.verdict("term-1")
+        self.assertEqual(self.task["state"], "done")
+        self.task.update(state="todo", worktree=os.path.join(self.root, "gone"))
+        with self.assertRaises(self.commands.Fail):
+            self.ready()
+
+    def test_rounds_never_below_the_minimum(self):
+        from herdr_task import settings
+        with open(settings.SETTINGS, "w") as f:
+            json.dump({"everywhere": {"tasks": {"review_rounds": 2, "review_min": 3}}}, f)
+        self.assertEqual(settings.review_limits(self.store, {"id": 5, "title": "x", "mode": "worktree", "agents": []}), (True, 3))
+
+    def test_its_reviewer_booting_is_not_a_wait_for_the_person(self):
+        from herdr_task import agents
+        self.task["started"] = 1
+        self.ready()
+        self.assertTrue(agents.starting(self.task))
+
     def test_a_codex_reviewer_is_told_to_escalate_its_verdict(self):
         self.task["reviewer"], self.task["reviewer_model"] = "codex", None
         self.ready()

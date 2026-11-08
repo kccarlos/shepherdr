@@ -41,3 +41,9 @@ answer (2026-11-08). It becomes the role allow lists in phase 3 (docs/factory.md
 - agy's shell had no `node` on PATH (it lives under ~/.nvm), so the repo's `node --check` loop failed until the worker
   found it: 3 extra prompts. Worker environments need the person's login PATH.
 - herdr-artifact is not in the commands agy workers may run without asking (herdr-task and herdr-browser are).
+- A launchd service needs macOS Documents access before it can tick a repo under ~/Documents. After `shepherdr
+  update` restarted `dev.shepherdr.service`, the new bun process had none: its tick's `git rev-parse` hung in the
+  repo folder while holding the tick lock, so nothing started, no news went out and no backups ran (also the cause of
+  FAC-4's wait). The orchestrator stopped the service (`launchctl bootout`) and killed the hung tick; the
+  herdr-automations hc terminal ticks instead, and the web board is offline until the person grants bun access.
+  FAC-10 adds a git timeout so a hung call never holds the tick lock.

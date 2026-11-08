@@ -8,6 +8,7 @@ How to run, build and lay out the code: [docs/develop.md](docs/develop.md).
   `node --check` loop in [docs/develop.md](docs/develop.md). The installer tests use throwaway roots only.
 - Agent shells may lack `node` on PATH (nvm): prefix `$HOME/.nvm/versions/node/<ver>/bin` for the node checks and the
   chat-log test. One test module runs from `test/` (`cd test && python3 -m unittest test_herdr_task.Revive`).
+- Agent shells on the Mac mini lack PIL: resize or crop proof screenshots with macOS `sips`.
 - Agent shells may lack `bun` on PATH too: it's `/opt/homebrew/bin/bun`. A scratch bun test that imports
   `service/compat.ts` must sit inside `service/` to resolve its imports.
 - Never run herdr-app or herdr-task with a changed `HOME` or `HERDR_APP_HOME`, never start a second herdr-app window,

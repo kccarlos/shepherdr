@@ -156,7 +156,14 @@ Each ask is one question with a recommendation. Release tags and merges in the p
 
 ## 10. Agents agreeing with each other
 
-Tasks that are close or related need a way to agree, across providers. This is being explored (scratchpad report `agent-comm.md`), and its result lands here.
+Workers never chat with each other. Tasks that edit the same files are sequenced with `--after`. Tasks that share an interface (one writes a format or API, another reads it) agree through a **contract first**:
+
+- The Assistant adds a small contract task first: `contracts/<name>.md` plus a contract test, about 60 lines, through the normal gate. The producer and the consumer come `--after` it. Their briefs say: follow the contract, and if it is wrong, stop and say so; never edit it.
+- Each side's test runs the contract's validator on what its own code really writes or reads, not on the example file. The task that merges second gets a verifier step that runs producer into consumer and checks the real output against the contract.
+- At most two contract changes. After that, the Assistant asks the person, with a recommendation.
+- Messages from the Assistant to a worker are short pointers to files. They are sent only when the worker is not `working`, otherwise held. agy reports `done` between turns, so `hc send --if idle` would hold every message. An urgent message gets `hc interrupt` first.
+
+Evidence: an agy experiment ([agent-comm.md](agent-comm.md)). Contract-first agreed the first time with 38% less code. Without a contract, the producer hedged with 11 keys and the consumer peeked at the other branch, which it can because worktrees share one git store. A contract test pointed only at its example passed while the real output broke it. Not yet verified: Claude and Codex mid-turn delivery, and a worker pushing back on a contract.
 
 ## 11. Edge cases
 

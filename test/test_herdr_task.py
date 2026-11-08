@@ -2083,6 +2083,11 @@ class SandboxedReviewer(unittest.TestCase):
         with mock.patch.object(launch.sys, "platform", "darwin"), mock.patch.object(launch.os.path, "exists", lambda p: False):
             self.assertFalse(launch.sandboxes(["agy"]))
 
+    def test_its_launcher_counts_as_its_agent_running(self):
+        from herdr_task.agents import agent_running
+        self.assertTrue(agent_running({"foreground": {"name": "bash", "argv": ["sh", "-c", "root=$1 ...", "herdr-sandbox", "/r"]}}))
+        self.assertFalse(agent_running({"foreground": {"name": "bash", "argv": ["bash"]}}))
+
     def test_revive_never_brings_a_sandboxed_reviewer_back(self):
         from herdr_task.revive import watched
         labels = {"herdr.task": "dev#6", "herdr.role": "reviewer"}

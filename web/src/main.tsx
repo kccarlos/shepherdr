@@ -11,6 +11,7 @@ import { watchScrolling } from './scrolling.ts'
 import Settings, { sectionOf, withPluginErrors } from './Settings.tsx'
 import { watchViewport } from './viewport.ts'
 import { AcceptCard } from './screens/Accept.tsx'
+import { BoardTaskPage } from './screens/BoardTask.tsx'
 import { WorktreeDialog } from './screens/Worktree.tsx'
 import { RoleSheet } from './screens/Role.tsx'
 import { AddMachineButton, AddMachineDialog } from './screens/AddMachine.tsx'
@@ -88,7 +89,7 @@ function PluginTrouble() {
 registry.views.settings = Settings
 registry.topBars.push(Offline, UpdateFailed, PluginTrouble)
 // Shepherdr 3's Accept card, over everything
-registry.overlays.push(AcceptCard, WorktreeDialog, AddMachineDialog, RoleSheet, ServeFromDialog)
+registry.overlays.push(BoardTaskPage, AcceptCard, WorktreeDialog, AddMachineDialog, RoleSheet, ServeFromDialog)
 // the sidebar foot's Add machine, as 3.0's
 registry.sideFoot.push({ order: 90, View: AddMachineButton })
 // the human's own plugins load first, each on its own: one that throws as it loads is left out

@@ -93,3 +93,6 @@ answer (2026-11-08). It becomes the role allow lists in phase 3 (docs/factory.md
   had recorded passes (reviewers exit after `herdr-task review`, so their terminals are gone). herdr-task tells the
   worker about `--changes`, not about a pass: a one-line news to the worker on each pass would stop the round trips.
 - Round limits raised to 9 for FAC-15, 29, 32 (and 8 for 28, 35, 37, 38) after review.min went to 3 mid-run.
+- `herdr-task ready` on a detached HEAD (after a worker's `git rebase --onto`) says "ready: pull request #26" but
+  pushes the task branch, which still points at the old commit; the PR keeps the old head and its conflict. ready
+  should refuse a detached HEAD, or push HEAD to the task branch.

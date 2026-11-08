@@ -100,3 +100,8 @@ answer (2026-11-08). It becomes the role allow lists in phase 3 (docs/factory.md
   skipped hung folder still rewrote shared news/retry state), round limit 9; B3 (FAC-41) at ~194 lines (all canvas
   parts with empty states); S1 (FAC-39) stays in service/ (no web/shared edits; B2/B3 type the fields); FAC-34 one
   more round; FAC-49 not hung (waiting on its round-4 reviewer), round limit 9 (3 passes needed).
+- Usage (~14:30): Gemini weekly 83% -> 56% overnight from gate rounds; Claude weekly 9%, resets ~21:30. Until then
+  Sonnet-worker tasks (FAC-17, 42, 43, 44, 46, 50, 52, 53) review with Claude Opus and review.min 2 (Opus is another
+  model); Opus-worker tasks keep Argon, since an Opus reviewer wouldn't be independent of an Opus worker. FAC-53 sends
+  reviewers only the delta and never starts a second live reviewer. Docs-only/tiny tasks: argon-medium, or one Opus
+  round plus one Argon (Assistant routing).

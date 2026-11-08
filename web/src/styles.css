@@ -24,37 +24,153 @@
 /* the keyboard is moving the tasks' cursor, which isn't the focus */
 @custom-variant cursor (:where([data-keys="cursor"]) &);
 
+/* Sheepdog design system tokens (the design system's tokens.json): screens use these, never raw hex. The older
+   names below (--canvas, --bg, --fg, --need…) are mapped onto them, so screens that use those keep working. */
+@font-face {
+  font-family: Outfit;
+  src: url("./outfit-latin-wght-normal.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: swap;
+}
+:root {
+  --sd-ink: #1f1f22;
+  --sd-cream: #f5f2ea;
+  --sd-orange: #f39c1f;
+  --sd-orange-deep: #d98718;
+  --sd-slate: #8e929a;
+  --sd-focus: var(--sd-orange);
+  --sd-on-primary: var(--sd-ink);
+  --sd-chevron: var(--sd-slate);
+  --sd-font-ui: InterVariable, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --sd-font-display: Outfit, InterVariable, system-ui, sans-serif;
+  --sd-space-6: 6px;
+  --sd-space-8: 8px;
+  --sd-space-12: 12px;
+  --sd-space-14: 14px;
+  --sd-space-16: 16px;
+  --sd-space-18: 18px;
+  --sd-touch-target: 44px;
+  --sd-reading-column: 680px;
+  --sd-radius-xs: 4px;
+  --sd-radius-sm: 8px;
+  --sd-radius-md: 10px;
+  --sd-radius: 14px;
+  --sd-radius-lg: 22px;
+  --sd-radius-pill: 999px;
+  --sd-sticker-stroke: 3px;
+  --sd-bg: #FAF8F3;
+  --sd-card: #FFFFFF;
+  --sd-code: #F1EEE7;
+  --sd-line: #E4E0D7;
+  --sd-fg: var(--sd-ink);
+  --sd-muted: #6B6E75;
+  --sd-primary: var(--sd-orange-deep);
+  --sd-primary-text: #8A5700;
+  --sd-primary-soft: #FDF1DC;
+  --sd-blocked: #D99417;
+  --sd-blocked-text: #8A5700;
+  --sd-working: #1F5F9E;
+  --sd-done: #1D6B46;
+  --sd-idle: #5C6370;
+  --sd-unknown: #646A75;
+  --sd-thinking: #6A46B0;
+  --sd-danger: #B42318;
+  --sd-danger-bg: #FEF3F2;
+  --sd-danger-line: #F4C7C3;
+  --sd-muted-on-fill: #5C5F66;
+  --sd-bubble: #ECE8DF;
+  --sd-track: #ECE8DF;
+  --sd-dash: #8E8A80;
+  --sd-working-soft: #E1EAF4;
+  --sd-done-soft: #DDEEE4;
+  --sd-thinking-soft: #ECE6F6;
+  --sd-thinking-text: #553591;
+  --sd-thinking-rule: #C9B8EA;
+  --sd-side: #F3F0E8;
+  --sd-sel-bg: #E5DFD2;
+  --sd-sel: #FFFFFF;
+  --sd-diff-add: #1A8038;
+  --sd-diff-remove: #BF2924;
+  --sd-diff-add-fill: rgba(52,199,89,0.12);
+  --sd-diff-remove-fill: rgba(255,59,48,0.12);
+  --sd-scrim: rgba(31,31,34,0.32);
+  --sd-wash: rgba(250,248,243,0.55);
+  --sd-shadow-sm: 0 1px 2px rgba(31,31,34,0.12);
+  --sd-shadow-pop: 0 12px 40px rgba(31,31,34,0.18), 0 0 0 1px var(--sd-line);
+}
+:root[data-theme=dark] {
+  --sd-bg: #16181C;
+  --sd-card: #1F2126;
+  --sd-code: #26292F;
+  --sd-line: #2E3138;
+  --sd-fg: var(--sd-cream);
+  --sd-muted: #A3A7AF;
+  --sd-primary: var(--sd-orange);
+  --sd-primary-text: #F5B83D;
+  --sd-primary-soft: #2A2416;
+  --sd-blocked: #F0A92A;
+  --sd-blocked-text: #F5B83D;
+  --sd-working: #6AA8EB;
+  --sd-done: #5CC792;
+  --sd-idle: #9AA1AD;
+  --sd-unknown: #8E95A0;
+  --sd-thinking: #B195F0;
+  --sd-danger: #F26B5B;
+  --sd-danger-bg: #2A1C1C;
+  --sd-danger-line: #5A2A2A;
+  --sd-muted-on-fill: #A3A7AF;
+  --sd-bubble: #2C2F36;
+  --sd-track: #26292F;
+  --sd-dash: #6B707A;
+  --sd-working-soft: #22303F;
+  --sd-done-soft: #1E3428;
+  --sd-thinking-soft: #2C2640;
+  --sd-thinking-text: #C9B5F5;
+  --sd-thinking-rule: #54477A;
+  --sd-side: #1B1D22;
+  --sd-sel-bg: #2C2F36;
+  --sd-sel: #3A3D44;
+  --sd-diff-add: #6BD185;
+  --sd-diff-remove: #FF7A73;
+  --sd-diff-add-fill: rgba(48,209,88,0.12);
+  --sd-diff-remove-fill: rgba(255,69,58,0.12);
+  --sd-scrim: rgba(0,0,0,0.5);
+  --sd-wash: rgba(22,24,28,0.55);
+  --sd-shadow-sm: 0 1px 2px rgba(0,0,0,0.5);
+  --sd-shadow-pop: 0 12px 40px rgba(0,0,0,0.5), 0 0 0 1px var(--sd-line);
+}
+
 :root {
   color-scheme: light;
-  --canvas: #f4f4f5;
-  --bg: #fff;
-  --fg: #09090b;
-  --fg2: #52525b;
+  --canvas: var(--sd-bg);
+  --bg: var(--sd-card);
+  --fg: var(--sd-fg);
+  --fg2: color-mix(in srgb, var(--sd-fg) 35%, var(--sd-muted));
   /* the faintest words (ids, times, hints, placeholders): still 4.5:1 on the page, so they read */
-  --fg3: #76767f;
-  --line: rgb(9 9 11 / 0.07);
-  --line2: rgb(9 9 11 / 0.12);
-  --hover: rgb(9 9 11 / 0.035);
-  --sel: rgb(9 9 11 / 0.06);
-  --well: #fafafa;
-  --bubble: #f4f4f5;
+  --fg3: var(--sd-muted);
+  --line: var(--sd-line);
+  --line2: color-mix(in srgb, var(--sd-line), var(--sd-fg) 12%);
+  --hover: color-mix(in srgb, var(--sd-fg) 4%, transparent);
+  --sel: var(--sd-sel-bg);
+  --well: var(--sd-code);
+  --bubble: var(--sd-code);
   /* your bubbles: a calm cool shade, apart from the agent's grey ones */
-  --reply: #edf2f8;
+  --reply: var(--sd-bubble);
   /* the picked segment of a toggle: lighter than its track in both themes */
-  --seg-on: #fff;
+  --seg-on: var(--sd-sel);
   /* a scrollbar's thumb, and while you hold it */
-  --thumb: rgb(9 9 11 / 0.2);
-  --thumb-held: rgb(9 9 11 / 0.36);
-  --need: #e5484d;
-  --ready: #30a46c;
-  --work: #e2a336;
-  --muted: #a1a1aa;
+  --thumb: color-mix(in srgb, var(--sd-fg) 20%, transparent);
+  --thumb-held: color-mix(in srgb, var(--sd-fg) 36%, transparent);
+  --need: var(--sd-blocked);
+  --ready: var(--sd-done);
+  --work: var(--sd-working);
+  --muted: var(--sd-slate);
   /* the status colours as small words on the page: a shade deeper in light mode, so they read */
-  --ready-fg: #18794e;
-  --work-fg: #a35200;
-  --need-fg: #ce2c31;
-  --accent: #c2410c;
-  --focus: #3b82f6;
+  --ready-fg: var(--sd-done);
+  --work-fg: var(--sd-working);
+  --need-fg: var(--sd-blocked-text);
+  --accent: var(--sd-primary-text);
+  --focus: var(--sd-focus);
   --term: #0b0b0d;
   --term-fg: #e4e4e7;
   /* the terminal's ANSI colours, and their bright twins */
@@ -75,26 +191,26 @@
   --ansi-6b: #67e8f9;
   --ansi-7b: #fafafa;
   /* a merged pull request */
-  --merged: #8250df;
+  --merged: var(--sd-thinking);
   /* a diff's lines added and taken out: a soft wash of ready and need */
-  --add: rgb(48 164 108 / 0.12);
-  --del: rgb(229 72 77 / 0.1);
+  --add: var(--sd-diff-add-fill);
+  --del: var(--sd-diff-remove-fill);
   /* code: calm tokens on the page's own background */
-  --syn-kw: #7c3aed;
-  --syn-str: #15803d;
-  --syn-num: #b45309;
+  --syn-kw: var(--sd-thinking);
+  --syn-str: var(--sd-done);
+  --syn-num: var(--sd-primary-text);
   --syn-com: #a1a1aa;
-  --syn-fn: #2563eb;
+  --syn-fn: var(--sd-working);
   --syn-type: #0e7490;
   --syn-tag: #be123c;
   --syn-attr: #b45309;
   --syn-meta: #71717a;
-  --menu-shadow: 0 0 0 1px var(--line2), 0 12px 32px rgb(0 0 0 / 0.12);
+  --menu-shadow: var(--sd-shadow-pop);
   /* Corners, one rule everywhere. A one-line control (a button, an icon button, a field, a tab, a chip) is a pill
      (rounded-full). A container has one of two corners: a box (a card, a menu or popover, a sheet, a dialog, a
      settings group) or a chat bubble. Something nested close inside a rounded thing takes its corner less the padding
      between them (row-pop, round-box), and a row is shaped like a menu's row, in a menu or not */
-  --box-radius: 14px;
+  --box-radius: var(--sd-radius);
   --bubble-radius: 20px;
   --row-radius: calc(var(--box-radius) - 6px);
   --sheet-shadow: -8px 0 32px rgb(0 0 0 / 0.12);
@@ -103,7 +219,7 @@
   --push-shadow: -10px 0 32px rgb(0 0 0 / 0.1);
   --dialog-shadow: 0 0 0 1px var(--line2), 0 24px 64px rgb(0 0 0 / 0.25);
   --toast-shadow: 0 0 0 1px var(--line2), 0 12px 32px rgb(0 0 0 / 0.18);
-  --seg-shadow: 0 0 0 1px var(--line2), 0 1px 2px rgb(0 0 0 / 0.06);
+  --seg-shadow: 0 0 0 1px var(--line2), var(--sd-shadow-sm);
   --soft-shadow: inset 0 0 0 1px var(--line2), 0 1px 2px rgb(0 0 0 / 0.05);
   --box-shadow: inset 0 0 0 1px var(--line2), 0 1px 2px rgb(0 0 0 / 0.03);
   /* the message box while you type in it: its edge a shade darker, never a bright ring */
@@ -112,32 +228,32 @@
 
 :root[data-theme=dark] {
   color-scheme: dark;
-  --canvas: #000;
-  --bg: #0b0b0d;
-  --fg: #fafafa;
-  --fg2: #a1a1aa;
-  --fg3: #7c7c85;
-  --line: rgb(255 255 255 / 0.07);
-  --line2: rgb(255 255 255 / 0.12);
-  --hover: rgb(255 255 255 / 0.04);
-  --sel: rgb(255 255 255 / 0.07);
-  --well: #111114;
-  --bubble: #1c1c20;
-  --reply: #161b23;
-  --seg-on: #2c2c31;
-  --thumb: rgb(255 255 255 / 0.18);
-  --thumb-held: rgb(255 255 255 / 0.32);
-  --need: #ff6369;
-  --ready: #3dd68c;
-  --work: #f5b544;
-  --muted: #71717a;
-  --ready-fg: #3dd68c;
-  --work-fg: #f5b544;
-  --need-fg: #ff6369;
-  --accent: #fb923c;
-  --merged: #a78bfa;
-  --add: rgb(61 214 140 / 0.12);
-  --del: rgb(255 99 105 / 0.12);
+  --canvas: var(--sd-bg);
+  --bg: var(--sd-card);
+  --fg: var(--sd-fg);
+  --fg2: color-mix(in srgb, var(--sd-fg) 35%, var(--sd-muted));
+  --fg3: var(--sd-muted);
+  --line: var(--sd-line);
+  --line2: color-mix(in srgb, var(--sd-line), var(--sd-fg) 12%);
+  --hover: color-mix(in srgb, var(--sd-fg) 4%, transparent);
+  --sel: var(--sd-sel-bg);
+  --well: var(--sd-code);
+  --bubble: var(--sd-code);
+  --reply: var(--sd-bubble);
+  --seg-on: var(--sd-sel);
+  --thumb: color-mix(in srgb, var(--sd-fg) 20%, transparent);
+  --thumb-held: color-mix(in srgb, var(--sd-fg) 36%, transparent);
+  --need: var(--sd-blocked);
+  --ready: var(--sd-done);
+  --work: var(--sd-working);
+  --muted: var(--sd-slate);
+  --ready-fg: var(--sd-done);
+  --work-fg: var(--sd-working);
+  --need-fg: var(--sd-blocked-text);
+  --accent: var(--sd-primary-text);
+  --merged: var(--sd-thinking);
+  --add: var(--sd-diff-add-fill);
+  --del: var(--sd-diff-remove-fill);
   --syn-kw: #c4b5fd;
   --syn-str: #86efac;
   --syn-num: #fcd34d;
@@ -164,6 +280,7 @@
   --font-sans: InterVariable, ui-sans-serif, system-ui, sans-serif;
   --font-sans--font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-display: var(--sd-font-display);
   --color-canvas: var(--canvas);
   --color-bg: var(--bg);
   --color-fg: var(--fg);

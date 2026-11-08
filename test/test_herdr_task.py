@@ -4198,3 +4198,15 @@ class Checks(unittest.TestCase):
         self.assertEqual(self.t["checks"][0]["ci"]["state"], "pending")
         self.tick()
         self.assertEqual(self.t["checks"][0]["ci"]["state"], "success")
+
+    def test_an_hc_that_does_not_answer_never_makes_a_failed_record(self):
+        self.tick()
+        self.terms["t1"]["state"] = "live"
+        real = self.terms
+        self.c.hc_json = lambda *a: None
+        self.tick()
+        self.assertEqual((self.t.get("checks"), bool(self.t.get("check_run")), os.path.exists(self.cwds[0])), (None, True, True))
+        self.clock[0] += self.c.LIMIT_MS + 1  # gone for good: dropped, no record, run again
+        self.tick()
+        self.assertEqual((self.t.get("checks"), self.t.get("check_run")), (None, None))
+        self.assertFalse(os.path.exists(self.cwds[0]))

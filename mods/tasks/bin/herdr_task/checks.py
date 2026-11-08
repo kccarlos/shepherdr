@@ -54,8 +54,11 @@ def checks_pass(s, t):
     on = t["state"] == "ready" and wt and gate_on(s, t)
     ok, sha, _ = git(wt, "rev-parse", "HEAD") if on else (False, None, None)
     if c:
-        k = hc_json("get", c["address"]) or {}
-        stale = not ok or sha != c["sha"]
+        k = hc_json("get", c["address"])
+        if k is None and now() - c["started_at"] <= LIMIT_MS:
+            return  # hc didn't answer: ask again next tick
+        k = k or {}
+        stale = not ok or sha != c["sha"] or not k  # a terminal hc no longer knows: dropped, checked again
         if k.get("state") == "live":
             if not stale and now() - c["started_at"] <= LIMIT_MS:
                 return

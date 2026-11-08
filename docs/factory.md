@@ -73,6 +73,7 @@ Every brief includes these (owner's wiki `lessons/agent-delivery.md`, Ponytail's
 - The task's size limit. Treat the first overrun as a question.
 - A finding needs a run: a failing test or a reproduced state. Theoretical risks, nitpicks and style are not findings.
 - A reviewer's proposed fix gets the same restraint. Fix the root cause once.
+- Implementers may push back. For each finding: fix it, or reject it with a one-line reason (wrong, a nitpick, or would make things worse); never agree just to end the loop. The rejection is recorded with the round. The next round drops the finding or re-asserts it with a run that proves it. Still disputed: a second model breaks the tie, else the person decides. A finding rejected with a reason and dropped by the next round never blocks the gate.
 - Never weaken validation at trust boundaries, data-loss handling, security or accessibility.
 - Test the real thing. Report skipped checks.
 - Two failed fixes on one idea means the idea is wrong: stop and say so.

@@ -843,11 +843,16 @@ def gate_reads(s, t):
         if not sandboxes([rn["cli"]]) or rn["round"] in done or (hc_json("get", rn["address"]) or {}).get("state") != "live":
             continue
         got = read_verdict(run(["hc", "read", rn["address"], "--lines", "400"]).stdout, round_code(rn))
-        if got:
-            try:
-                record_verdict(s, t, rn, *got)
-            finally:
-                end_reviewer(rn["address"])
+        if not got:
+            continue
+        before = list(t.get("reviews") or [])
+        try:
+            record_verdict(s, t, rn, *got)
+        except Exception:  # nothing half recorded: a later tick tries again, its reviewer still there
+            t["reviews"] = before
+            if git(t.get("worktree") or "", "rev-parse", "HEAD")[1] in ("", rn["head"]):
+                raise
+        end_reviewer(rn["address"])  # recorded, or its head moved on: its verdict never applies
 
 
 def cmd_state(args, state):

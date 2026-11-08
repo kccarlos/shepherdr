@@ -2,7 +2,7 @@
 ;; agy runs with --dangerously-skip-permissions. Its HOME is TMP, this run's temp dir holding agy's
 ;; whole state (a copy of its sign-in), removed when it ends (launch.SANDBOX_SH). Params, real
 ;; paths: TMP, WORKTREE, GITDIR (the repo's git common dir), AGY (agy's binary), DEVDIR (Xcode's
-;; tools, for git), NVM (~/.nvm/versions), CORE (herdr-core's sockets, ~/.local/state/herdr-core).
+;; tools, for git), NVM (~/.nvm/versions), CORE (herdr-core's sockets, under XDG_STATE_HOME or ~/.local/state).
 (version 1)
 (allow default)
 
@@ -24,6 +24,8 @@
   (subpath "/opt/homebrew")
   (subpath (param "DEVDIR"))
   (subpath "/private/etc")
+  (subpath "/private/var/db/timezone")
+  (literal "/private/var/run/resolv.conf")
   (subpath "/dev"))
 ;; Not even there: .env files (herdr-secret env writes secrets into one). After the allows: the last match wins.
 (deny file-read-data (regex #"/\.env(\.[^/]*)?$"))

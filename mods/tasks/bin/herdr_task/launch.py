@@ -280,7 +280,7 @@ def sandboxed(argv, worktree):
     real = os.path.realpath
     return ["sh", "-c", SANDBOX_SH, "herdr-sandbox", SANDBOX_ROOT, pkgutil.get_data(__package__, "reviewer.sb").decode(),
             real(worktree), real(common), real(os.path.join(HOME, ".nvm", "versions")),
-            real(os.path.join(HOME, ".local", "state", "herdr-core")), *argv]
+            real(os.path.join(os.environ.get("XDG_STATE_HOME") or os.path.join(HOME, ".local", "state"), "herdr-core")), *argv]
 
 
 def sweep_sandboxes():

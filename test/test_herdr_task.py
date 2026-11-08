@@ -1998,11 +1998,25 @@ class GateReview(unittest.TestCase):
         self.screen(f"{code} pass\n")  # round 1's code on round 2's screen: no verdict
         self.commands.gate_reads(self.store, self.task)
         self.assertEqual(len(self.task["reviews"]), 1)
-        self.change("moved")
+        with open(os.path.join(self.wt, "gate.txt"), "a") as f:  # a dirty tree: nothing recorded, its reviewer kept for a later try
+            f.write("more")
+        self.commands.subprocess.Popen.reset_mock()
         self.screen(f"{code2} pass\n")
         with self.assertRaises(self.commands.Fail):
             self.commands.gate_reads(self.store, self.task)
         self.assertEqual(len(self.task["reviews"]), 1)
+        self.assertFalse(self.commands.subprocess.Popen.called)
+        from unittest import mock
+        self.git(self.wt, "checkout", "gate.txt")
+        with mock.patch.object(self.commands, "gate_step", side_effect=RuntimeError("hc run failed")):  # starting the next round fails
+            with self.assertRaises(RuntimeError):
+                self.commands.gate_reads(self.store, self.task)
+        self.assertEqual(len(self.task["reviews"]), 1)  # rolled back, read again next tick
+        self.assertFalse(self.commands.subprocess.Popen.called)
+        self.change("moved")  # its head moved on: no verdict, and that reviewer ends
+        self.commands.gate_reads(self.store, self.task)
+        self.assertEqual(len(self.task["reviews"]), 1)
+        self.assertTrue(self.commands.subprocess.Popen.called)
         self.reviewer_term = {"state": "gone"}  # nor from a terminal no longer live
         self.commands.gate_reads(self.store, self.task)
         self.assertEqual(len(self.task["reviews"]), 1)

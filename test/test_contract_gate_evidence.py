@@ -24,6 +24,8 @@ class GateEvidence(unittest.TestCase):
         bad("review_runs", head="abc")
         bad("reviews", verdict="ok")
         bad("reviews", started_by="worker")
+        bad("reviews", must_fix=2)
+        bad("review_runs", round=0)
         bad("reviews", must_fix="0")
         bad("reviews", report="x" * 2001)
         bad("checks", exit=True)
@@ -32,8 +34,12 @@ class GateEvidence(unittest.TestCase):
         bad("verdicts", commands="ls")
         bad("verdicts", extra=1)
 
-    def test_worker_round_and_no_ci_are_valid(self):
-        r = example("reviews"); del r["started_by"]; validate_review(r)
+    def test_edge_cases(self):
+        r = example("reviews"); del r["started_by"]
+        with self.assertRaises(ValueError):
+            validate_review(r)
+        validate_review({**example("reviews"), "verdict": "changes", "must_fix": 2})
+        validate_check({**example("checks"), "ci": {"state": "none", "url": None}})
         validate_check({**example("checks"), "ci": None})
         with self.assertRaises(ValueError):
             validate_check({k: v for k, v in example("checks").items() if k != "ci"})

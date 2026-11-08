@@ -32,16 +32,18 @@ def _check(r, ints=(), strs=(), shas=(), lists=(), enums=None, caps=None, extra=
 
 def validate_review_run(r):
     _check(r, ints=("round", "at"), strs=("address", "cli", "model"), shas=("head",))
+    if r["round"] < 1:
+        raise ValueError("round starts at 1")
 
 
 def validate_review(r):
-    # started_by is absent on a round a worker recorded itself
-    _check(r, ints=("round", "must_fix", "at"), strs=("by",), shas=("head",), enums={"verdict": ("pass", "changes")},
-           caps={"report": 2000}, optional=("started_by",))
-    if r.get("started_by", "herdr-task") != "herdr-task":
-        raise ValueError("started_by must be 'herdr-task' or absent")
-    if r["must_fix"] < 0 or r["round"] < 1:
-        raise ValueError("round starts at 1 and must_fix is not negative")
+    # only rounds herdr-task recorded; a worker's own `reviewed` round has the old shape and is not validated
+    _check(r, ints=("round", "must_fix", "at"), strs=("by", "started_by"), shas=("head",),
+           enums={"verdict": ("pass", "changes")}, caps={"report": 2000})
+    if r["started_by"] != "herdr-task":
+        raise ValueError("started_by must be 'herdr-task'")
+    if r["must_fix"] < 0 or r["round"] < 1 or (r["verdict"] == "pass" and r["must_fix"]):
+        raise ValueError("round starts at 1; must_fix is not negative and is 0 on a pass")
 
 
 def validate_check(r):
@@ -49,7 +51,9 @@ def validate_check(r):
            caps={"output_tail": 4000}, extra=("ci",))
     ci = r["ci"]
     if ci is not None:
-        _check(ci, strs=("url",), enums={"state": ("success", "failure", "pending", "none")})
+        _check(ci, extra=("url",), enums={"state": ("success", "failure", "pending", "none")})
+        if ci["url"] is not None and not isinstance(ci["url"], str):
+            raise ValueError("ci.url is a string or null")
 
 
 def validate_verdict(r):

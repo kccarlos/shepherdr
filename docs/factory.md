@@ -194,6 +194,7 @@ Evidence: an agy experiment ([agent-comm.md](agent-comm.md)). Contract-first agr
 - **Implementers:** on the host, in their own worktree (sandboxed from G7).
 - **Reviewers:** on the host under `sandbox-exec`, confined to the worktree.
 - **Gate verifier and GUI checks** (board, Herdr panel, fresh install, reboot recovery): in a Tart macOS VM cloned from the snapshot `sd-qa-base` for each run and deleted afterwards. The clone is instant, and parallel runs each get their own clone (the owner's wiki `env/tart-macos-vm.md`).
+- **Snapshot steps that need the person are asked, never waited on.** Building or refreshing a VM snapshot can need the person: a TCC grant (Accessibility, Screen Recording), a CLI or Apple ID login, a consent dialog. The factory files an ask (ask pane, so it reaches the phone) naming the exact step, where to click and why, then waits as Needs you. Other work goes on. It never stalls silently, and it never types the person's credentials.
 - **The verifier never calls a failure a flake** until it has reproduced it on a fresh clone, with before and after screenshots.
 - **No unattended part depends on a path that needs a macOS consent prompt** (Documents, Desktop, Downloads, removable volumes), unless access was granted beforehand and a probe at start proves it. This bit twice: the factory stalled 3 hours on Documents (2026-11-08), and a nightly waited 53 minutes on the external SSD.
 

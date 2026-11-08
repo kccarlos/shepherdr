@@ -100,9 +100,10 @@ into kc-factory).
   reads no `herdr.factory`, `herdr.role` or `herdr.task` label (grep of `internal/`). Workers carry
   `herdr.task.space`, never `herdr.space` (Shepherdr launch.py:629, 642), and sheepdog takes a space only from
   `herdr.space` (herdrcore/spaces.go:33). A mute is per space folder (attention.go:527-533), and herdrcore has no
-  `PaneCwd` fallback (the only one is in `inject/herdr.go`). So a worker can't be muted in v0. Its blocks are heard at every chattiness level, and its
-  finishes only at chatty, since the person never dealt with it (supervisor/settings.go:72-79). Fix: a mute by
-  label in sheepdog, or a `herdr.space` on workers, which herdr-app would then show.
+  `PaneCwd` fallback (the only one is in `inject/herdr.go`). So a worker can't be muted in v0. Its blocks are heard
+  at every chattiness level, and its finishes only at chatty, since the person never dealt with it
+  (supervisor/settings.go:72-79). Fix: a mute by label in sheepdog, or a `herdr.space` on workers, which herdr-app
+  would then show.
 
 ## Not checked by a run
 

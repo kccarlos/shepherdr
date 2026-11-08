@@ -4,25 +4,25 @@ The one run that proves the whole gate (docs/factory.md section 6; records in co
 G3 (checks), G4 (gate, merge in code) and G5 (verifier) exist. G5's worker turns it into `test/gate_e2e.sh` (or a Python
 script), runs it for real and attaches the output as proof. Nothing here touches the real core, store or `~/.config/herdr-app`.
 
-## Setup (all in one `mktemp -d`, `$T`)
+## Setup (`T=$(mktemp -d)`; remove everything in a `trap`)
 
-1. **Project:** `$T/repo`, a git repo on `main` with `app.py` (prints `hi`), `check.sh` (`python3 app.py | grep -qx hi`) and
-   `git config user.*`. A bare `$T/origin.git` is the remote only if the PR path is run; the local path needs none.
-2. **Core:** `HC_SESSION=gate-e2e-$$` and `hc` started under clean `env -i HOME=$T/home PATH=$T/bin:...` (`HC_SESSION`
-   must stay unset for herdr-task itself). herdr-task refuses `hc` under a changed `HC_SESSION`, so `$T/bin/hc` is the AGENTS.md
-   shim: `#!/bin/sh` / `HC_SESSION=gate-e2e-$$ exec /real/hc "$@"`. Also set `HC_SOCKET=$HC_TERMINAL_SOCKET` where a
-   terminal of the core runs herdr-task. Stop the core in a `trap` on exit.
-3. **Store and settings:** `HERDR_TASK_STORE=$T/store`, `HERDR_TASK_SETTINGS=$T/shepherdr.json` with `tasks.review_min` 2,
-   `tasks.review_rounds` 4, `tasks.check` `sh check.sh`, `tasks.merge` ask, `tasks.must_fix` major, reviewer `agy`, verifier a
-   different CLI than the worker. (Never `herdr-app` or `herdr-app check`; the settings mod is not involved.)
-4. **Fake CLIs** in `$T/bin`, named like the real ones, because `argv_for` starts `agy`, `claude`, `codex` by name:
-   - `agy` (reviewer): reads `$T/plan/review-<round>` (`pass` or `changes`), runs `herdr-task review <ref> --pass` or
-     `--changes "<finding>" --must-fix 1` from its own terminal, then exits. It records nothing else.
-   - verifier (a CLI other than the worker's and reviewer's): runs the project (`python3 app.py`) in its cwd (the detached worktree), reads `$T/plan/verdict`
-     (`pass` or `fail`) and runs `herdr-task verdict <ref> --pass|--fail --command "python3 app.py"` (G5's name; use its real one).
-   - worker: `$T/bin/worker` commits `app.py` change to the task worktree, then `herdr-task ready <ref> --summary ...`.
-5. Every step is `herdr-task ... --json`, and after each step the script dumps `t` from `$T/store` and runs
-   `test/contract_gate_evidence.py` on every `review_runs`, `reviews`, `checks`, `verdicts` record it finds.
+1. **Project:** `$T/gate-e2e-$$`, a git repo on `main` (unique name: worktrees land in the fixed `~/.herdr/worktrees/<repo>/`, so the
+   trap removes `~/.herdr/worktrees/gate-e2e-$$`) with `app.py` (prints `hi`), `check.sh` (`python3 app.py | grep -qx hi`), `git config user.*`.
+2. **Core:** keep the real `HOME` (herdr-task refuses a changed one). A core under `HC_SESSION=gate-e2e-$$`, started with clean `env -i`
+   plus `PATH`, `SHELL=/usr/bin/env` (agents otherwise start in `$SHELL -lic`, and the login shell puts system paths ahead of
+   `$T/bin`), `HERDR_TASK_STORE`, `HERDR_TASK_SETTINGS`. `$T/bin/hc` is the AGENTS.md shim (`HC_SESSION=gate-e2e-$$ exec /real/hc "$@"`);
+   `herdr-app` is not on that PATH. Inside the core's terminals, `unset HC_SESSION` and set `HC_SOCKET=$HC_TERMINAL_SOCKET`. The trap kills only that core.
+3. **Settings** (`$T/shepherdr.json`): `{"everywhere": {"tasks": {"review_min": 2, "review_rounds": 4, "check": "sh check.sh", "merge": "ask",
+   "must_fix": "major"}, "reviewer": {"agent": "agy"}}}` (other top-level keys are ignored; `reviewer` is an object). Verifier: another CLI than the worker's.
+   Every herdr-task call passes `--space e2e` (else `default_space()` runs `herdr-app status`). Not `herdr-app check`.
+4. **Fake CLIs** in `$T/bin`, named `agy`, `claude`, `codex` (`argv_for` starts them by name), each `#!/usr/bin/env python3` (a `#!/bin/sh` script
+   reads as a stopped shell, `SHELLS` in base.py), and each waits on a gate file in `$T/plan/` so steps run in order, then stays alive until told to exit:
+   - reviewer: reads `plan/review-N` (`pass` or `changes`; N = a counter file it bumps, as herdr-task passes no round), then runs
+     `herdr-task review <ref> --pass` or `--changes "<finding>" --must-fix 1` from its own terminal.
+   - verifier: runs `python3 app.py` in its cwd (the detached worktree), reads `plan/verdict`, runs `herdr-task verdict <ref> --pass|--fail --command "python3 app.py"` (G5's real name).
+   - worker: commits an `app.py` change in the task worktree, then runs `herdr-task ready <ref> --summary ...`.
+5. Prose is dropped under `--json` and a fake's own output stays in its terminal: each fake appends the command's exit and output to `$T/log`, and
+   the script reads that. After each step it dumps `t` from `$T/store` and runs `test/contract_gate_evidence.py` on every record of the four lists.
 
 ## Positive run
 
@@ -33,7 +33,7 @@ script), runs it for real and attaches the output as proof. Nothing here touches
 | 3 | Reviewer 1 `--pass` | `reviews[0]` `started_by` herdr-task, `by` = `review_runs[0].address`, `pass`, `must_fix` 0; message says round 2 started (review.min 2); the reviewer's terminal is gone within ~6 s |
 | 4 | Reviewer 2 `--pass` | two counting rounds, same `head`, distinct addresses; task is `ready` |
 | 5 | `herdr-task tick` (twice) | `check_run` set, a detached worktree of that SHA exists, then `checks[0]` with `sha` = head, `exit` 0, real `output_tail`, `by` a `herdr.role=checks` terminal; the worktree and terminal are removed; the repo dir has no new files |
-| 6 | `tick` again | G5: `verdicts[0]` `sha` = head after a verifier started in its own detached worktree (cwd is not the task worktree), `verdict` pass, `by` its terminal, `commands` as the fake ran them; no second verifier on the same SHA |
+| 6 | `tick`, then wait until the verifier's terminal has exited and `tick` cleaned its worktree | G5: `verdicts[0]` `sha` = head after a verifier started in its own detached worktree (cwd is not the task worktree), `verdict` pass, `by` its terminal, `commands` as the fake ran them; no second verifier on the same SHA |
 | 7 | `accept` | G4: `git -C repo rev-parse main` = the verified SHA exactly (`ff-only`, no merge commit), task `done`; the herdr-task output names the SHA |
 
 ## Negative runs (each from a fresh task unless said; every one ends with `main` unmoved and `accept` refused with the reason in plain words)
@@ -42,9 +42,9 @@ script), runs it for real and attaches the output as proof. Nothing here touches
   both refused ("only the ... herdr-task started ... from its own terminal"), no record written. (b) The script edits
   `$T/store` to append a `reviews` row with `started_by` herdr-task but no matching `review_runs`, or a `verdicts` row
   whose `by` is no verifier it started: `accept` refuses naming the missing round/verdict (counting rule).
-- **Moved head:** after step 4, 5 or 6 the worker commits again. Evidence on the old SHA is not enough: the task goes back to
-  working ("a new commit to review"), `auto_merge` cleared, `accept` refuses, and the new head needs 2 new rounds, a new
-  check record and a new verdict. A reviewer or verifier answering after the move is refused ("moved on from <sha7>").
+- **Moved head:** (a) after step 4, 5 or 6 the worker commits, then says `ready`: "a new commit to review" (`back_to_work`), `auto_merge`
+  cleared, `accept` refuses, and the new head needs 2 new rounds, a new check and a new verdict. (b) With a reviewer/verifier open, the
+  worker commits and the fake answers: refused ("moved on from <sha7>"), no record. (c) A commit with no `ready`: `accept` still refuses (gate keys on the exact SHA).
   Also move `main` after step 6: `accept` sends the task back to its worker to rebase (fresh-base rule), `main` unmoved.
 - **Failing check:** `check.sh` made to fail on the head: `checks[-1].exit` non-zero with the real output tail, the task does
   not reach the verifier, `accept` refuses with "checks failed". A fixed commit passes only on its own new record.

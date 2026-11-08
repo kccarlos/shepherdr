@@ -38,7 +38,7 @@ export function deliverables(rows: any[], arts: any[], folder: string, machine: 
       // its own newest version among the task's artifacts
       let own: any = null, at = -1;
       for (const a of mine) for (const v of a.versions ?? []) if (byAgent(g, v) && (v.at ?? 0) > at) { own = a; at = v.at ?? 0; }
-      agents.push({ ref: r.ref, address: g.address, at: g.at ?? 0, by: own ? "agent" : "task", latest: card(own ?? newest) });
+      agents.push({ ref: r.ref, address: g.address, at: g.at ?? 0, ended: g.ended ?? null, by: own ? "agent" : "task", latest: card(own ?? newest) });
     }
   }
   return { folder, machine, tasks, agents };

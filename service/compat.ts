@@ -200,6 +200,9 @@ export function codexQuestion(x: any, key: string): Question {
   return { id: `cq:${x.id}`, title: qs[0].text, kind: "Question", to: key, other: true, noNote: true, choices: choices(qs[0]) };
 }
 
+/** A task the web app shows: not done, or done in the last week. */
+const shown = (r: Row) => r.section !== "done" || !!(r.done_at && Date.now() - r.done_at < 7 * 86400000);
+
 export class Compat {
   /** another machine's key -> the name people read for it (who sent a message: core/chat-view.js fromName) */
   machineNames = new Map<string, string>();
@@ -217,7 +220,7 @@ export class Compat {
   }
 
   /** A folder's deliverables for the board (service/deliverables.ts), from the last build. */
-  deliverables(folder: string, machine: string | null) { return deliverables(this.rows, this.rawArts, folder, machine, (r) => this.artsOf(r)); }
+  deliverables(folder: string, machine: string | null) { return deliverables(this.rows.filter(shown), this.rawArts, folder, machine, (r) => this.artsOf(r)); }
 
   private rows: Row[] = [];
   /** the artifacts' registries as herdr-artifact lists them (versions with who published them), for a chat's publishes */
@@ -375,7 +378,7 @@ export class Compat {
     // one older than 10 minutes was left by a quit (as the window reads it)
     const acc = this.shared?.value("tasks.accepting") ?? {};
     const accepting = (r: Row) => { const at = acc?.[`${r.machine ?? ""}:${r.folder}:${r.ref}`]; return typeof at === "number" && Date.now() - at < 600000; };
-    const tasks: Task[] = rows.filter((r) => r.section !== "done" || (r.done_at && Date.now() - r.done_at < 7 * 86400000)).map((r) => {
+    const tasks: Task[] = rows.filter(shown).map((r) => {
       const id = taskId(r);
       if (r.worker) chats.set(`${id}/worker`, r.worker);
       else if (r.lastLog) chats.set(`${id}/worker`, `log:${r.machine ?? ""}|${r.lastLog.kind}|${r.lastLog.path}`);

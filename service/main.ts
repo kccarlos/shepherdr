@@ -621,7 +621,7 @@ const server = Bun.serve<{ who: string }>({
     }
     if (path === "/api/deliverables" && req.method === "GET") {
       // the board's deliverables (docs/factory.md section 3): a folder's tasks' artifacts and each agent's latest; &on=<machine>
-      const folder = url.searchParams.get("folder") ?? "", m = url.searchParams.get("on"), on = !m || m === me?.host ? null : m;
+      const folder = url.searchParams.get("folder") ?? "", m = url.searchParams.get("on"), on = !m || m === compat.host ? null : m;
       if (!folder.startsWith("/") || (on && !/^[\w.-]{1,64}$/.test(on))) return json({ error: "Give a folder (and a machine)." }, 400);
       return json(compat.deliverables(folder, on));
     }

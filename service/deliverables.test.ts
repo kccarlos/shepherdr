@@ -47,6 +47,13 @@ test("each agent's latest: what its own terminal published while it ran, else th
   const b = board([row({ ref: "SHOP-4", id: 4, title: "Coverage", agents })], arts);
   expect(b.agents.map((g: any) => [g.address, g.by, g.latest.id])).toEqual([["t5", "agent", "mine-0001"], ["t7", "task", "mine-0001"]]);
   expect(b.agents[0].latest.thumb).toBe("api/artifacts/mine-0001/file/shot.png?v=2");
+  // each entry is one run of the agent: when it ended tells it from a later program on the same address
+  expect(b.agents.map((g: any) => [g.at, g.ended])).toEqual([[1000, 2000], [300000, null]]);
+});
+
+test("a task done over a week ago, which the web app no longer shows, isn't listed either", () => {
+  const rows = [row({ ref: "SHOP-1", id: 1, title: "Old", section: "done", done_at: Date.now() - 10 * 86400000 }), row({ ref: "SHOP-2", id: 2, title: "Recent", section: "done", done_at: Date.now() - 86400000 })];
+  expect(board(rows, []).tasks.map((t: any) => t.ref)).toEqual(["SHOP-2"]);
 });
 
 test("another machine's: only its own artifacts, its thumbnails read there; a task with none lists no agent", () => {

@@ -21,6 +21,11 @@ herdr-app	codesign --verify ~/Applications/Herdr.app && defaults read ~/Applicat
 claude	claude --version
 agy	agy --version
 timeout	timeout 5 echo works
+codex	codex --version
+gh-login	gh auth status >/dev/null 2>&1 && echo logged in || echo not logged in
+claude-login	claude auth status --json 2>/dev/null | jq -r 'if .loggedIn then "logged in, " + .authMethod else "not logged in" end'
+codex-login	codex login status 2>&1 | head -1
+agy-login	env -u SSH_CONNECTION -u SSH_CLIENT -u SSH_TTY timeout 60 agy models >/dev/null 2>&1 && echo logged in || echo not logged in
 no-self-update	grep -c '^0.0.0.0 releases.herdr.dev' /etc/hosts
 EOF
     ;;
@@ -42,6 +47,9 @@ case $1 in
     for f in .zprofile .zshrc; do
       grep -q '# factory PATH' "$f" 2>/dev/null ||
         echo "export PATH=\"\$HOME/.local/bin:\$HOME/sdk/$go/bin:/opt/homebrew/opt/node@24/bin:/opt/homebrew/bin:\$PATH\" # factory PATH" >>"$f"
+      # The CLIs keep their logins in the login keychain, locked over ssh; admin/admin is the base image's stock account.
+      grep -q '# factory keychain' "$f" ||
+        echo '[ -n "$SSH_CONNECTION" ] && security unlock-keychain -p admin ~/Library/Keychains/login.keychain-db 2>/dev/null # factory keychain' >>"$f"
     done
     cat >.local/bin/timeout <<'EOF'
 #!/bin/sh
@@ -63,9 +71,11 @@ EOF
     git fetch -q origin </dev/null && git checkout -q --detach origin/HEAD
     go mod download </dev/null && go build ./... </dev/null # modules and the build cache, warm
     ;;
-  record)
-    mkdir -p .factory
-    printf 'image\t%s\t%s\t%s\n' "$3" "$4" "$(date -u +%FT%TZ)" >>$M
+  record) # (re)writes this layer's lines, so a refresh doesn't repeat them
+    mkdir -p .factory && touch $M
+    tools "$2" | cut -f1 >/tmp/factory-names
+    awk -F'\t' 'NR==FNR {n[$1]; next} !($1 == "tool" && $2 in n)' /tmp/factory-names $M >$M.new && mv $M.new $M
+    grep -q "^image	$3	" $M || printf 'image\t%s\t%s\t%s\n' "$3" "$4" "$(date -u +%FT%TZ)" >>$M
     tools "$2" | while IFS=$'\t' read -r name cmd; do
       printf 'tool\t%s\t%s\t%s\n' "$name" "$(zsh -lc "$cmd" </dev/null 2>&1 | head -1)" "$cmd"
     done >>$M

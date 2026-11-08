@@ -17,12 +17,13 @@ export TART_HOME=<the Tart folder on the external SSD>   # without it, tart list
 vm/provision.sh factory-base          # today's date; or: vm/provision.sh factory-base 2026-11-08
 vm/provision.sh sheepdog-qa           # from the newest factory-base-<day>
 vm/provision.sh smoke sheepdog-qa-2026-11-08
+vm/provision.sh refresh factory-base-2026-11-08   # re-run a layer on an existing image, keeping its logins
 ```
 
 - Each build clones its parent to `<layer>-build`, provisions it over ssh (`guest.sh`), snapshots it as `<layer>-<day>`,
   deletes the build VM, then runs the smoke test on a fresh clone. A failed smoke test deletes the new snapshot.
 - An existing `<layer>-<day>` is left alone, so re-running is safe. To rebuild a day, `tart delete` it first.
-- The CLIs (herdr-core/hc, herdr, claude, agy, bun) and Herdr.app are copied from this Mac: the VM runs what the host
+- The CLIs (herdr-core/hc, herdr, claude, agy, codex, bun) and Herdr.app are copied from this Mac: the VM runs what the host
   runs. git, gh, Go, node, python and jq come with sd-qa-base. New needs go into the scripts, never into a hand-edited
   image.
 - Herdr updates itself and herdr-core from `releases.herdr.dev`, which made a clone drift from its manifest within a
@@ -39,7 +40,8 @@ image  factory-base-2026-11-08  sd-qa-base  2026-11-08T21:40:00Z
 tool   go  go version go1.27.3 darwin/arm64  go version
 ```
 
-A `tool` line is its name, its version and the command whose first line printed that version.
+A `tool` line is its name, its version and the command whose first line printed that version. The `*-login` lines
+hold only a login's state (`logged in`, `not logged in`), never a token or an account.
 
 ## Smoke test
 
@@ -53,8 +55,12 @@ PATH line is in both `.zprofile` and `.zshrc`; the TCC grants hold (osascript to
   survive in every clone.
 - CLI logins may live in the image (the SSD stays attached to this Mac). Only the person does them:
   `vm/provision.sh login factory-base-<day>` opens a VM window; in its Terminal run `gh auth login`, `claude` (then
-  `/login`) and `agy`, then Apple menu > Shut Down. The image is re-snapshotted and smoke-tested. Rebuild
-  sheepdog-qa afterwards (delete it, run its build again) so it inherits them.
+  `/login`), `codex` and `agy`, then Apple menu > Shut Down. A refresh follows: the manifest records the logins, the
+  smoke test checks them on a fresh clone, then the image is swapped. Rebuild sheepdog-qa afterwards (delete it, run
+  its build again) so it inherits them.
+- The logins sit in the guest's login keychain, which is locked over ssh: a login shell (`zsh -l`) over ssh unlocks
+  it (the base image's stock admin/admin account). agy over ssh reads a token file instead of the keychain, so run it
+  as `env -u SSH_CONNECTION -u SSH_CLIENT -u SSH_TTY agy ...`.
 
 ## Using sheepdog-qa (one clone per run)
 

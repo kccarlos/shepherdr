@@ -3,7 +3,8 @@
 #   provision.sh factory-base [day]   sd-qa-base             -> factory-base-<day>
 #   provision.sh sheepdog-qa [day]    newest factory-base-*  -> sheepdog-qa-<day>
 #   provision.sh smoke <image>        a fresh clone boots; its manifest's tools, PATH and TCC grants check out
-#   provision.sh login <image>        a window for the person's CLI logins, then the image is re-snapshotted
+#   provision.sh refresh <image>      re-run its layer and manifest in place (keeps its logins), smoke, swap
+#   provision.sh login <image>        a window for the person's CLI logins first, then a refresh
 # An existing <layer>-<day> is left as it is, so re-running is safe. Needs TART_HOME (the external SSD).
 set -euo pipefail
 : "${TART_HOME:?export TART_HOME first: the Tart images live on the external SSD}"
@@ -50,7 +51,7 @@ app() { # the host's Herdr.app (only the app: no staged update beside it), when 
 # The layers. The CLIs come from this Mac (all standalone arm64), so the VM runs what the host runs.
 layer_factory_base() {
   step base
-  for b in herdr-core herdr claude agy; do put "$HOME/.local/bin/$b" ".local/bin/$b"; done
+  for b in herdr-core herdr claude agy codex; do put "$HOME/.local/bin/$b" ".local/bin/$b"; done
   put "$(command -v bun)" .local/bin/bun
   app
 }
@@ -82,11 +83,15 @@ case ${1:-} in
     base=$(tart list --quiet | grep -E '^factory-base-[0-9]{4}-[0-9]{2}-[0-9]{2}$' | sort | tail -1 || true)
     build sheepdog-qa "${base:?no factory-base-<day> image: build it first}" ;;
   smoke) smoke "${2:?which image?}" ;;
-  login)
-    img=${2:?which image?} edit=${2}-login
+  refresh|login)
+    img=${2:?which image?} edit=${2}-edit layer=${2%-*-*-*}
     fresh "$img" "$edit"
-    echo "In the VM window: open Terminal, run gh auth login, claude (then /login) and agy; then Apple menu > Shut Down."
-    tart run "$edit"
+    if [ "$1" = login ]; then
+      echo "In the VM window: open Terminal, run gh auth login, claude (then /login), codex and agy; then Apple menu > Shut Down."
+      tart run "$edit"
+    fi
+    boot; "layer_${layer//-/_}"; step record "$layer" "$img" -
+    g sync; tart stop "$VM"
     if ! smoke "$edit"; then tart delete "$edit"; echo "smoke test failed: $img left as it was" >&2; exit 1; fi
     tart delete "$img"; tart rename "$edit" "$img" ;;
   *) sed -n '2,7p' "$0"; exit 2 ;;

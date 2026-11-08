@@ -2016,6 +2016,15 @@ class AgyWorker(unittest.TestCase):
             self.assertIn("command(/x/herdr-task status)", merged["permissions"]["allow"], flag)
             if "role" in flag[-1]:
                 self.assertEqual(merged["permissions"]["allow"][0], "command(ls)")
+        # several --settings become one that keeps all their rules, and the worktree is trusted once
+        with mock.patch.object(launch, "HOME", self.home), mock.patch.object(launch, "own_path", lambda: "/x/herdr-task"), \
+                mock.patch.object(launch, "secret_path", lambda: None), mock.patch.object(launch, "browser_path", lambda: None):
+            out = launch.own_argv(["agy", "--settings=role.json", "--settings", '{"trustedWorkspaces": ["/wt/x"], "permissions": {"allow": ["command(pwd)"]}}', "-m", "x"], "/wt/x", cwd=folder)
+        self.assertEqual(sum(a.startswith("--settings") for a in out), 1)
+        self.assertEqual(out[-2:], ["-m", "x"])
+        merged = json.loads(out[out.index("--settings") + 1])
+        self.assertEqual(merged["trustedWorkspaces"], ["/wt/x"])
+        self.assertEqual(merged["permissions"]["allow"][:2], ["command(ls)", "command(pwd)"])
 
     def test_a_switched_task_does_not_read_the_old_agents_log(self):
         from herdr_task.agents import agent_log

@@ -6,6 +6,8 @@ How to run, build and lay out the code: [docs/develop.md](docs/develop.md).
 
 - Quick checks are fine here (seconds): `bin/sync-shared --check`, `python3 -m unittest discover -s test` and the
   `node --check` loop in [docs/develop.md](docs/develop.md). The installer tests use throwaway roots only.
+- Agent shells may lack `node` on PATH (nvm): prefix `$HOME/.nvm/versions/node/<ver>/bin` for the node checks and the
+  chat-log test. One test module runs from `test/` (`cd test && python3 -m unittest test_herdr_task.Revive`).
 - Never run herdr-app or herdr-task with a changed `HOME` or `HERDR_APP_HOME`, never start a second herdr-app window,
   and never install into the real `~/.config/herdr-app` for a try: use `./install.sh --root <scratch>`. A window or
   scheduler on another home can overwrite every machine's spaces.

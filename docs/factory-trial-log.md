@@ -96,3 +96,7 @@ answer (2026-11-08). It becomes the role allow lists in phase 3 (docs/factory.md
 - `herdr-task ready` on a detached HEAD (after a worker's `git rebase --onto`) says "ready: pull request #26" but
   pushes the task branch, which still points at the old commit; the PR keeps the old head and its conflict. ready
   should refuse a detached HEAD, or push HEAD to the task branch.
+- Calls (orchestrator's standing answer, 2026-11-08 ~14:10): FAC-50 to ~160 lines to fix a data-loss blocker (a
+  skipped hung folder still rewrote shared news/retry state), round limit 9; B3 (FAC-41) at ~194 lines (all canvas
+  parts with empty states); S1 (FAC-39) stays in service/ (no web/shared edits; B2/B3 type the fields); FAC-34 one
+  more round; FAC-49 not hung (waiting on its round-4 reviewer), round limit 9 (3 passes needed).

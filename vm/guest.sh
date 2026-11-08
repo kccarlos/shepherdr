@@ -24,7 +24,7 @@ timeout	timeout 5 echo works
 codex	codex --version
 gh-login	gh auth status >/dev/null 2>&1 && echo logged in || echo not logged in
 claude-login	claude auth status --json 2>/dev/null | jq -r 'if .loggedIn then "logged in, " + .authMethod else "not logged in" end'
-codex-login	codex login status 2>&1 | head -1
+codex-login	codex login status >/dev/null 2>&1 && echo logged in || echo not logged in
 agy-login	env -u SSH_CONNECTION -u SSH_CLIENT -u SSH_TTY timeout 60 agy models >/dev/null 2>&1 && echo logged in || echo not logged in
 no-self-update	grep -c '^0.0.0.0 releases.herdr.dev' /etc/hosts
 EOF
@@ -76,8 +76,9 @@ EOF
     tools "$2" | cut -f1 >/tmp/factory-names
     awk -F'\t' 'NR==FNR {n[$1]; next} !($1 == "tool" && $2 in n)' /tmp/factory-names $M >$M.new && mv $M.new $M
     grep -q "^image	$3	" $M || printf 'image\t%s\t%s\t%s\n' "$3" "$4" "$(date -u +%FT%TZ)" >>$M
-    tools "$2" | while IFS=$'\t' read -r name cmd; do
-      printf 'tool\t%s\t%s\t%s\n' "$name" "$(zsh -lc "$cmd" </dev/null 2>&1 | head -1)" "$cmd"
+    tools "$2" | while IFS=$'\t' read -r name cmd; do # a failing or silent command fails the build
+      out=$(zsh -lc "$cmd" </dev/null 2>&1) && [ -n "${out%%$'\n'*}" ] || { echo "record: $name failed: $out" >&2; exit 1; }
+      printf 'tool\t%s\t%s\t%s\n' "$name" "${out%%$'\n'*}" "$cmd"
     done >>$M
     cat $M
     ;;
@@ -86,7 +87,7 @@ EOF
     [ -s $M ] || { echo "FAIL  no manifest at ~/$M"; exit 1; }
     while IFS=$'\t' read -r kind name want cmd; do
       if [ "$kind" = image ]; then echo "image $name (from $want, built $cmd)"; continue; fi
-      got=$(zsh -lc "$cmd" </dev/null 2>&1 | head -1)
+      got=$(zsh -lc "$cmd" </dev/null 2>&1) && got=${got%%$'\n'*} || got="exit $?: ${got%%$'\n'*}"
       if [ "$got" = "$want" ]; then echo "ok    $name: $got"; else echo "FAIL  $name: want '$want', got '$got'"; fail=1; fi
     done <$M
     for f in .zprofile .zshrc; do

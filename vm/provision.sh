@@ -16,9 +16,9 @@ VM='' TEMP=''
 
 g() { ssh "${SSHO[@]}" "admin@$(tart ip "$VM")" "$@"; }
 # A guest step: guest.sh is copied in first (bash -s would let the step's commands eat the script from stdin).
-step() { g 'cat > /tmp/factory-guest.sh' <"$HERE/guest.sh"; g "bash /tmp/factory-guest.sh $*"; }
+step() { g 'cat > /tmp/factory-guest.sh' <"$HERE/guest.sh" && g "bash /tmp/factory-guest.sh $*"; }
 has() { tart list --quiet | grep -qx "$1"; }
-cleanup() { if [ -n "$TEMP" ]; then tart stop "$TEMP" >/dev/null 2>&1; tart delete "$TEMP" >/dev/null 2>&1; fi; true; }
+cleanup() { if [ -n "$TEMP" ]; then tart stop "$TEMP" >/dev/null 2>&1 || true; tart delete "$TEMP" >/dev/null 2>&1 || true; fi; }
 trap cleanup EXIT
 
 fresh() { # fresh <image> <vm>: a new clone to work in, deleted on exit unless kept
@@ -32,7 +32,7 @@ boot() {
     sleep 3
     if tart ip "$VM" >/dev/null 2>&1 && g true 2>/dev/null; then return; fi
   done
-  echo "$VM never answered ssh" >&2; exit 1
+  echo "$VM never answered ssh" >&2; return 1
 }
 done_with() { tart stop "$VM" >/dev/null 2>&1 || true; tart delete "$VM"; TEMP=''; }
 
@@ -71,8 +71,7 @@ build() { # build <layer> <parent image>
 smoke() { # smoke <image>
   local rc=0
   echo "smoke test of $1 on a fresh clone"
-  fresh "$1" "$1-smoke"; boot
-  step smoke || rc=$?
+  fresh "$1" "$1-smoke" && boot && step smoke || rc=$?
   done_with; return $rc
 }
 

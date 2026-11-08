@@ -81,7 +81,10 @@ How to run, build and lay out the code: [docs/develop.md](docs/develop.md).
   `HC_SOCKET=$HC_TERMINAL_SOCKET` (herdr-task's guard allows that).
 - Ask-pane tests run the real pane on a pty (`test_herdr_task.AskPane`); a stuck pane must be killed or the test hangs.
 - herdr-task refuses to run hc with a changed `HC_SESSION`: for a real run on a throwaway core, put a tiny hc shim first
-  on PATH that runs `HC_SESSION=<name> hc "$@"`, and leave `HC_SESSION` unset for herdr-task itself.
+  on PATH that runs `HC_SESSION=<name> /abs/path/to/hc "$@"`, and leave `HC_SESSION` unset for herdr-task itself. The shim must exec hc by its absolute path (on PATH it
+  calls itself forever).
+- agy in a fresh HOME needs `cache/onboarding.json` copied beside its oauth token, or it stops on first-run screens
+  (theme, data-sharing consent).
 - Checks run inside a throwaway core's terminal inherit its `HC_SESSION`, so
   `AutomationFromAnotherMachine.test_other_events_too` fails there: not a real failure.
 - An agy reviewer in a task worktree can't run git (the worktree's `.git` points outside its trusted folder): put the

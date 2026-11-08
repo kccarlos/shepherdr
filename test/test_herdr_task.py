@@ -3717,18 +3717,13 @@ class HandoffsAtTheFloor(unittest.TestCase):
     handoff from git and its chat, saved under the store. A throwaway git repo and store; hc never runs."""
 
     def setUp(self):
-        from unittest import mock
         import shutil
         sys.path.insert(0, BIN)
-        import herdr_task.base as base
         import herdr_task.handoff as handoff
         self.handoff = handoff
         self.root = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, self.root, True)
         self.store_dir = os.path.join(self.root, "store")
-        p = mock.patch.object(base, "STORE", self.store_dir)
-        p.start()
-        self.addCleanup(p.stop)
         main, self.wt = os.path.join(self.root, "repo"), os.path.join(self.root, "wt")
         git = lambda cwd, *a: subprocess.run(["git", "-C", cwd, *a], capture_output=True, text=True, check=True).stdout.strip()
         git(self.root, "init", "-q", "-b", "main", main)
@@ -3750,9 +3745,9 @@ class HandoffsAtTheFloor(unittest.TestCase):
                                              "branch": "task/1", "base": "main", "start": start,
                                              "agents": [{"address": f"a{i}", "agent": argv[0], "argv": argv, "log": log}]}, **kw)
         self.store = Store([worker(1, ["claude", "--model", "opus"]), worker(2, ["codex", "--no-daemon", "-m", "gpt-5.5"]),
-                            worker(3, ["agy", "--model=gemini-4-argon-high"]), worker(4, ["agy", "--model", "claude-sonnet-5-5-medium"]),
+                            worker(3, ["agy", "--model", "claude-x", "--model", "gemini-4-argon-high"]), worker(4, ["agy", "--model", "claude-sonnet-5-5-medium"]),
                             worker(5, ["claude"], state="ready"), worker(6, ["agy"])])
-        self.store.loc["folder"] = main
+        self.store.loc["folder"], self.store.path = main, os.path.join(self.store_dir, "f.json")
 
     def test_only_the_pools_running_tasks_get_one(self):
         got = {p: [h["task"] for h in self.handoff.handoffs(self.store, p, self.store.data["tasks"])]
@@ -3770,5 +3765,7 @@ class HandoffsAtTheFloor(unittest.TestCase):
         with open(h["path"]) as f:
             self.assertEqual(f.read(), h["text"] + "\n")
 
-    def test_agy_on_its_own_default_has_no_pool(self):
+    def test_agy_on_its_own_default_has_no_pool_and_no_pool_gets_none(self):
         self.assertIsNone(self.handoff.pool_of({"agent": "agy", "argv": ["agy"]}))
+        self.assertEqual(self.handoff.handoffs(self.store, None, self.store.data["tasks"]), [])
+        self.assertFalse(os.path.exists(os.path.join(self.store_dir, "handoffs")))

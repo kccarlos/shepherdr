@@ -47,3 +47,8 @@ answer (2026-11-08). It becomes the role allow lists in phase 3 (docs/factory.md
   FAC-4's wait). The orchestrator stopped the service (`launchctl bootout`) and killed the hung tick; the
   herdr-automations hc terminal ticks instead, and the web board is offline until the person grants bun access.
   FAC-10 adds a git timeout so a hung call never holds the tick lock.
+- News still reaches the Assistant with the launchd service stopped: the herdr-automations hc terminal
+  (`herdr-task scheduler`) sends it (13 batches 03:27-04:43, its screen says `news to t2p`). But it can be late:
+  none went out 04:11-04:43, and FAC-12's ready (04:28) arrived at 04:43:58, about 15 minutes late. The scheduler
+  logged backups at 04:18 and 04:29 and then nothing until 04:43:58 (the 04:39 backup is missing), so its round
+  was likely stuck about 14 minutes; its log doesn't say why. Not yet investigated.

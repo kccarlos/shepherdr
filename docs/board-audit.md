@@ -12,8 +12,7 @@ facts only: no visual design and no implementation split. The screenshots are in
   headless Brave got it, and `/api/health` answers 200. The refusal is `service/auth.ts:23`: the login header came on a
   connection `service/peer.ts` didn't trust. netstat shows the caller side held by `io.tailscale.ipn` (root). Other
   devices (a phone) were not tested. The cause is not established.
-- **Finding: `herdr-browser` fails on the Mac mini** with "agent-browser isn't installed here". Installing it was not
-  allowed in this task.
+- **Finding: `herdr-browser` fails on the Mac mini** with "agent-browser isn't installed here". Installing it was not allowed in this task.
 - So the screenshots are of the installed release's own `web/dist`, served by a small Bun stub with fictional spaces,
   tasks and needs (the AGENTS.md method), and driven by headless Brave over CDP. The UI is real; the data is not. Stub
   side effects that are not findings: "detached" on every space, "claude · Not known yet", the same chat in every
@@ -37,8 +36,7 @@ facts only: no visual design and no implementation split. The screenshots are in
 ## The board views
 
 ### 1. Send a request (to the Assistant)
-- Today: the chat composer "Message the Assistant" (`Composer`, `web/plugins/chat/client.tsx:1849`), with Send, dictation and a
-  voice call.
+- Today: the chat composer "Message the Assistant" (`Composer`, `web/plugins/chat/client.tsx:1849`), with Send, dictation and a voice call.
 - Data and API: `POST /api/action {type:"send", chat, text}` (`service/main.ts:726` → `service/actions.ts:567`). It
   exists and works for any space's Assistant chat.
 - Missing: a way to know which chat is the factory's Assistant. `herdr.factory` appears nowhere in `service/`, `web/`
@@ -56,15 +54,17 @@ facts only: no visual design and no implementation split. The screenshots are in
   Claude or Codex chat's `Chat.agent.model` (`service/compat.ts:684`), not for agy.
 
 ### 3. Agent tree (Assistant → workers → reviewers, verifier)
-- Today: a task's header lists its worker's subagents (for example the "fac-19-review" chip). There is no tree view.
+- Today: a task's header names at most one active subagent by role and CLI ("Reviewer · Codex at work",
+  `web/src/App.tsx:462-467`). Its rows sit above the chat box (`JobsTag`, `activity.tsx:579`). There is no tree view.
 - Data and API: terminals labelled `herdr.task=<slug>#<id>` (`service/model.ts:209-217`). Subagents are the worker's
   hc children (`service/model.ts:264` → `core/chat-view.js:415`). The Assistant → task edge is the row's `space`
   (`service/model.ts:256`).
 - Missing:
   - A reviewer or verifier that herdr-task starts (contract G2/G5) is not the worker's child, so `subagentsOf` won't
     list it.
-  - `agentsOf` finds such an agent with role `reviewer`, but it is only dropped from `worker` (`service/model.ts:245`)
-    and never sent.
+  - `agentsOf` skips a reviewer that has any hc parent (`isHelper`, `core/chat-view.js:379`, at `model.ts:217`). An
+    unparented one is dropped from `worker` (`model.ts:245`) and never sent. A `herdr.role=verifier` terminal is
+    filtered by neither, so it can be picked as the task's worker (`model.ts:245-246`).
   - herdr-task keeps the agents it started with a role in `t["reviewers"]` and workers in `t["agents"]`
     (`launch.py:660-667`: `{address, agent, argv, parent?}`). Only the evidence action returns them (view 4); the
     snapshot's `Task` has neither.

@@ -38,7 +38,7 @@ export function Home({ leave }: { leave: () => void }) {
   const asks = (Array.isArray(snap.asks) ? (snap.asks as Ask[]) : []).filter((a) => a.answer === null)
   const [dl, setDl] = useState<Deliverables[]>([])
   const folders = [...new Set(tasks.map((t) => t.taskFolder).filter((f): f is string => !!f))]
-  const fresh = JSON.stringify([folders, tasks.map((t) => t.artifacts)])
+  const fresh = JSON.stringify([folders, tasks.map((t) => t.artifacts), snap.artifacts.map((a) => a.v)])
   useEffect(() => {
     const on = place?.machine ? `&on=${encodeURIComponent(place.machine)}` : ''
     Promise.all(folders.map((f) => fetch(`api/deliverables?folder=${encodeURIComponent(f)}${on}`).then((r) => (r.ok ? r.json() : null)).catch(() => null)))
@@ -197,7 +197,7 @@ function Row({ t, go }: { t: Task; go: (id: string) => void }) {
         {t.sub ? <span className={`text-[13px] ${t.status === 'need' ? 'text-[var(--sd-primary-text)]' : 'text-[var(--sd-muted)]'}`}>{t.sub}</span> : null}
       </div>
       <div className="flex flex-none flex-wrap items-center justify-end gap-1.5">
-        <Chip>{worker ? who(worker) : 'not started'}</Chip>
+        {worker || t.agent || 'agents' in t ? <Chip>{worker ? who(worker) : (t.agent?.cli ?? 'not started')}</Chip> : null}
         {reviewer ? <Chip>review · {who(reviewer)}</Chip> : null}
         <span className={`min-w-11 text-right ${muted} tabular-nums`}>{t.left ?? ''}</span>
         {t.status === 'ready' ? <span className="inline-flex min-h-9 items-center rounded-full border border-[var(--sd-fg)] px-3.5 text-sm font-medium">Review</span> : null}

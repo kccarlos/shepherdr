@@ -38,6 +38,7 @@ import { PANE_MIN } from './panes.ts'
 import { ChatColumn, Frame, PanelColumn, PlacesColumn, PlacesToggle } from './Frame.tsx'
 import { PanelSheet, TabBody, TaskPanel, TaskTabs } from './Panel.tsx'
 import { openAccept, useAccepting } from './screens/Accept.tsx'
+import { Home } from './screens/Home.tsx'
 import * as TK from '@core/tasks.js'
 
 /** a line's first letter a capital, as the window writes every reason (core/tasks.js) */
@@ -84,6 +85,8 @@ export default function App() {
   const device = useUI((u) => u.device)
   const search = useUI((u) => u.search)
   const keyboard = useUI((u) => u.keyboard)
+  // the board's home (screens/Home.tsx), on a desktop opened with ?board; opening a task leaves it
+  const [board, setBoard] = useState(() => new URLSearchParams(location.search).has('board'))
   useKeyboard()
   if (!snap) return <Loading />
   return (
@@ -101,7 +104,7 @@ export default function App() {
         <Bar key={i} />
       ))}
       <div className="relative flex min-h-0 flex-1 flex-col">
-        {device === 'phone' ? <PhoneLayout snap={snap} /> : <WideLayout snap={snap} />}
+        {device === 'phone' ? <PhoneLayout snap={snap} /> : board ? <Home leave={() => setBoard(false)} /> : <WideLayout snap={snap} />}
         <PanelSheet />
         {registry.overlays.map((O, i) => (
           <O key={i} />

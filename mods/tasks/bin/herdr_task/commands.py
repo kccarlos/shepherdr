@@ -439,7 +439,10 @@ def gate_step(s, t):
     need, head = gate_min(s, t), t.get("head")
     if not need or gate_passes(t, head) >= need:
         return None
-    runs, done = t.get("review_runs") or [], {r["round"] for r in t.get("reviews") or [] if r.get("started_by") == "herdr-task"}
+    mine = [r for r in t.get("reviews") or [] if r.get("started_by") == "herdr-task"]
+    runs, done = t.get("review_runs") or [], {r["round"] for r in mine}
+    if mine and mine[-1]["head"] == head and mine[-1]["verdict"] == "changes":
+        return f"{s.ref(t)}: Herdr's reviewer asked for changes to {head[:7]}: fix them, commit, then run ready again."
     if any(r["head"] == head and r["round"] not in done and (hc_json("get", r["address"]) or {}).get("state") == "live" for r in runs):
         return f"{s.ref(t)}: Herdr's reviewer is still reviewing {head[:7]}; its findings come to you as a message."
     on, rounds = review_limits(s, t)
@@ -459,7 +462,8 @@ def gate_step(s, t):
         f"Must fix: {MUST_WORDS[rows['Must fix']]}. Herdr started you, not the worker: when done, record your verdict with one of "
         f"`{cmd} --pass` or `{cmd} --changes \"<each finding with its level and proof>\" --must-fix <how many are at or above "
         f"Must fix>`. It is taken only from this terminal while {head[:7]} is the worktree's HEAD with nothing uncommitted. "
-        f"Then end with your findings as your last message."])
+        f"Then end with your findings as your last message."
+        + (" Codex's sandbox can't reach Herdr: give that command sandbox_permissions \"require_escalated\"." if rv["agent"] == "codex" else "")])
     live = workers(s, t)
     a = launch(s, t, argv, t.get("space"), prompt, parent=live[-1]["address"] if live else None, role="reviewer")
     t.setdefault("review_runs", []).append({"round": len(runs) + 1, "head": head, "address": a["address"], "cli": agent_key(argv),

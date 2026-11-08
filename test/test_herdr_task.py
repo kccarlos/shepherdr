@@ -1788,6 +1788,20 @@ class GateReview(unittest.TestCase):
         self.assertEqual([(r["round"], r["head"]) for r in self.task["review_runs"]], [(1, self.head), (2, new)])
         self.valid()
 
+    def test_ready_again_without_fixing_the_changes_starts_none(self):
+        self.ready()
+        self.verdict("term-1", passed=False, changes="gate.txt says hi twice", must_fix=1)
+        self.ready()  # the same head: no fresh reviewer for unfixed code
+        self.assertEqual(len(self.runs), 1)
+        self.assertEqual(self.task["state"], "running")
+
+    def test_a_codex_reviewer_is_told_to_escalate_its_verdict(self):
+        self.task["reviewer"], self.task["reviewer_model"] = "codex", None
+        self.ready()
+        cmd = self.runs[0][self.runs[0].index("--") + 1:]
+        self.assertIn("read-only", cmd)
+        self.assertIn("require_escalated", cmd[-1])
+
     def test_out_of_rounds_starts_none(self):
         self.task["set"]["review_rounds"] = 1
         self.ready()

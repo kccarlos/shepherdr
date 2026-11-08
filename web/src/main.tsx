@@ -16,7 +16,7 @@ import { WorktreeDialog } from './screens/Worktree.tsx'
 import { RoleSheet } from './screens/Role.tsx'
 import { AddMachineButton, AddMachineDialog } from './screens/AddMachine.tsx'
 import { ServeFromDialog } from './screens/ServeFrom.tsx'
-import { Preview } from './screens/Preview.tsx'
+import { Preview } from './Preview.tsx'
 
 /** a bar across the top: the first one keeps clear of a phone's notch (the screen's own top under it then doesn't) */
 const topBar = 'shrink-0 bg-bubble px-4 py-1.5 text-center text-[0.8125rem] text-fg2 phone:text-[0.9375rem] [[data-device=phone]>&:first-child]:pt-[calc(env(safe-area-inset-top)+6px)]'
@@ -109,16 +109,19 @@ const loaded = await Promise.all(
 const off: string[] = await fetch('api/me').then((r) => r.json()).then((m) => m.off ?? [], () => []).catch(() => [])
 Object.assign(window, { shepherdrOff: off })
 installPlugins(loaded.filter((p: ClientPlugin | null): p is ClientPlugin => p !== null && !off.includes(p.name)), enabled.filter((n: string) => !off.includes(n)), user)
-connect()
-watchViewport((keyboard) => setUI({ keyboard }))
-watchScrolling()
-watchKeys()
-
-// a deliverable's preview (screens/Preview.tsx previewUrl): its own screen, with a way back
+// a deliverable's preview (Preview.tsx previewUrl) is its own screen: no link to the service's snapshot or history
 const q = new URLSearchParams(opened)
-if (q.get('preview')) history.replaceState(null, '', location.pathname + opened)
+const preview = !!q.get('preview') && !!q.get('folder')?.startsWith('/')
+if (!preview) {
+  connect()
+  watchViewport((keyboard) => setUI({ keyboard }))
+  watchScrolling()
+  watchKeys()
+}
+
+if (preview) history.replaceState(null, '', location.pathname + opened)
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    {q.get('preview') && q.get('folder')?.startsWith('/') ? <Preview id={q.get('preview')!} folder={q.get('folder')!} on={q.get('on')} /> : <App />}
+    {preview ? <Preview id={q.get('preview')!} folder={q.get('folder')!} on={q.get('on')} /> : <App />}
   </StrictMode>,
 )

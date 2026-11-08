@@ -617,6 +617,8 @@ let backing: ReturnType<typeof setTimeout> | null = null
 
 /** write the screen into the history: a new step, or in place of the one on screen */
 function write(how: 'push' | 'replace') {
+  // a deliverable's preview (Preview.tsx) keeps its own address, a resize included
+  if (new URLSearchParams(location.search).has('preview')) return
   const screen = screenOf(state.ui)
   const url = urlOf(screen, state.ui.device === 'phone', location.pathname, (id) => slugOf(state.snap, id))
   const next: Entry = { shep: 1, key: stepKey(screen), prev: how === 'push' ? (entry?.key ?? null) : (entry?.prev ?? null), screen }

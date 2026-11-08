@@ -105,3 +105,13 @@ answer (2026-11-08). It becomes the role allow lists in phase 3 (docs/factory.md
   model); Opus-worker tasks keep Argon, since an Opus reviewer wouldn't be independent of an Opus worker. FAC-53 sends
   reviewers only the delta and never starts a second live reviewer. Docs-only/tiny tasks: argon-medium, or one Opus
   round plus one Argon (Assistant routing).
+- Person's decision (~14:45): the auto-merge hardening is over-engineered; review plus the orchestrator's checks
+  before Accept catch worker shortcuts. Cancelled before they started: FAC-16 (G5 verifier: Tart VM per run, flake
+  rule, person-in-the-loop VM steps), FAC-17 (G6 role settings at launch), FAC-18 (G7 worker sandbox + outbox the tick
+  validates; agy implementers first), FAC-30 (verdict caller check by pid; task can't lower review.min), FAC-46
+  (3 Argon rounds or 2 with another model, in code), FAC-47 (implementer rejections recorded; Opus breaks ties). The
+  pushback rule stays in worker.md/reviewer.md (FAC-45). G4 finishes only as "herdr-task merges the exact SHA".
+  Merges stay on Accept; auto-merge deferred. Tasks from now on: one complete change of ~150-300 lines, no separate
+  doc/plan tasks unless the plan is the person's decision.
+- Claude reviewers that herdr-task starts run in `--permission-mode plan`: they can't run their verdict command, so an
+  Opus reviewer writes its review as a plan and waits on "approve plan" (FAC-42's t10y, verdict pass).

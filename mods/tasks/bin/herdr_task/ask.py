@@ -14,6 +14,7 @@ import base64
 import codecs
 import json
 import os
+import re
 import secrets
 import select
 import sys
@@ -70,6 +71,8 @@ def cmd_ask(args):
     if recommend not in options:
         raise Fail(f"--recommend must be one of the options: {', '.join(options) or 'none given'}")
     words = [w.strip(".!?,;:") for w in recommend.lower().split()]
+    if any(re.search(r"\s\([a-z0-9]{1,6}\)$", o, re.I) for o in options):  # sheepdog reads it as the option's key
+        raise Fail("An option can't end in a short word in parentheses, like (y) or (v2): sheepdog would press that, not the number.")
     first = " ".join(words[:2]) if words[:2] == ["do", "not"] else (words or [""])[0]
     if first in NEGATIVE | {"do not"} and not any(o.lower().startswith("yes") for o in options):
         raise Fail(f'Sheepdog can\'t tap a recommended option that starts with "{first}" unless another option starts with "Yes": reword it or add one.')
@@ -110,14 +113,14 @@ def read_answer(count):
     fd, old = sys.stdin.fileno(), termios.tcgetattr(sys.stdin.fileno())
     dec, buf, esc = codecs.getincrementaldecoder("utf-8")("replace"), "", None
     try:
-        tty.setcbreak(fd)  # before the prompt shows: switching later can drop a key typed in between
+        tty.setcbreak(fd, termios.TCSADRAIN)  # keeps what's already typed; before the prompt shows: switching later can drop a key typed in between
         sys.stdout.write("> ")
         sys.stdout.flush()
         while True:
             if len(buf) == 1 and buf.isascii() and buf.isdigit() and 1 <= int(buf) <= count \
                     and not select.select([fd], [], [], 0.3)[0]:
                 return buf
-            data = os.read(fd, 1024)
+            data = os.read(fd, 1)  # one byte at a time: nothing past the line's end is lost
             if not data:
                 raise EOFError
             for ch in dec.decode(data):
@@ -125,8 +128,8 @@ def read_answer(count):
                     esc = "seq" if ch in "[O" else None
                 elif esc == "seq":
                     esc = None if "@" <= ch <= "~" else esc
-                elif ch == "\x1b":
-                    esc = "esc"
+                elif ch == "\x1b":  # a lone Esc is no sequence: it must not swallow the next key
+                    esc = "esc" if select.select([fd], [], [], 0.05)[0] else None
                 elif ch in "\r\n":
                     return buf
                 elif ch in "\x7f\b":

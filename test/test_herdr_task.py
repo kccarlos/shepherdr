@@ -4021,8 +4021,8 @@ class Asks(unittest.TestCase):
         t = out["terminal"]
         until(lambda: (get(t).get("status") or {}).get("state") == "blocked", f"the pane didn't report blocked: {get(t)}")
         self.assertEqual(get(t)["status"], {"kind": "question", "msg": "Ship it tonight?", "state": "blocked"})
-        self.assertIn("2. Ship  (recommended)", hc("read", t).stdout)
-        self.assertEqual(hc("keys", t, "2", "enter").returncode, 0)
+        self.assertEqual(sheepdog_parse(hc("read", t).stdout), (["Wait", "Ship  (recommended)"], 1))
+        self.assertEqual(hc("keys", t, "2").returncode, 0)  # a tap, as sheepdog sends it: no Enter
         until(lambda: get(t).get("state") == "finished", f"the pane didn't exit: {get(t)}")
         self.assertEqual(get(t)["exit_code"], 0)
         rec = self.record(out["id"])
@@ -4315,7 +4315,8 @@ class AskPane(unittest.TestCase):
                     break
                 out += chunk
             if not sent and b"> " in out.split(b"\x07")[-1]:
-                os.write(fd, feed)
+                for part in feed if isinstance(feed, tuple) else (feed,):
+                    time.sleep(part) if isinstance(part, float) else os.write(fd, part)
                 sent = True
         try:
             for _ in range(20):  # the pane ends by itself once answered
@@ -4345,6 +4346,12 @@ class AskPane(unittest.TestCase):
     def test_typed_words_still_answer(self):
         self.assertEqual(self.pane(b"2 weeks, then ship\r")[1]["answer"], "2 weeks, then ship")
 
+    def test_input_typed_ahead_and_a_lone_escape_are_not_lost(self):
+        self.assertEqual(self.pane(b"\r2\r")[1]["answer"], "Wait for review")
+        self.assertEqual(self.pane(b"\r2")[1]["answer"], "Wait for review")
+        import time
+        self.assertEqual(self.pane((b"\x1b", 0.2, b"1"))[1]["answer"], "Yes, ship")
+
     def test_typing_edits_like_a_terminal(self):
         for keys, want in ((b"\xc2\xb2 maybe\r", "\xb2 maybe"), ("\u6539\u5929\r".encode(), "\u6539\u5929"),
                            (b"n\x7f1\r", "Yes, ship"), (b"\x7f2\r", "Wait for review"),
@@ -4370,4 +4377,6 @@ class AskPane(unittest.TestCase):
                 ask.cmd_ask(args(["Do it now", "Hold"], "Do it now"))
             with self.assertRaisesRegex(ask.Fail, "starts with"):
                 ask.cmd_ask(args(["Do not ship", "Ship"], "Do not ship"))
+            with self.assertRaisesRegex(ask.Fail, "short word in parentheses"):
+                ask.cmd_ask(args(["Switch (v2)", "Ship"], "Ship"))
             run.assert_not_called()

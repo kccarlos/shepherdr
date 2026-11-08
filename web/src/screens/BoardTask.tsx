@@ -16,12 +16,14 @@ let open: string | null = null
 const subs = new Set<() => void>()
 const set = (id: string | null) => { open = id; for (const f of subs) f() }
 export const openBoardTask = (id: string) => set(id)
+const back = () => { set(null); if (location.hash.startsWith('#board-task=')) history.replaceState(null, '', location.pathname + location.search) }
 const useOpen = () => useSyncExternalStore((f) => { subs.add(f); return () => subs.delete(f) }, () => open)
 
 const STATUS: Record<string, [string, string]> = {
   ready: ['ready · waits for your Accept', 'done'], need: ['needs you', 'blocked'], work: ['working', 'working'],
   merging: ['merging', 'working'], done: ['done', 'done'],
 }
+const CI: Record<string, string> = { success: 'done', failure: 'danger' }
 const card = 'flex flex-col gap-2.5 rounded-[var(--sd-radius)] border border-[var(--sd-line)] bg-[var(--sd-card)] p-3.5'
 const h2 = 'm-0 font-display text-lg font-semibold'
 const mono = 'font-mono text-xs text-[var(--sd-muted)]'
@@ -43,8 +45,25 @@ export function BoardTaskPage() {
   const t = useStore((s) => (id ? (s.snap?.tasks.find((x) => x.id === id) as BoardTask | undefined) : undefined))
   const accepting = useAccepting(id ?? '')
   const first = useRef<HTMLButtonElement>(null)
-  // the keyboard starts on the page, on its back link
-  useEffect(() => { if (id) first.current?.focus({ preventScroll: true }) }, [id, !t])
+  const box = useRef<HTMLDivElement>(null)
+  // the keyboard stays on the page while nothing is over it: it starts on the back link, Tab wraps, Escape closes; then
+  // the focus goes back where it was
+  useEffect(() => {
+    if (!id || !t) return
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    first.current?.focus({ preventScroll: true })
+    const key = (e: KeyboardEvent) => {
+      const el = box.current
+      if (!el || [...document.querySelectorAll('[aria-modal=true]')].some((d) => d !== el)) return
+      if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); back() }
+      if (e.key !== 'Tab') return
+      const all = [...el.querySelectorAll<HTMLElement>('a[href], button:not(:disabled), summary')]
+      const at = all.indexOf(document.activeElement as HTMLElement)
+      if (e.shiftKey ? at <= 0 : at < 0 || at === all.length - 1) { e.preventDefault(); all.at(e.shiftKey ? -1 : 0)?.focus() }
+    }
+    addEventListener('keydown', key, true)
+    return () => { removeEventListener('keydown', key, true); if (opener?.isConnected) opener.focus({ preventScroll: true }) }
+  }, [id, !t])
   const [proof, setProof] = useState<{ title: string; thumb?: string | null } | null>(null)
   useEffect(() => {
     setProof(null)
@@ -61,16 +80,17 @@ export function BoardTaskPage() {
   const named = (a?: Agent) => (a ? [a.cli, a.model].filter(Boolean).join(' · ') : 'none yet')
   const byAddr = (addr: string) => t.agents?.find((a) => a.address === addr)
   const [word, tone] = STATUS[t.status] ?? [t.status, 'idle']
-  const rounds = t.reviews ?? [], checks = t.checks ?? [], v = t.verdicts?.at(-1), size = t.size
+  // only the latest head's checks: herdr-task adds a run for each head it checks
+  const rounds = t.reviews ?? [], checks = (t.checks ?? []).filter((c) => c.sha === t.checks?.at(-1)?.sha), v = t.verdicts?.at(-1), size = t.size
   const total = size ? size.added + size.removed : 0
   const over = !!size && size.limit !== null && total > size.limit
   const last = rounds.at(-1)
-  const back = () => { set(null); if (location.hash.startsWith('#board-task=')) history.replaceState(null, '', location.pathname + location.search) }
+  const failing = checks.filter((c) => c.exit !== 0 || c.ci?.state === 'failure').length
 
   return (
-    <div role="dialog" aria-modal="true" aria-label={`${t.id} ${t.name}`} onKeyDown={(e) => e.key === 'Escape' && back()}
-      className="absolute inset-0 z-20 overflow-y-auto bg-[var(--sd-bg)] text-[15px] text-[var(--sd-fg)]">
-      <div className="mx-auto flex max-w-[1120px] flex-col gap-5 px-[clamp(16px,3vw,32px)] pt-4 pb-12">
+    <div ref={box} role="dialog" aria-modal="true" aria-label={`${t.id} ${t.name}`}
+      className="absolute inset-0 z-7 overflow-y-auto bg-[var(--sd-bg)] text-[15px] text-[var(--sd-fg)]">
+      <div className="mx-auto flex max-w-[1120px] flex-col gap-5 px-[clamp(16px,3vw,32px)] pt-[max(1rem,env(safe-area-inset-top))] pb-12">
         <button ref={first} type="button" onClick={back} className="inline-flex min-h-11 items-center gap-1.5 self-start text-sm text-[var(--sd-primary-text)] hover:text-[var(--sd-fg)]">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6" /></svg>board
         </button>
@@ -102,7 +122,7 @@ export function BoardTaskPage() {
                 <h2 className="m-0 text-[15px] font-semibold">{v ? `verdict: ${v.verdict === 'pass' ? 'passed' : 'failed'} on ${short(v.sha)}` : 'verdict: none yet'}</h2>
                 <span className="text-[13px] text-[var(--sd-muted)]">
                   {[rounds.length ? `${rounds.length} review round${rounds.length > 1 ? 's' : ''}, the last ${last!.verdict === 'pass' ? 'with nothing to fix' : `with ${last!.must_fix} to fix`}` : 'no review rounds yet',
-                    checks.length ? (checks.every((c) => c.exit === 0) ? 'all checks pass' : `${checks.filter((c) => c.exit !== 0).length} check failing`) : 'no checks yet',
+                    checks.length ? (failing ? `${failing} check${failing > 1 ? 's' : ''} failing` : checks.some((c) => c.ci?.state === 'pending') ? 'CI pending' : 'all checks pass') : 'no checks yet',
                     over ? 'over the size limit' : ''].filter(Boolean).join(' · ')}
                 </span>
                 {v?.commands.length ? <span className={`${mono} [overflow-wrap:anywhere]`}>$ {v.commands.join(' · ')}</span> : null}
@@ -137,7 +157,7 @@ export function BoardTaskPage() {
                     <span className="font-mono text-[13px] [overflow-wrap:anywhere]">{c.command}</span>
                     <span className="inline-flex items-center gap-1.5 text-[13px] font-medium" style={{ color: `var(--sd-${c.exit === 0 ? 'done' : 'danger'})` }}>
                       <Tick ok={c.exit === 0} />{c.exit === 0 ? 'passed' : `failed · exit ${c.exit}`}
-                      {c.ci ? (c.ci.url ? <a href={c.ci.url} target="_blank" rel="noreferrer">· CI {c.ci.state}</a> : <span>· CI {c.ci.state}</span>) : null}
+                      {c.ci ? <a href={c.ci.url ?? undefined} target="_blank" rel="noreferrer" style={{ color: `var(--sd-${CI[c.ci.state] ?? 'muted'})` }}>· CI {c.ci.state}</a> : null}
                     </span>
                   </div>
                   <Tail text={c.output_tail} />
@@ -150,7 +170,7 @@ export function BoardTaskPage() {
             <Section label="Proof" heading="proof">
               {t.proof ? (
                 <>
-                  {proof?.thumb ? <button type="button" onClick={() => openArtifact(t.proof!)} className="overflow-hidden rounded-[var(--sd-radius-sm)] border border-[var(--sd-line)] bg-[var(--sd-code)] p-0"><img src={proof.thumb} alt="" className="block max-h-56 w-full object-cover object-top" /></button> : null}
+                  {proof?.thumb ? <button type="button" aria-label={proof.title} onClick={() => openArtifact(t.proof!)} className="overflow-hidden rounded-[var(--sd-radius-sm)] border border-[var(--sd-line)] bg-[var(--sd-code)] p-0"><img src={proof.thumb} alt="" className="block max-h-56 w-full object-cover object-top" /></button> : null}
                   <button type="button" onClick={() => openArtifact(t.proof!)} className="inline-flex min-h-11 items-center self-start text-left text-[var(--sd-primary-text)] hover:text-[var(--sd-fg)]">{proof?.title ?? t.proof}</button>
                 </>
               ) : <p className={`m-0 ${muted}`}>No proof yet.</p>}
@@ -161,7 +181,7 @@ export function BoardTaskPage() {
                 <>
                   <div className="flex items-baseline gap-2"><span className="font-display text-[30px] font-semibold tabular-nums">{total}</span>
                     <span className={muted}>lines changed{size.limit !== null ? ` · brief said about ${size.limit}` : ''}</span></div>
-                  {size.limit !== null ? (
+                  {size.limit ? (
                     <div className="relative h-1.5 rounded-full bg-[var(--sd-track)]">
                       <div className="h-full rounded-full" style={{ width: `${Math.min(100, (total / size.limit) * 100)}%`, background: `var(--sd-${over ? 'blocked' : 'done'})` }} />
                       {over ? <span aria-hidden="true" className="absolute -top-1 h-3.5 w-0.5 bg-[var(--sd-fg)]" style={{ left: `${(size.limit / total) * 100}%` }} /> : null}

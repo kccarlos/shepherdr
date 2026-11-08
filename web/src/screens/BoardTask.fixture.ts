@@ -20,6 +20,8 @@ export const readyTask = {
     { round: 3, head: 'd0674bd' + H('3').slice(7), by: 'term-8', started_by: 'herdr-task', verdict: 'pass', must_fix: 0, report: 'Nothing at major or above on the final head.', at: at + 1200000 },
   ],
   checks: [
+    // an earlier head's failed run: the page shows only the latest head's
+    { sha: '0d35f19' + H('2').slice(7), command: 'python3 -m unittest discover -s test', exit: 1, output_tail: 'FAILED (failures=1)', started_at: at + 700000, finished_at: at + 730000, by: 'term-9', ci: null },
     { sha: 'd0674bd' + H('3').slice(7), command: 'python3 -m unittest discover -s test', exit: 0, output_tail: 'Ran 412 tests in 38.214s\n\nOK (skipped=3)', started_at: at + 1300000, finished_at: at + 1338000, by: 'term-9', ci: null },
     { sha: 'd0674bd' + H('3').slice(7), command: 'bin/sync-shared --check', exit: 0, output_tail: 'all 198 copies match', started_at: at + 1340000, finished_at: at + 1341000, by: 'term-9', ci: { state: 'success', url: 'https://github.com/example/shop/actions/runs/1' } },
   ],

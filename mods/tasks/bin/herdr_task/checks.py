@@ -8,19 +8,11 @@ import tempfile
 
 from .base import git, hc_json, now, run
 from .github import gh
-from .settings import settings_for, settings_layers
+from .settings import gate_min, settings_for
 
 LIMIT_MS = 20 * 60000
 TAIL = 4000
 CI_WINDOW_MS = 10 * 60000
-
-
-def gate_on(s, t):
-    """review.min > 0 for this task's folder (0 while the setting doesn't exist)."""
-    n = 0
-    for layer in settings_layers(s, t.get("space")):
-        n = (layer.get("review") or {}).get("min", n) if (layer.get("review") or {}).get("min") is not None else n
-    return type(n) is int and n > 0
 
 
 def ci_of(t, sha):
@@ -52,7 +44,7 @@ def checks_pass(s, t):
     """One tick's step for one task: finish a check run (record it, or drop it when the task moved on or its
     head did), keep the CI state of a record fresh, or start a run at a head without a record."""
     wt, c = t.get("worktree"), t.get("check_run")
-    on = t["state"] == "ready" and wt and gate_on(s, t)
+    on = t["state"] == "ready" and wt and gate_min(s, t) > 0
     ok, sha, _ = git(wt, "rev-parse", "HEAD") if on else (False, None, None)
     if c:
         k = hc_json("get", c["address"])

@@ -4095,7 +4095,7 @@ class Checks(unittest.TestCase):
             return subprocess.CompletedProcess(args, code, out, "")
         for name, value in (("run", hc), ("hc_json", lambda *a: dict(self.terms[a[1]]) if a[1] in self.terms else None),
                             ("settings_for", lambda s, sp=None: {"tasks": {"check": self.cfg}}),
-                            ("settings_layers", lambda s, sp=None: ({}, {}, {"review": {"min": self.min}}))):
+                            ("gate_min", lambda s, t, sp=None: self.min)):
             p = mock.patch.object(checks, name, value)
             p.start()
             self.addCleanup(p.stop)

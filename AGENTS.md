@@ -8,6 +8,7 @@ How to run, build and lay out the code: [docs/develop.md](docs/develop.md).
   `node --check` loop in [docs/develop.md](docs/develop.md). The installer tests use throwaway roots only.
 - Agent shells may lack `node` on PATH (nvm): prefix `$HOME/.nvm/versions/node/<ver>/bin` for the node checks and the
   chat-log test. One test module runs from `test/` (`cd test && python3 -m unittest test_herdr_task.Revive`).
+- Agent shells on the Mac mini lack PIL: resize or crop proof screenshots with macOS `sips`.
 - Agent shells may lack `bun` on PATH too: it's `/opt/homebrew/bin/bun`. A scratch bun test that imports
   `service/compat.ts` must sit inside `service/` to resolve its imports.
 - Never run herdr-app or herdr-task with a changed `HOME` or `HERDR_APP_HOME`, never start a second herdr-app window,
@@ -76,6 +77,12 @@ How to run, build and lay out the code: [docs/develop.md](docs/develop.md).
   on PATH that runs `HC_SESSION=<name> hc "$@"`, and leave `HC_SESSION` unset for herdr-task itself.
 - An agy reviewer in a task worktree can't run git (the worktree's `.git` points outside its trusted folder): put the
   diff in its prompt. Its startup briefly shows `blocked (auth)`, then it works.
+- An agy reviewer that must read another repo asks per file and loops after compacting: tell it to read with `sed -n`
+  and `grep -n` through the shell.
+- A hand-started agy reviewer needs `--mode plan` (else it runs in auto mode with edits approved). A declined permission
+  interrupts its turn: `hc send` it a nudge to carry on.
+- To survey a big Design canvas without flooding context, a read-only claude helper (`hc run`, plan mode) can read every
+  artboard with the Artifact tool and leave the files on disk for scripts.
 - `herdr-task --on <machine>` copies its bundle there, and a hub (the Mac mini) copies it on: running a branch's
   herdr-task against other machines spreads that branch fleet-wide until the next update. Prefer local tests.
 - herdr-task's scheduler re-execs itself within 15 s when its code changes. Its live code is either the zipapp

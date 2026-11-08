@@ -3,6 +3,7 @@ a throwaway) its commands start. On a person's machine herdr-task never runs wit
 import json
 import os
 import shlex
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -3564,3 +3565,108 @@ class CodexAsksOnTheCard(unittest.TestCase):
         argv = launch.own_argv(["codex", "--sandbox", "workspace-write"])
         self.assertIn(f"timeout={launch.ASK_TIMEOUT}", argv[2])
         self.assertEqual(launch.ASK_TIMEOUT, 1800)
+
+
+class Asks(unittest.TestCase):
+    """FAC-9: herdr-task ask keeps the ask and starts an ask pane that reports a question over OSC
+    7501; its answer goes into the record and reaches the asker as held news. A throwaway store;
+    the end-to-end test runs a throwaway herdr-core, never the person's live session."""
+
+    def setUp(self):
+        self.store = tempfile.mkdtemp()
+        self.env = {**os.environ, "HERDR_TASK_STORE": self.store}
+        self.entry = os.path.join(BIN, "herdr-task")
+
+    def record(self, ask_id):
+        with open(os.path.join(self.store, "asks", f"{ask_id}.json")) as f:
+            return json.load(f)
+
+    def held(self):
+        with open(os.path.join(self.store, ".held.json")) as f:
+            return json.load(f)
+
+    def test_pane_keeps_the_answer_and_holds_news(self):
+        os.makedirs(os.path.join(self.store, "asks"))
+        with open(os.path.join(self.store, "asks", "ab12cd.json"), "w") as f:
+            json.dump({"id": "ab12cd", "question": "Ship <it> tonight?", "options": ["Yes", "No"], "recommend": "Yes",
+                       "task": "FAC-3", "to": "t5", "at": 1}, f)
+        p = subprocess.run([sys.executable, self.entry, "_ask-pane", "ab12cd"], input="\n2\n", capture_output=True, text=True, env=self.env)
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertIn("  1. Yes  (recommended)\n  2. No\n", p.stdout)
+        self.assertIn("\x1b]7501;state=blocked:kind=question:msg=U2hpcCA8aXQ+IHRvbmlnaHQ/\x07", p.stdout)
+        self.assertEqual(self.record("ab12cd")["answer"], "No")
+        [msg] = self.held()["t5"]
+        self.assertEqual(msg["how"], "news")
+        self.assertEqual(msg["text"], '<herdr-news task="FAC-3" event="answer" key="ab12cd">'
+                                      'Ask ab12cd answered: No (asked: Ship ‹it› tonight?)</herdr-news>')
+        # Words of one's own are an answer too; no stdin leaves the ask open.
+        p = subprocess.run([sys.executable, self.entry, "_ask-pane", "ab12cd"], input="maybe later\n", capture_output=True, text=True, env=self.env)
+        self.assertEqual(self.record("ab12cd")["answer"], "maybe later", p.stderr)
+        p = subprocess.run([sys.executable, self.entry, "ask", "--show", "ab12cd", "--json"], capture_output=True, text=True, env=self.env)
+        self.assertEqual(json.loads(p.stdout)["answer"], "maybe later", p.stderr)
+
+    def test_recommend_must_be_an_option(self):
+        p = subprocess.run([sys.executable, self.entry, "ask", "Ship?", "--option", "Yes", "--recommend", "Maybe"],
+                           capture_output=True, text=True, env=self.env)
+        self.assertEqual(p.returncode, 1)
+        self.assertIn("--recommend must be one of the options: Yes", p.stderr)
+        self.assertFalse(os.path.exists(os.path.join(self.store, "asks")))
+
+    @unittest.skipUnless(shutil.which("hc") and not CI, "needs herdr-core (hc) on this machine")
+    def test_ask_pane_end_to_end(self):
+        import pwd
+        import time
+        session = f"fac9-ask-{os.getpid()}"
+        base = {"HOME": pwd.getpwuid(os.getuid()).pw_dir, "PATH": f"/usr/bin:/bin:{os.path.dirname(shutil.which('hc'))}"}
+        throwaway = {**base, "HC_SESSION": session}
+
+        def hc(*a):
+            return subprocess.run(["hc", *a], capture_output=True, text=True, env=throwaway)
+
+        def get(t):
+            return json.loads(hc("get", t, "--json").stdout or "{}")
+
+        def until(test, what):
+            for _ in range(100):
+                if test():
+                    return
+                time.sleep(0.1)
+            self.fail(what)
+
+        state = []  # the throwaway core's folder, once known: removed after it stops
+
+        def stop():
+            hc("server", "stop")
+            for d in state:
+                shutil.rmtree(d, True)
+
+        self.addCleanup(stop)
+        # The asker (the Assistant) is a terminal of the throwaway core; its socket is how
+        # herdr-task inside it reaches that core, with HC_SESSION unset (base.not_real allows it).
+        sock_file = os.path.join(self.store, "sock")
+        asker = json.loads(hc("run", "--bg", "--json", "--name", "asker", "--", "sh", "-c",
+                              f'echo "$HC_TERMINAL_SOCKET" > {sock_file}; exec sleep 120').stdout)["address"]
+        until(lambda: os.path.getsize(sock_file) if os.path.exists(sock_file) else 0, "the asker didn't start")
+        with open(sock_file) as f:
+            sock = f.read().strip()
+        if os.path.basename(os.path.dirname(sock)) == session:
+            state.append(os.path.dirname(sock))
+        inside = {**base, "HC_SOCKET": sock, "HC_TERMINAL_SOCKET": sock, "HC_TERMINAL_ID": asker, "HERDR_TASK_STORE": self.store}
+        ls = json.loads(subprocess.run(["hc", "ls", "--json"], capture_output=True, text=True, env=inside).stdout)
+        self.assertEqual([k["name"] for k in ls["terminals"]], ["asker"], "not the throwaway core: stop")
+
+        p = subprocess.run([sys.executable, self.entry, "ask", "Ship it tonight?", "--option", "Wait", "--option", "Ship",
+                            "--recommend", "Ship", "--task", "FAC-9", "--json"], capture_output=True, text=True, env=inside)
+        self.assertEqual(p.returncode, 0, p.stderr)
+        out = json.loads(p.stdout)
+        t = out["terminal"]
+        until(lambda: (get(t).get("status") or {}).get("state") == "blocked", f"the pane didn't report blocked: {get(t)}")
+        self.assertEqual(get(t)["status"], {"kind": "question", "msg": "Ship it tonight?", "state": "blocked"})
+        self.assertIn("2. Ship  (recommended)", hc("read", t).stdout)
+        self.assertEqual(hc("keys", t, "2", "enter").returncode, 0)
+        until(lambda: get(t).get("state") == "finished", f"the pane didn't exit: {get(t)}")
+        self.assertEqual(get(t)["exit_code"], 0)
+        rec = self.record(out["id"])
+        self.assertEqual((rec["answer"], rec["to"], rec["terminal"]), ("Ship", asker, t))
+        [msg] = self.held()[asker]
+        self.assertIn(f'event="answer" key="{out["id"]}">Ask {out["id"]} answered: Ship', msg["text"])

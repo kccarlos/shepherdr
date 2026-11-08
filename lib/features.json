@@ -349,7 +349,8 @@
       },
       "web": {
         "files": [
-          "plugins/tasks/client.tsx"
+          "plugins/tasks/client.tsx",
+          "src/screens/Home.tsx"
         ]
       },
       "forms": {

@@ -8,6 +8,7 @@ import clsx from 'clsx'
 import { Fragment, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent, type ReactNode, type RefObject } from 'react'
 import {
   agentChat,
+  boardAsked,
   closePane,
   focusPane,
   onlyPane,
@@ -86,7 +87,7 @@ export default function App() {
   const search = useUI((u) => u.search)
   const keyboard = useUI((u) => u.keyboard)
   // the board's home (screens/Home.tsx), on a desktop opened with ?board; opening a task leaves it
-  const [board, setBoard] = useState(() => new URLSearchParams(location.search).has('board'))
+  const [board, setBoard] = useState(boardAsked)
   useKeyboard()
   if (!snap) return <Loading />
   return (

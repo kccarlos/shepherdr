@@ -274,7 +274,7 @@
   }
  ],
  "deliverables": {
-  "folder": "/Users/kc/Documents/reference_repo/factory-run",
+  "folder": "/srv/factory",
   "machine": null,
   "tasks": [
    {

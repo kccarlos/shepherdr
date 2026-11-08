@@ -64,8 +64,8 @@ export function Home({ leave }: { leave: () => void }) {
           </div>
           <section aria-label="Usage pools" className="flex flex-wrap gap-2">
             {tiles(snap.usage ?? []).map((p) => (
-              <div key={p.label} className={`flex min-w-[148px] flex-[1_1_148px] flex-col gap-[5px] rounded-[var(--sd-radius)] border border-[var(--sd-line)] bg-[var(--sd-card)] px-3 py-2`}>
-                <div className="flex justify-between gap-2 text-xs"><span className="font-medium">{p.label}</span><span className="tabular-nums">{p.left === null ? '' : `${p.left}% left`}</span></div>
+              <div key={p.label} className={`flex min-w-[164px] flex-[1_1_164px] flex-col gap-[5px] rounded-[var(--sd-radius)] border border-[var(--sd-line)] bg-[var(--sd-card)] px-3 py-2`}>
+                <div className="flex justify-between gap-2 text-xs whitespace-nowrap"><span className="font-medium">{p.label}</span><span className="tabular-nums">{p.left === null ? '' : `${p.left}% left`}</span></div>
                 <div className="h-1 overflow-hidden rounded-full bg-[var(--sd-track)]"><div className="h-full rounded-full bg-[var(--sd-fg)]" style={{ width: `${p.left ?? 0}%` }} /></div>
                 <span className="text-xs text-[var(--sd-muted)]">{p.note}</span>
               </div>
@@ -132,7 +132,7 @@ export function Home({ leave }: { leave: () => void }) {
               <div className="flex flex-wrap items-baseline justify-between gap-2"><h2 className={h2}>asks for you</h2><span className="text-[13px] font-medium text-[var(--sd-primary-text)]">{asks.length} waiting</span></div>
               {asks.map((a) => (
                 <div key={a.id} className="flex flex-col gap-2.5 rounded-[var(--sd-radius)] border-[1.5px] border-[var(--sd-blocked)] bg-[var(--sd-primary-soft)] px-3.5 py-3">
-                  <div className="flex justify-between gap-2 text-xs"><span><span className="font-mono">{a.task ?? 'Assistant'}</span> · asks</span><span className="tabular-nums">{Math.max(1, Math.round((Date.now() - a.at) / 60e3))} min</span></div>
+                  <div className="flex justify-between gap-2 text-xs whitespace-nowrap"><span><span className="font-mono">{a.task ?? 'Assistant'}</span> · asks</span><span className="tabular-nums">{Math.max(1, Math.round((Date.now() - a.at) / 60e3))} min</span></div>
                   <p className="m-0 text-[15px]/[1.4] font-medium">{a.question}</p>
                   <div className="flex flex-wrap gap-2">
                     {a.options.map((o) => (
@@ -171,7 +171,7 @@ export function Home({ leave }: { leave: () => void }) {
                       {agentsOf(t).filter((a) => a.role !== 'worker').map((c) => (
                         <div key={c.address} className="ml-1 flex items-center gap-2.5 border-l border-dashed border-[var(--sd-dash)] pl-3.5">
                           <Dot c={DOT[c.state]} s={8} />
-                          <span className="text-xs text-[var(--sd-muted)]">{c.role} · {who(c)} · {STATE[c.state] ?? c.state}</span>
+                          <span className="text-xs text-[var(--sd-muted)]">{[c.role, c.cli && who(c), STATE[c.state] ?? c.state].filter(Boolean).join(' · ')}</span>
                         </div>
                       ))}
                     </li>

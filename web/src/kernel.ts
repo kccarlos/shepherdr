@@ -406,6 +406,8 @@ function saveSide(side: UI['side']) {
 }
 
 const params = new URLSearchParams(location.search)
+/** the page was opened with ?board: the board's home (screens/Home.tsx), read before the history rewrites the address */
+export const boardAsked = params.has('board')
 // a reload for a new build draws at once what it showed: the last snapshot and the chats on screen, until the server's
 const { text: keptText, snap: keptSnap, chats: keptChats, ...keptUI } = kept()
 let state: State = {

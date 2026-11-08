@@ -89,3 +89,7 @@ answer (2026-11-08). It becomes the role allow lists in phase 3 (docs/factory.md
 - Size calls: FAC-51 (VM image scripts) kept at 188 lines (limit ~150; a login step and tool lists, both layers built
   and smoke-tested; not a review fix, accepted to avoid a 15-minute rebuild for comments). FAC-50 to ~120 lines (limit
   ~30) for round 3's findings: the start-up probe the brief described plus per-folder skipping in the store sweeps.
+- Workers misread the gate: FAC-45 and FAC-35 stopped saying their reviewers "exited with no verdict" while the store
+  had recorded passes (reviewers exit after `herdr-task review`, so their terminals are gone). herdr-task tells the
+  worker about `--changes`, not about a pass: a one-line news to the worker on each pass would stop the round trips.
+- Round limits raised to 9 for FAC-15, 29, 32 (and 8 for 28, 35, 37, 38) after review.min went to 3 mid-run.

@@ -18,7 +18,7 @@ def gate_on(s, t):
     """review.min > 0 for this task's folder (0 while the setting doesn't exist)."""
     n = 0
     for layer in settings_layers(s, t.get("space")):
-        n = (layer.get("review") or {}).get("min", n)
+        n = (layer.get("review") or {}).get("min", n) if (layer.get("review") or {}).get("min") is not None else n
     return type(n) is int and n > 0
 
 
@@ -77,7 +77,7 @@ def checks_pass(s, t):
         return
     cmd = (settings_for(s, t.get("space"))["tasks"].get("check") or "").strip()
     mine = [r for r in t.get("checks") or [] if r["sha"] == sha]
-    if mine and t.get("pr") and (mine[-1]["ci"] or {}).get("state") == "pending":
+    if mine and t.get("pr") and (mine[-1]["ci"] or {"state": "pending"}).get("state") == "pending":
         ci = ci_of(t, sha)
         if ci != mine[-1]["ci"]:
             mine[-1]["ci"], s.dirty = ci, True
@@ -87,7 +87,7 @@ def checks_pass(s, t):
     if not git(wt, "worktree", "add", "--detach", tmp, sha)[0]:
         return clean(s, tmp)
     try:
-        r = run(["hc", "run", "--bg", "--json", "--outlive-parent", "--no-notify", "--cwd", tmp,
+        r = run(["hc", "run", "--bg", "--json", "--no-parent", "--no-notify", "--cwd", tmp,
                  "--label", "herdr.role=checks", "--label", f"herdr.task={s.key(t)}", "--", "sh", "-c", cmd])
         address = json.loads(r.stdout)["address"] if r.returncode == 0 else None
     except (ValueError, KeyError):

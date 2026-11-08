@@ -37,22 +37,23 @@ facts only: no visual design and no implementation split. The screenshots are in
 ## The board views
 
 ### 1. Send a request (to the Assistant)
-- Today: the chat composer "Message the Assistant" (`web/plugins/chat/client.tsx:1780`), with Send, dictation and a
+- Today: the chat composer "Message the Assistant" (`Composer`, `web/plugins/chat/client.tsx:1849`), with Send, dictation and a
   voice call.
 - Data and API: `POST /api/action {type:"send", chat, text}` (`service/main.ts:726` → `service/actions.ts:567`). It
   exists and works for any space's Assistant chat.
 - Missing: a way to know which chat is the factory's Assistant. `herdr.factory` appears nowhere in `service/`, `web/`
-  or `core/` (grep). The Assistant is found only as a space's coordinator (`herdr.role=coordinator`,
-  `service/actions.ts:472`).
+  or `core/` (grep). The Assistant is found only as a space's coordinator (`herdr.role=coordinator` and
+  `herdr.coordinator.space`, `core/spaces.js:12`, called at `service/model.ts:279`).
 
 ### 2. Tasks by status
-- Today: the Tasks panel groups tasks by status, in this order: Needs you, Ready, Working, Queued, Scheduled, To do,
-  Done. Each row shows its title, ref, space, minutes left and a Review button on Ready.
+- Today: the Tasks panel groups tasks by status, in this order: Pinned (if any), Needs you, Ready, Merging, Working,
+  Queued, Scheduled, To do, Done (`web/src/groups.ts:14`). Each row shows its title, ref, space, minutes left and a Review button on Ready.
 - Data and API: the `/api/ws` snapshot's `tasks` (`service/main.ts:585`, sent at `service/live.ts:61`). Rows are built
   from the task store at `service/model.ts:239` and mapped at `service/compat.ts:372-404`, with the status mapping at
   `service/compat.ts:44`.
 - Missing: each worker's CLI and model. Every live worker is labelled `cli: "claude"` (`service/compat.ts:403`), so
-  an agy or codex worker shows as claude. No model field reaches the web.
+  an agy or codex worker shows as claude. Snapshot rows have no model field. A model reaches the web only in a watched
+  Claude or Codex chat's `Chat.agent.model` (`service/compat.ts:684`), not for agy.
 
 ### 3. Agent tree (Assistant → workers → reviewers, verifier)
 - Today: a task's header lists its worker's subagents (for example the "fac-19-review" chip). There is no tree view.
@@ -60,11 +61,13 @@ facts only: no visual design and no implementation split. The screenshots are in
   hc children (`service/model.ts:264` → `core/chat-view.js:415`). The Assistant → task edge is the row's `space`
   (`service/model.ts:256`).
 - Missing:
-  - A reviewer or verifier that herdr-task starts (contract G3/G5) is not the worker's child, so `subagentsOf` won't
+  - A reviewer or verifier that herdr-task starts (contract G2/G5) is not the worker's child, so `subagentsOf` won't
     list it.
   - `agentsOf` finds such an agent with role `reviewer`, but it is only dropped from `worker` (`service/model.ts:245`)
     and never sent.
-  - No snapshot field carries a terminal's role, CLI or model per task.
+  - herdr-task keeps the agents it started with a role in `t["reviewers"]` and workers in `t["agents"]`
+    (`launch.py:660-667`: `{address, agent, argv, parent?}`). Only the evidence action returns them (view 4); the
+    snapshot's `Task` has neither.
 
 ### 4. Each task's evidence (review rounds, checks, verdict, proof)
 - Today: the Accept card shows the summary, commits, changed files, checks, proof and folded details. A task's tabs
@@ -73,12 +76,13 @@ facts only: no visual design and no implementation split. The screenshots are in
   `herdr-task show --evidence` (`mods/tasks/bin/herdr_task/proof.py:96`). It works for any task, not only Ready ones
   (`service/actions.ts:587`).
 - Missing:
-  - None of `reviews`, `review_runs`, `checks` or `verdicts` (contracts/gate-evidence.md) is in the evidence or the
-    snapshot rows.
+  - The action already returns the whole store record (`view()` is `dict(task)`, `output.py:17`), so `reviews`,
+    `agents` and `reviewers` (and later `review_runs`, `checks`, `verdicts`) reach the page. But the `evidence` key, the
+    snapshot rows and the Accept card (`Shown`, `Accept.tsx:25`) don't use them.
   - "Checks" is GitHub's PR rollup only (`proof.py:75-83`), not a check herdr-task ran.
   - Today's worker-recorded rounds use another shape (`result`, `text`, `head`; `commands.py:478`) than the
     contract's herdr-task rounds (`verdict`, `must_fix`, `started_by`).
-  - G2–G5, which produce those records, are not on kc-factory yet.
+  - G2, G3 and G5, which produce those records, are not on kc-factory yet.
 
 ### 5. Open asks
 - Today: Needs you (the panel group, the filter and the footer count) lists tasks needing the person, blocked
@@ -106,11 +110,11 @@ facts only: no visual design and no implementation split. The screenshots are in
 - Data and API:
   - Every artifact's record comes from herdr-artifact's registries in `~/.herdr/artifacts` (`service/artifacts.ts:13-23`):
     `{id, title, version, task, publisher, at, files, versions[{v, at, publisher}]}`. It reaches the snapshot's
-    `artifacts` (`compat.ts:302`).
+    `artifacts` (`compat.ts:468`, `artifactOf` at `compat.ts:168`).
   - A task's proof is `t["proof"]`, set by `herdr-task ready --proof` (`commands.py:369-373`). It goes into rows
     (`model.ts:266`) and `Task.proof` (`compat.ts:393`).
-  - The task's other artifacts come from its agents' addresses (`compat.ts:391` → `core/task-artifacts.js:32`, by
-    `publisher`).
+  - The task's other artifacts are those whose record names the task, else those a task agent published
+    (`compat.ts:391` → `core/task-artifacts.js:41-42`).
   - A recipe's JSON and pictures are served at `GET /api/artifacts/<id>/recipe?v=` and `/file/<path>?v=`
     (`service/main.ts:611-620`).
 - Missing:
@@ -118,9 +122,8 @@ facts only: no visual design and no implementation split. The screenshots are in
     sets it, and no endpoint serves one.
   - An external-link kind: a claude.ai canvas link is not an artifact record. Only local recipe and GPUI kinds exist
     (`types.ts:466`).
-  - A per-agent latest deliverable: `publisher` is a terminal address, and the web is not sent which tree node made
-    which artifact.
-  - Before/after pairs as a kind.
+  - Before/after pairs as a kind, and a per-agent latest deliverable: `publisher` is a terminal address, and the web is
+    not sent which tree node made which artifact.
   - A "new to look at" mark per person: read marks exist for chats only (`Snapshot.read`, `types.ts:1220`).
 
 ## Compared with the orchestrator's design
@@ -133,17 +136,15 @@ facts only: no visual design and no implementation split. The screenshots are in
 | Agents panel (Assistant, then workers with their reviewer child) | Terminals by role, parent and model | `model.ts:209`, `core/chat-view.js:415` | reviewer/verifier rows, models (view 3) |
 | "asks for you" | Open asks | `needs`: `compat.ts:409` | FAC-9 records (view 5) |
 | "merge gate" panel (feature rollout states) | Not task data | none | No source anywhere; it is the factory's own build state |
-| One task: review rounds (round, verdict, detail, head, model) | `t.reviews` / `review_runs` | worker rounds in the store only (`commands.py:478`) | not sent to the web; contract shape not produced (view 4) |
+| One task: review rounds (round, verdict, detail, head, model) | `t.reviews` / `review_runs` | worker rounds (`commands.py:478`), returned by the evidence action (`output.py:17`) | not shown anywhere; not in the snapshot; contract shape not produced (view 4) |
 | One task: checks (command, result) | `t.checks` | GitHub rollup only: `proof.py:75` | herdr-task's own check records |
-| One task: agents (worker, reviewer, "accepted by") | Agents per task, who accepted | `task.agents` addresses (`model.ts:267`) | CLI/model per agent; who accepted |
+| One task: agents (worker, reviewer, "accepted by") | Agents per task, who accepted | `t.agents`/`t.reviewers` with CLI and argv, via the evidence action (`launch.py:660`) | not in the snapshot; the model when argv has none; who accepted (only `accepted_at`, `commands.py:1029`) |
 | One task: size (lines vs limit) | Diff size, the brief's limit | `+/-` in evidence: `proof.py:136-138` | the size limit (it lives in brief text only) |
 | One task: proof link | Proof id | `proof.py:99`, Accept card | — |
-| "New to look at" strip (added later) | Recent artifacts per task and agent, a seen mark, thumbnails | `artifacts` in the snapshot (`compat.ts:302`) | thumbnails, link kind, seen marks (view 7) |
+| "New to look at" strip (added later) | Recent artifacts per task and agent, a seen mark, thumbnails | `artifacts` in the snapshot (`compat.ts:468`) | thumbnails, link kind, seen marks (view 7) |
 
 Gaps this audit found that the design doesn't cover:
 - Loading, offline and error states.
-- A light theme.
-- Phone layout of the lanes.
-- The 403 from the serving Mac.
-- A Ready task's Accept action.
+- A light theme, and a phone layout of the lanes.
+- The 403 from the serving Mac, and a Ready task's Accept action.
 - Ready as its own lane: the design has no Ready lane, only needs you, working, queued and done.

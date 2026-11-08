@@ -63,7 +63,7 @@ person ─voice/phone─▶ sheepdog ─prompt (the person's words)─▶ Assist
 
 **herdr-app.** One layout per window, and sheepdog's and Shepherdr's are alternatives. The factory needs no window: Shepherdr's service ticks (service/jobs.ts) and the board is a web page.
 
-**Board.** A production-quality web board built from Shepherdr's web app (tailnet only). It lets the person send a request and shows tasks by status, the agent tree (Assistant → workers → reviewers, verifier), each task's evidence, open asks and the usage pools. Later it moves into the sheepdog iPhone app.
+**Board.** A production-quality web board built from Shepherdr's web app (tailnet only). It lets the person send a request and shows tasks by status, the agent tree (Assistant → workers → reviewers, verifier), each task's evidence, open asks and the usage pools. **Deliverable previews bubble up:** whatever an agent produces for a person to look at (a proof with screenshots of a verified screen, a designer's canvas, a before/after pair) is linked to its task, shown as a thumbnail on that agent's node in the tree and in a "new to look at" strip, and opens in a preview. Screenshots embed; a private claude.ai canvas shows as a card with its link. Later it moves into the sheepdog iPhone app.
 
 ## 4. What every role carries
 

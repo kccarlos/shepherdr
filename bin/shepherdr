@@ -834,7 +834,12 @@ def cmd_install(a, update=False):
     install_service(r, rec, home)
     if a.guard:
         install_guard(r, src, rec)
-    if not a.no_hooks:
+    # --no-hooks is remembered in the record: an update keeps it, a plain install brings the hooks back
+    if not update:
+        rec.pop("no_hooks", None)
+    if a.no_hooks:
+        rec["no_hooks"] = True
+    if not rec.get("no_hooks"):
         rec["hooks"] = add_hooks(r, rec)
     rec.update({"version": VERSION, "source": src, "at": r.stamp, "root": root})
     if a.dry_run:
@@ -1067,7 +1072,7 @@ def cmd_doctor(a):
             json.load(open(r.p(f"{APP}/{rel}")))
         except (OSError, ValueError) as e:
             bad.append(f"{APP}/{rel}: {e}")
-    for f, event, cmd in rec.get("hooks", []):
+    for f, event, cmd in ([] if rec.get("no_hooks") else rec.get("hooks", [])):
         if cmd not in (read(r.p(f)) or b"").decode(errors="replace").replace("\\'", "'"):
             warn.append(f"hook missing in {f} ({event}): questions from that CLI won't reach the chat")
     t_bad, t_notes = check_tools(home)

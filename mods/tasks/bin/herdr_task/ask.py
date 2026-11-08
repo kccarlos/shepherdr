@@ -59,10 +59,12 @@ def cmd_ask(args):
     question = " ".join((args.question or "").split())
     options = [" ".join(o.split()) for o in args.option or []]
     recommend = None if args.recommend is None else " ".join(args.recommend.split())
-    if not question or len(options) < 2 or not all(options):
-        raise Fail('Say the question and at least two options: herdr-task ask "<question>" --option A --option B --recommend A')
+    if not question or len(options) < 2 or not all(options) or len(set(options)) < len(options):
+        raise Fail('Say the question and at least two different options: herdr-task ask "<question>" --option A --option B --recommend A')
     if recommend not in options:
         raise Fail(f"--recommend must be one of the options: {', '.join(options) or 'none given'}")
+    if not os.environ.get("HC_TERMINAL_ID"):  # the answer's news goes to the asker's terminal
+        raise Fail("Run it from an agent's own terminal (there's no HC_TERMINAL_ID here).")
     rec = {"id": secrets.token_hex(3), "question": question, "options": options, "recommend": recommend,
            "task": args.task, "to": os.environ.get("HC_TERMINAL_ID"), "at": now()}
     save(rec)
@@ -70,11 +72,11 @@ def cmd_ask(args):
     labels = ["--label", "herdr.role=ask", "--label", f"herdr.ask={rec['id']}"]
     try:
         r = run(["hc", "run", "--bg", "--json", "--no-notify", "--outlive-parent", "--name", f"ask-{rec['id']}", *labels, "--",
-                 "env", f"HERDR_TASK_STORE={STORE}", sys.executable, ENTRY, "_ask-pane", rec["id"]])
+                 "env", f"HERDR_TASK_STORE={STORE}", sys.executable, ENTRY, "_ask-pane", rec["id"]], check=True)
         rec = {**load(rec["id"]), "terminal": json.loads(r.stdout)["address"]}  # the pane may have saved since
     except (Fail, OSError, ValueError, KeyError, TypeError) as e:
         os.unlink(path_of(rec["id"]))  # no pane, no ask
-        raise Fail(f"couldn't start the ask pane: {e if isinstance(e, (Fail, OSError)) else (r.stderr or r.stdout).strip()}")
+        raise Fail(f"couldn't start the ask pane: {e if isinstance(e, (Fail, OSError)) else (r.stderr or r.stdout).strip() or 'no terminal in its answer'}")
     save(rec)
     say(args, {"id": rec["id"], "terminal": rec["terminal"]},
         f"Asked ({rec['id']}): its pane is {rec['terminal']}. The answer comes to you as news; carry on with other work.")

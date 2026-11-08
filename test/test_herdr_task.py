@@ -3631,19 +3631,23 @@ class Asks(unittest.TestCase):
 
     def test_recommend_must_be_an_option(self):
         p = subprocess.run([sys.executable, self.entry, "ask", "Ship?", "--option", "Yes", "--option", "No", "--recommend", "Maybe"],
-                           capture_output=True, text=True, env=self.env)
+                           capture_output=True, text=True, env={**self.env, "HC_TERMINAL_ID": "t5"})
         self.assertEqual(p.returncode, 1)
         self.assertIn("--recommend must be one of the options: Yes, No", p.stderr)
         self.assertFalse(os.path.exists(os.path.join(self.store, "asks")))
         for opts in (["--option", "  ", "--option", "No", "--recommend", "No"], ["--option", "Yes", "--recommend", "Yes"],
-                     ["--option", "Yes", "--option", "No"]):
-            p = subprocess.run([sys.executable, self.entry, "ask", "Ship?", *opts], capture_output=True, text=True, env=self.env)
+                     ["--option", "Yes", "--option", "No"], ["--option", "Yes", "--option", " Yes ", "--recommend", "Yes"]):
+            p = subprocess.run([sys.executable, self.entry, "ask", "Ship?", *opts], capture_output=True, text=True, env={**self.env, "HC_TERMINAL_ID": "t5"})
             self.assertEqual(p.returncode, 1, opts)
         # hc refusing the pane leaves no ask behind.
         p = subprocess.run([sys.executable, self.entry, "ask", "Ship?", "--option", " Yes ", "--option", "No", "--recommend", " Yes"],
-                           capture_output=True, text=True, env=self.env)
-        self.assertIn("couldn't start the ask pane", p.stderr)
+                           capture_output=True, text=True, env={**self.env, "HC_TERMINAL_ID": "t5"})
+        self.assertIn("couldn't start the ask pane: hc failed", p.stderr)
         self.assertEqual(os.listdir(os.path.join(self.store, "asks")), [])
+        # Outside a terminal there's nobody to tell the answer: refused.
+        p = subprocess.run([sys.executable, self.entry, "ask", "Ship?", "--option", "Yes", "--option", "No", "--recommend", "Yes"],
+                           capture_output=True, text=True, env=self.env)
+        self.assertIn("Run it from an agent's own terminal", p.stderr)
 
     @unittest.skipUnless(shutil.which("hc") and not CI, "needs herdr-core (hc) on this machine")
     def test_ask_pane_end_to_end(self):

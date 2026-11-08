@@ -3611,6 +3611,13 @@ class Asks(unittest.TestCase):
                            env={**self.env, "PATH": "/usr/bin:/bin", "HC_TERMINAL_SOCKET": "/nonexistent.sock"})
         self.assertEqual(self.record("ab12cd")["answer"], "² maybe later", p.stderr)
         self.assertEqual(len(self.held()["t5"]), 2)
+        # A pane whose HC_SESSION isn't its socket's session (the guard's case) sends nothing: held.
+        log = os.path.join(self.store, "hc.log")
+        with open(os.path.join(self.store, "bin", "hc"), "w") as f:
+            f.write(f'#!/bin/sh\necho "$@" >> {log}\nexit 1\n')
+        p = subprocess.run([sys.executable, self.entry, "_ask-pane", "ab12cd"], input="1\n", capture_output=True, text=True,
+                           env={**self.env, "HC_SESSION": "other", "HC_TERMINAL_SOCKET": "/nonexistent/default/default.sock"})
+        self.assertEqual((p.returncode, os.path.exists(log), len(self.held()["t5"])), (0, False, 3), p.stderr)
         # The ask saves the pane's terminal after the pane read the record: answering keeps it.
         pane = subprocess.Popen([sys.executable, self.entry, "_ask-pane", "ab12cd"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, env=self.env)
         pane.stdout.readline()  # the question: the record is read

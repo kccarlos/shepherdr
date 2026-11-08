@@ -15,15 +15,13 @@ herdr-task add "Audit the billing code" --agent agy --model gemini-4-argon-high
 ```
 
 `--agent agy` alone uses agy's own default model. `edit` takes the same flags, and the next agent started for the
-task uses the new choice. To make agy the default for a space or everywhere, set **Settings › Agents › Workers** to
-agy ([Settings](settings.md)); a task's own `--agent` still wins over it.
+task uses the new choice. The Workers setting in [Settings](settings.md) only offers Claude Code and Codex, so agy is
+chosen per task (the Assistant does this for audits, below).
 
-**Models** are agy's own ids, with the effort as the last part: `gemini-4-argon-*`, `gemini-3.8-flash-*`,
-`claude-opus-5-5-*`, `claude-sonnet-5-5-*`, each `low`, `medium` or `high`. The effort can also come separately with
-`--effort`.
+**Models.** herdr-task keeps no list: `--model` and `--effort` go to agy as they are. Run `agy models` to see the ids,
+such as `gemini-4-argon-high` or `gemini-3.8-flash-medium` (family plus `low`, `medium` or `high`).
 
-**Permissions.** Workers start in agy's `accept-edits` mode. The Workers setting can change that: plan mode, or full
-access (`--dangerously-skip-permissions`).
+**Permissions.** A task's agy starts in its `accept-edits` mode.
 
 **Resume.** When a task's agent is started again, agy picks up its conversation (`--conversation <id>`). herdr-task
 learns the id from the conversation file the running agy has open.
@@ -33,10 +31,10 @@ worktree herdr-task made, it is answered for you; any other folder is not.
 
 ### What differs from Claude Code and Codex
 
-- The task's brief goes in with `-i`, as agy takes a prompt from nowhere else.
-- herdr-task's own commands (`status`, `ready`, ...) are allowed through agy's `--settings`. That list replaces agy's
-  own, so herdr-task adds the allow rules you keep in `~/.gemini/antigravity-cli/settings.json` and the folders it
-  already trusts, then its own.
+- The task's first message goes in with `-i`: agy takes no plain prompt for an interactive session.
+- herdr-task's own commands (`status`, `ready`, ...), `herdr-secret` and `herdr-browser` are allowed through agy's
+  `--settings`. That list replaces agy's own, so herdr-task first copies the allow rules from
+  `~/.gemini/antigravity-cli/settings.json`.
 
 ### Limits
 
@@ -57,7 +55,7 @@ The Assistant chooses for each task by the kind of work, and says in a line what
 | Hard debugging, backend | Codex |
 | Reading much code, an audit | agy, `gemini-4-argon-high` |
 
-The review goes to a different CLI than the one that did the work.
+When review is on, it goes by default to a different CLI than the one that did the work.
 
 **What you say wins.** Name a CLI, a model or a quota concern ("use Codex", "save my Claude quota") and the Assistant
 follows that. It passes your choice with `--agent`, `--model` and `--effort` (`low`, `medium`, `high`, `xhigh`,

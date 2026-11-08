@@ -81,6 +81,8 @@ How to run, build and lay out the code: [docs/develop.md](docs/develop.md).
   and `grep -n` through the shell.
 - A hand-started agy reviewer needs `--mode plan` (else it runs in auto mode with edits approved). A declined permission
   interrupts its turn: `hc send` it a nudge to carry on.
+- To survey a big Design canvas without flooding context, a read-only claude helper (`hc run`, plan mode) can read every
+  artboard with the Artifact tool and leave the files on disk for scripts.
 - `herdr-task --on <machine>` copies its bundle there, and a hub (the Mac mini) copies it on: running a branch's
   herdr-task against other machines spreads that branch fleet-wide until the next update. Prefer local tests.
 - herdr-task's scheduler re-execs itself within 15 s when its code changes. Its live code is either the zipapp

@@ -2052,11 +2052,19 @@ class AgyWorker(unittest.TestCase):
         trusted = lambda hc: json.loads(hc[hc.index("--settings") + 1]).get("trustedWorkspaces") if "--settings" in hc else None
         self.assertEqual(trusted(ran[0]), ["/wt/x"])
         self.assertIsNone(trusted(ran[1]))
-        self.assertIsNone(trusted(ran[2]))
+        # an agy reviewer in a worktree: that worktree trusted, but none of the worker's own rules
+        self.assertEqual(trusted(ran[2]), ["/wt/x"])
+        self.assertNotIn("herdr-task", json.dumps(json.loads(ran[2][ran[2].index("--settings") + 1])["permissions"]))
         # an argv's own --settings keeps the folders it already trusts
         with mock.patch.object(L, "HOME", self.home):
             out = L.own_argv(["agy", "--settings", '{"trustedWorkspaces": ["/code"]}'], "/wt/x")
         self.assertEqual(trusted(out), ["/code", "/wt/x"])
+
+    def test_the_brief_gives_an_agy_reviewer_i_and_its_worktree_trusted(self):
+        from herdr_task.templates import WORKER_MD
+        self.assertIn("`-i`", WORKER_MD)
+        self.assertIn("trustedWorkspaces", WORKER_MD)
+        self.assertIn("agy rejects a positional prompt", WORKER_MD)
 
     def test_resume_by_conversation(self):
         from herdr_task.launch import resume_argv

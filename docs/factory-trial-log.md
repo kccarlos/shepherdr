@@ -115,3 +115,6 @@ answer (2026-11-08). It becomes the role allow lists in phase 3 (docs/factory.md
   doc/plan tasks unless the plan is the person's decision.
 - Claude reviewers that herdr-task starts run in `--permission-mode plan`: they can't run their verdict command, so an
   Opus reviewer writes its review as a plan and waits on "approve plan" (FAC-42's t10y, verdict pass).
+- After FAC-49's install (~15:00): the Sonnet tasks went back from Opus to sandboxed Argon reviewers (review.min back
+  to the folder's 3), since Claude reviewers in plan mode can't record verdicts. Five pre-sandbox reviewers that were
+  blocked (t106, t10t, t10w, t10y, t114) were ended; FAC-32, 34, 39, 42 and 50 re-readied with round limit 10.

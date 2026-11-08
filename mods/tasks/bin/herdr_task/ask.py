@@ -105,10 +105,10 @@ def read_answer(count):
     if not sys.stdin.isatty():
         return input("> ")
     fd, old = sys.stdin.fileno(), termios.tcgetattr(sys.stdin.fileno())
-    sys.stdout.write("> ")
-    sys.stdout.flush()
     try:
-        tty.setcbreak(fd)
+        tty.setcbreak(fd)  # before the prompt shows: switching later can drop a key typed in between
+        sys.stdout.write("> ")
+        sys.stdout.flush()
         ch = os.read(fd, 1).decode(errors="replace")
         if not ch:
             raise EOFError

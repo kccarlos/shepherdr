@@ -4339,13 +4339,17 @@ class AskPane(unittest.TestCase):
 
     def test_a_recommended_no_needs_a_yes_to_be_tappable(self):
         import argparse
+        from unittest import mock
         sys.path.insert(0, BIN)
         import herdr_task.ask as ask
         def args(opts, rec):
             return argparse.Namespace(show=None, question="Ship?", option=opts, recommend=rec, task=None)
-        with self.assertRaises(ask.Fail):
-            ask.cmd_ask(args(["Wait for review", "Ship now"], "Wait for review"))
-        os.environ["HC_TERMINAL_ID"] = ""  # past the guard it then stops at the terminal check, not the wording
-        self.addCleanup(os.environ.pop, "HC_TERMINAL_ID", None)
-        with self.assertRaisesRegex(ask.Fail, "own terminal"):
-            ask.cmd_ask(args(["Wait for review", "Yes, ship"], "Wait for review"))
+        # Never a real pane or the real store: hc and the asks folder are replaced, whatever the code does.
+        with mock.patch.object(ask, "run", side_effect=AssertionError("started hc")) as run, \
+                mock.patch.object(ask, "ASKS", os.path.join(self.tmp, "asks")), \
+                mock.patch.dict(os.environ, {"HC_TERMINAL_ID": ""}):  # empty: stops at the terminal check
+            with self.assertRaisesRegex(ask.Fail, "starts with"):
+                ask.cmd_ask(args(["Wait for review", "Ship now"], "Wait for review"))
+            with self.assertRaisesRegex(ask.Fail, "own terminal"):
+                ask.cmd_ask(args(["Wait for review", "Yes, ship"], "Wait for review"))
+            run.assert_not_called()

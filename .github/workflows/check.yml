@@ -1,4 +1,4 @@
-# Shepherdr 3.0's check on GitHub's runners, on every pull request to main and every push to main (a merge). A task
+# Shepherdr 3.0's check on GitHub's runners, on every pull request to main or kc-factory and every push to them (a merge). A task
 # waits for its pull request's run before it merges. A branch with no pull request can still be checked by hand:
 # gh workflow run check.yml --ref <branch>.
 #
@@ -11,9 +11,9 @@ name: Check
 on:
   # no paths-ignore here: a docs-only pull request must report a check too, or it could never merge
   pull_request:
-    branches: [main]
+    branches: [main, kc-factory]
   push:
-    branches: [main]
+    branches: [main, kc-factory]
     paths-ignore:
       - '**/*.md'
       - 'docs/**'

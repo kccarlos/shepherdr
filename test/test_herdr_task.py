@@ -4210,7 +4210,10 @@ class Checks(unittest.TestCase):
         self.c.hc_json = lambda *a: None
         self.tick()
         self.assertEqual((self.t.get("checks"), bool(self.t.get("check_run")), os.path.exists(self.cwds[0])), (None, True, True))
-        self.clock[0] += self.c.LIMIT_MS + 1  # gone for good: dropped, no record, run again
+        self.clock[0] += self.c.LIMIT_MS + 1  # past the limit but hc still silent: waits, never a failed record or a rerun
+        self.tick()
+        self.assertEqual((self.t.get("checks"), bool(self.t.get("check_run"))), (None, True))
+        self.clock[0] += self.c.LIMIT_MS  # gone for good: dropped, no record, run again
         self.tick()
         self.assertEqual((self.t.get("checks"), self.t.get("check_run")), (None, None))
         self.assertFalse(os.path.exists(self.cwds[0]))

@@ -56,7 +56,7 @@ def checks_pass(s, t):
     ok, sha, _ = git(wt, "rev-parse", "HEAD") if on else (False, None, None)
     if c:
         k = hc_json("get", c["address"])
-        if k is None and now() - c["started_at"] <= LIMIT_MS:
+        if k is None and now() - c["started_at"] <= 2 * LIMIT_MS:
             return  # hc didn't answer: ask again next tick
         k = k or {}
         stale = not ok or sha != c["sha"] or not k or c.get("stale")  # a terminal hc no longer knows: dropped, checked again
@@ -75,6 +75,7 @@ def checks_pass(s, t):
                 "output_tail": (tail + (f"\nKilled: ran longer than {LIMIT_MS // 60000} minutes." if c.get("over") else ""))[-TAIL:],
                 "started_at": c["started_at"], "finished_at": now(), "by": c["address"], "ci": ci_of(t, c["sha"])})
         clean(s, c["tmp"])
+        run(["hc", "kill", c["address"]])  # a terminal hc no longer answers for may still run
         run(["hc", "rm", c["address"]])
         t.pop("check_run")
         s.dirty = True

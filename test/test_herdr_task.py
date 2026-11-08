@@ -4260,3 +4260,92 @@ class Checks(unittest.TestCase):
         self.assertIsNone(self.t.get("checks"))
         self.tick()
         self.assertEqual(len(self.cwds), 2)
+
+
+def sheepdog_parse(screen):
+    """A copy of sheepdog's ParsePrompt for numbered menus (herdr/prompt.go findOptions/parseOptions at cf9c7337):
+    options numbered from 1, exactly one with a cursor marker. Returns (labels, cursor index) or None."""
+    import re
+    rx = re.compile(r"^\s*([›❯>])?\s*(\d+)\.\s+(.+?)\s*$")
+    lines = screen.split("\n")[-40:]
+    for i in range(len(lines) - 1, -1, -1):
+        m = rx.match(lines[i])
+        if not m or m.group(2) != "1":
+            continue
+        labels, cursor, cursors = [], -1, 0
+        for line in lines[i:]:
+            m = rx.match(line)
+            if m and m.group(2) == str(len(labels) + 1):
+                if m.group(1):
+                    cursor, cursors = len(labels), cursors + 1
+                labels.append(m.group(3))
+            else:
+                break  # the pane's own text under the options ends the block
+        if len(labels) >= 2 and cursors == 1:
+            return labels, cursor
+    return None
+
+
+class AskPane(unittest.TestCase):
+    """FAC-28: the ask pane is a question card in sheepdog (cursor marker) and a tapped digit answers it."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="ask-pane-")
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        os.makedirs(os.path.join(self.tmp, "asks"))
+        with open(os.path.join(self.tmp, "asks", "ab1.json"), "w") as f:
+            json.dump({"id": "ab1", "question": "Ship it?", "options": ["Yes, ship", "Wait for review", "Drop it"],
+                       "recommend": "Wait for review"}, f)
+        self.env = {**os.environ, "HERDR_TASK_STORE": self.tmp}
+
+    def pane(self, feed):
+        """Runs the real pane on a pseudo-terminal, sends `feed` once its prompt is up; returns (screen, record)."""
+        import pty, select, time
+        pid, fd = pty.fork()
+        if pid == 0:
+            os.execve(sys.executable, [sys.executable, os.path.join(BIN, "herdr-task"), "_ask-pane", "ab1"], self.env)
+        out, sent, end = b"", False, time.time() + 15
+        while time.time() < end:
+            if select.select([fd], [], [], 0.2)[0]:
+                try:
+                    chunk = os.read(fd, 4096)
+                except OSError:
+                    break
+                if not chunk:
+                    break
+                out += chunk
+            if not sent and b"> " in out.split(b"\x07")[-1]:
+                os.write(fd, feed)
+                sent = True
+        try:
+            os.kill(pid, 9)  # a pane that never answered (the old one) must not hang the test
+        except OSError:
+            pass
+        os.waitpid(pid, 0)
+        with open(os.path.join(self.tmp, "asks", "ab1.json")) as f:
+            return out.decode(), json.load(f)
+
+    def test_the_screen_parses_as_a_question_card_on_the_recommended_option(self):
+        screen, _ = self.pane(b"1")
+        self.assertEqual(sheepdog_parse(screen.replace("\r", "")),
+                         (["Yes, ship", "Wait for review  (recommended)", "Drop it"], 1))
+
+    def test_a_tapped_digit_answers_with_or_without_enter(self):
+        for keys in (b"3", b"3\r"):
+            self.assertEqual(self.pane(keys)[1]["answer"], "Drop it", keys)
+
+    def test_typed_words_still_answer(self):
+        self.assertEqual(self.pane(b"2 weeks, then ship\r")[1]["answer"], "2 weeks, then ship")
+
+    def test_a_recommended_no_needs_a_yes_to_be_tappable(self):
+        import argparse
+        sys.path.insert(0, BIN)
+        import herdr_task.ask as ask
+        def args(opts, rec):
+            return argparse.Namespace(show=None, question="Ship?", option=opts, recommend=rec, task=None)
+        with self.assertRaises(ask.Fail):
+            ask.cmd_ask(args(["Wait for review", "Ship now"], "Wait for review"))
+        os.environ["HC_TERMINAL_ID"] = ""  # past the guard it then stops at the terminal check, not the wording
+        self.addCleanup(os.environ.pop, "HC_TERMINAL_ID", None)
+        with self.assertRaisesRegex(ask.Fail, "own terminal"):
+            ask.cmd_ask(args(["Wait for review", "Yes, ship"], "Wait for review"))

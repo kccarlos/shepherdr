@@ -14,12 +14,17 @@ import base64
 import json
 import os
 import secrets
+import select
 import sys
+import termios
+import tty
 
 from .base import ENTRY, Fail, now, run, STORE
 from .output import say
 
 ASKS = os.path.join(STORE, "asks")
+# Sheepdog's rail refuses an approving answer whose words open with one of these (supervisor/inputs.go negativeWords)
+NEGATIVE = {"no", "nope", "nah", "don't", "dont", "do", "stop", "cancel", "never", "deny", "decline", "reject", "wait", "hold", "negative"}
 MSG_MAX = 300  # the question in the OSC report, cut: hc refuses an overlong sequence
 
 
@@ -63,6 +68,9 @@ def cmd_ask(args):
         raise Fail('Say the question and at least two different options: herdr-task ask "<question>" --option A --option B --recommend A')
     if recommend not in options:
         raise Fail(f"--recommend must be one of the options: {', '.join(options) or 'none given'}")
+    first = (recommend.lower().split() or [""])[0].strip(".!?,;:")
+    if first in NEGATIVE and not any(o.lower().startswith("yes") for o in options):
+        raise Fail(f'Sheepdog can\'t tap a recommended option that starts with "{first}" unless another option starts with "Yes": reword it or add one.')
     if not os.environ.get("HC_TERMINAL_ID"):  # the answer's news goes to the asker's terminal
         raise Fail("Run it from an agent's own terminal (there's no HC_TERMINAL_ID here).")
     rec = {"id": secrets.token_hex(3), "question": question, "options": options, "recommend": recommend,
@@ -91,19 +99,44 @@ def report(state, kind=None, msg=None):
     sys.stdout.flush()
 
 
+def read_answer(count):
+    """One answer: a digit alone (sheepdog's tap sends no Enter) answers once nothing follows it for a moment;
+    anything else is a line of words, as typed. Without a terminal, a plain line."""
+    if not sys.stdin.isatty():
+        return input("> ")
+    fd, old = sys.stdin.fileno(), termios.tcgetattr(sys.stdin.fileno())
+    sys.stdout.write("> ")
+    sys.stdout.flush()
+    try:
+        tty.setcbreak(fd)
+        ch = os.read(fd, 1).decode(errors="replace")
+        if not ch:
+            raise EOFError
+        if ch.isascii() and ch.isdigit() and 1 <= int(ch) <= count and count < 10 and not select.select([fd], [], [], 0.3)[0]:
+            return ch
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old)
+    if ch in "\r\n":
+        return ""
+    sys.stdout.write(ch)
+    sys.stdout.flush()
+    return ch + input("")
+
+
 def cmd_ask_pane(args):
     """The ask pane's program: the prompt, one answer into the record, news to the asker."""
     from .news import hold, send_or_hold
     rec = load(args.id)
     print(rec["question"])
-    for i, o in enumerate(rec["options"], 1):
-        print(f"  {i}. {o}" + ("  (recommended)" if o == rec.get("recommend") else ""))
+    for i, o in enumerate(rec["options"], 1):  # the ❯ marks the recommended option: sheepdog's prompt parser needs one
+        rec_here = o == rec.get("recommend")
+        print(f"{'❯' if rec_here else ' '} {i}. {o}" + ("  (recommended)" if rec_here else ""))
     print("Answer with a number or your own words, then Enter:")
     report("blocked", "question", rec["question"])
     answer = ""
     while not answer:
         try:
-            answer = " ".join(input("> ").split())
+            answer = " ".join(read_answer(len(rec["options"])).split())
         except EOFError:
             raise Fail("no answer: the ask stays open")
         if answer.isascii() and answer.isdigit() and 1 <= int(answer) <= len(rec["options"]):

@@ -1970,7 +1970,7 @@ class AgyWorker(unittest.TestCase):
         s = SimpleNamespace(key=lambda t: "dev#6", dirty=False)
         with mock.patch.object(L, "run", run), mock.patch.object(L, "folder_for", lambda s, t: "/tmp"), \
                 mock.patch.object(L, "agent_name", lambda *a: "dev-6-fake"), mock.patch.object(L, "track", lambda *a: None), \
-                mock.patch.object(L, "coordinator_tab", lambda a: None), mock.patch.object(L, "own_argv", lambda a, *_: a), \
+                mock.patch.object(L, "coordinator_tab", lambda a: None), mock.patch.object(L, "own_argv", lambda a, *_, **__: a), \
                 mock.patch.object(L, "in_shell", lambda a: a), mock.patch.object(L, "low_priority", lambda a, n: a):
             L.launch(s, {"id": 6, "title": "fake", "agents": []}, ["agy", "--mode", "plan"], "sp1", "Your task")
             L.launch(s, {"id": 7, "title": "fake", "agents": []}, ["claude"], "sp1", "Your task")
@@ -1998,6 +1998,24 @@ class AgyWorker(unittest.TestCase):
         allow = json.loads(out[out.index("--settings") + 1])["permissions"]["allow"]
         self.assertEqual(allow[0], "command(ls)")
         self.assertIn("command(/x/herdr-task status)", allow)
+
+    def test_an_agy_settings_relative_file_and_equals_form_are_merged(self):
+        from unittest import mock
+        from herdr_task import launch
+        folder = os.path.join(self.home, "task")
+        os.makedirs(folder)
+        with open(os.path.join(folder, "role.json"), "w") as fh:
+            json.dump({"permissions": {"allow": ["command(ls)"]}}, fh)
+        for flag in (["--settings", "role.json"], ["--settings=role.json"], ["--settings", '{"x": 1}'], ['--settings={"x": 1}']):
+            with mock.patch.object(launch, "HOME", self.home), mock.patch.object(launch, "own_path", lambda: "/x/herdr-task"), \
+                    mock.patch.object(launch, "secret_path", lambda: None), mock.patch.object(launch, "browser_path", lambda: None):
+                out = launch.own_argv(["agy"] + flag, "/wt/x", cwd=folder)  # the test's own cwd is not the folder
+            self.assertEqual(sum(a.startswith("--settings") for a in out), 1, flag)
+            merged = json.loads(out[out.index("--settings") + 1])
+            self.assertEqual(merged["trustedWorkspaces"], ["/wt/x"], flag)
+            self.assertIn("command(/x/herdr-task status)", merged["permissions"]["allow"], flag)
+            if "role" in flag[-1]:
+                self.assertEqual(merged["permissions"]["allow"][0], "command(ls)")
 
     def test_a_switched_task_does_not_read_the_old_agents_log(self):
         from herdr_task.agents import agent_log
@@ -2149,7 +2167,7 @@ class CleanEnv(unittest.TestCase):
         task = {"id": 6, "title": "fake", "agents": []}
         with mock.patch.object(L, "run", run), mock.patch.object(L, "folder_for", lambda s, t: "/tmp"), \
                 mock.patch.object(L, "agent_name", lambda *a: "dev-6-fake"), mock.patch.object(L, "track", lambda *a: None), \
-                mock.patch.object(L, "coordinator_tab", lambda a: None), mock.patch.object(L, "own_argv", lambda a, *_: a), \
+                mock.patch.object(L, "coordinator_tab", lambda a: None), mock.patch.object(L, "own_argv", lambda a, *_, **__: a), \
                 mock.patch.object(L, "in_shell", lambda a: a), mock.patch.object(L, "low_priority", lambda a, n: a):
             L.launch(s, task, ["env"], "sp1")
         hc = ran[0]
@@ -2351,7 +2369,7 @@ class Revive(unittest.TestCase):
         self.terms["t5"] = {"address": "t5", "state": "live", "pid": 500, "cwd": "/wt", "name": "shep-6-web", "argv": ["claude"],
                             "labels": {"herdr.task": "dev#6"}}
         self.crash("t5")
-        with self.mock.patch("herdr_task.launch.own_argv", lambda argv, *_: argv):
+        with self.mock.patch("herdr_task.launch.own_argv", lambda argv, *_, **__: argv):
             self.tick()
         self.assertTrue(self.sent[0][1].startswith("cd /wt && HERDR_BROWSER_TASK='dev#6' claude --resume S1 'Herdr restarted"), self.sent)
 

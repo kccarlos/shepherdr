@@ -23,7 +23,7 @@ import { boardOf, openAsks, poolsOf } from "./board.ts";
 const SHARED = join(HOME, ".config", "herdr-app", "shared.json");
 const SETTINGS = process.env.HERDR_TASK_SETTINGS || join(HOME, ".herdr", "shepherdr.json");
 // herdr-task's usage pools (usage.py: codexbar, cached a minute in the service's data folder)
-const USAGE = [join(process.env.HERDR_APP_HOME || join(HOME, ".config", "herdr-app"), "mods", "tasks", "bin"),
+const usagePy = () => [join(process.env.HERDR_APP_HOME || join(HOME, ".config", "herdr-app"), "mods", "tasks", "bin"),
   join(HOME, ".local", "share", "shepherdr", "mods", "tasks", "bin")].find((d) => existsSync(join(d, "herdr_task", "usage.py")));
 const SHELL = /^(ba|z|fi|da|k|tc|c)?sh$|^nu$|^pwsh$/;
 
@@ -132,10 +132,11 @@ export class Model {
   private usageAt = 0;
   /** The usage pools, read at most once a minute (codexbar can take seconds a provider). */
   private async readUsage() {
-    if (!USAGE || Date.now() - this.usageAt < 60_000) return;
+    const bin = usagePy();
+    if (!bin || Date.now() - this.usageAt < 60_000) return;
     this.usageAt = Date.now();
     const py = "import sys, json; sys.path.insert(0, sys.argv[1]); from herdr_task import usage; print(json.dumps(usage.read(sys.argv[2])))";
-    const p = Bun.spawn(["python3", "-c", py, USAGE, DATA], { stdout: "pipe", stderr: "ignore", stdin: "ignore" });
+    const p = Bun.spawn(["python3", "-c", py, bin, DATA], { stdout: "pipe", stderr: "ignore", stdin: "ignore" });
     try { const out = await new Response(p.stdout).text(); if ((await p.exited) === 0) { this.usage = poolsOf(JSON.parse(out)); this.soon(); } } catch {}
   }
 
@@ -305,7 +306,8 @@ export class Model {
         range: task.branch && task.start ? (p.section === "done" ? `${task.start}..${task.head ?? task.branch}` : `${task.base ?? task.start}...${task.branch}`) : null,
       };
     }));
-    this.live.put("tasks", rows);
+    // (the board's fields go out in the snapshot only)
+    this.live.put("tasks", rows.map(({ board, range, ...r }) => r));
     void this.readSizes(rows);
 
     const bar = sidebarOf(this.value("spaces-chat"));

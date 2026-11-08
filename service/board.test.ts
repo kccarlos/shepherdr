@@ -74,6 +74,26 @@ test("agents carry their real CLI, model, parent and state; the worker's cli is 
   expect(t.agent.cli).toBe("claude");
 });
 
+test("a codex worker reads as codex on its row and in its agents", async () => {
+  const t15 = real.tasks.find((t: any) => t.id === 15);
+  const was = t15.agents;
+  t15.agents = [{ ...was[0], agent: "codex", argv: ["codex", "-m", "gpt-6"] }];
+  try {
+    const t = (await snapshot({ t6n: "working" })).snap.tasks.find((x: any) => x.id.endsWith("-15"));
+    expect(t.agent.cli).toBe("codex");
+    expect(t.agents[0]).toMatchObject({ role: "worker", cli: "codex", model: "gpt-6" });
+  } finally { t15.agents = was; }
+});
+
+test("the tasks view pages get keeps its old shape: the board's fields go in the snapshot only", async () => {
+  const views: any[] = [];
+  const m: any = new Model(hub({}) as any, { put: (k: string, v: any) => k === "tasks" && views.push(v) } as any);
+  m.lists.set(null, [{ slug: "factory", name: "factory-run", prefix: "FAC", folder: tmp, machine: null, tasks: real.tasks }]);
+  m.build();
+  expect(views[0].length).toBe(4);
+  expect(views[0].some((r: any) => "board" in r || "range" in r)).toBe(false);
+});
+
 test("evidence: only herdr-task's review rounds; a size from git; a task with none is bare", async () => {
   const { snap } = await snapshot({});
   const byId = (n: number) => snap.tasks.find((x: any) => x.id.endsWith(`-${n}`));

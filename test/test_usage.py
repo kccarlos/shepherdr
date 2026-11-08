@@ -1,4 +1,5 @@
 """herdr_task.usage: codexbar readings (recorded in test/fixtures/codexbar, account details replaced) into pools."""
+import json
 import os
 import sys
 import tempfile
@@ -30,6 +31,14 @@ class Parse(unittest.TestCase):
         self.assertEqual(sorted(pools), ["antigravity-claude-gpt", "antigravity-gemini"])
         self.assertEqual((pools["antigravity-gemini"]["five"], pools["antigravity-gemini"]["week"]), (97.1, 76.3))
         self.assertEqual(pools["antigravity-claude-gpt"]["week_reset"], "2026-11-11T08:02:36Z")
+
+    def test_a_model_scoped_tertiary_window_doesnt_replace_the_weekly_one(self):
+        d = json.loads(fixture("claude"))
+        d[0]["usage"]["secondary"]["usedPercent"] = 99.5
+        d[0]["usage"]["tertiary"] = {"windowMinutes": 10080, "usedPercent": 15, "resetsAt": "2026-11-11T00:00:00Z"}
+        (c,) = usage.parse("claude", json.dumps(d))
+        self.assertEqual(c["week"], 0.5)
+        self.assertIsNone(usage.pick([c], {"claude"}, False))
 
     def test_a_failing_provider_is_unknown(self):
         for text in ("", "not json", "[]", '[{"error":"x"}]'):

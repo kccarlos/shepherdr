@@ -33,7 +33,7 @@ def parse(provider, text):
         usage = json.loads(text)[0]["usage"]
         if provider != "antigravity":
             pool = _unknown(provider)
-            for k in ("primary", "secondary", "tertiary"):
+            for k in ("primary", "secondary"):
                 _fill(pool, usage.get(k))
             return [pool] if pool["state"] == "ok" else [_unknown(provider)]
         pools = {name: _unknown(name) for name in _AG.values()}
@@ -66,7 +66,7 @@ def read(cache_dir, fetch=_codexbar, clock=time.time):
         pass
     pools = [p for prov in PROVIDERS for p in parse(prov, fetch(prov))]
     os.makedirs(cache_dir, exist_ok=True)
-    tmp = path + ".tmp"
+    tmp = "%s.%d.tmp" % (path, os.getpid())
     with open(tmp, "w") as f:
         json.dump({"at": clock(), "pools": pools}, f)
     os.replace(tmp, path)

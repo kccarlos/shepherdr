@@ -1653,6 +1653,7 @@ class GateReview(unittest.TestCase):
         self.store.loc["folder"] = self.main
         self.task = self.store.data["tasks"][0]
         self.runs, self.told = [], []
+        self.reviewer_term = {"state": "live", "agent": "agy"}  # what hc get says of a reviewer
 
         def hc_run(argv, **k):
             self.runs.append(argv)
@@ -1668,7 +1669,7 @@ class GateReview(unittest.TestCase):
                                  (launch, "run", hc_run), (launch, "hc_json", lambda *a: None),
                                  (launch, "low_priority", lambda argv, name: argv), (templates, "TEMPLATES", tdir),
                                  (settings, "SETTINGS", os.path.join(tdir, "none.json")),
-                                 (commands, "hc_json", lambda *a: {"state": "live"}),
+                                 (commands, "hc_json", lambda *a: self.reviewer_term),
                                  (commands, "subprocess", mock.Mock())):  # no real `hc kill` of a reviewer
             p = mock.patch.object(mod, name, value)
             p.start()
@@ -1794,6 +1795,37 @@ class GateReview(unittest.TestCase):
         self.ready()  # the same head: no fresh reviewer for unfixed code
         self.assertEqual(len(self.runs), 1)
         self.assertEqual(self.task["state"], "running")
+
+    def test_a_reviewer_gone_without_a_verdict_doesnt_stop_the_next(self):
+        self.ready()
+        self.reviewer_term = {"state": "live", "agent": "zsh", "foreground": {"name": "zsh"}}  # its CLI exited, the kept shell stays
+        self.ready()
+        self.assertEqual([r["round"] for r in self.task["review_runs"]], [1, 2])
+
+    def test_findings_below_must_fix_never_block(self):
+        self.ready()
+        with self.assertRaises(self.commands.Fail):
+            self.verdict("term-1", passed=False, changes="nitpick: rename a variable", must_fix=0)
+        self.assertNotIn("reviews", self.task)
+
+    def test_review_more_and_show_in_a_gate_folder(self):
+        import argparse
+        from unittest import mock
+        self.task["set"]["review_rounds"] = 1
+        self.ready()
+        self.verdict("term-1")
+        self.assertNotIn("progress", self.task)  # its "reviewer is on it" line is gone: it waits for a round
+        sent = []
+        with mock.patch("herdr_task.news.send_or_hold", lambda to, msg: sent.append(msg) or True), \
+                mock.patch.object(self.commands, "workers", lambda s, t: [{"address": "w1"}]), \
+                mock.patch.object(self.commands, "caller_labels", lambda: {}):
+            self.commands.cmd_review_more(argparse.Namespace(id="SHEP-13", json=True, folder=None))
+        self.assertIn(" ready SHEP-13", sent[0])
+        self.assertNotIn(" reviewed ", sent[0])
+        self.assertEqual(self.commands.rounds_used(self.task, True), 1)
+        from herdr_task import settings
+        self.assertEqual(settings.review_limits(self.store, {"id": 4, "title": "x", "mode": "worktree", "agents": [],
+                                                             "set": {"review_min": 5}}), (True, 5))
 
     def test_a_codex_reviewer_is_told_to_escalate_its_verdict(self):
         self.task["reviewer"], self.task["reviewer_model"] = "codex", None

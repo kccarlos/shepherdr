@@ -219,7 +219,7 @@ def cmd_show(args):
         v["settings"] = task_settings(s, t)
         on, rounds = review_limits(s, t)
         if on:
-            v["review_rounds"] = {"used": rounds_used(t), "of": rounds, "added": int(t.get("review_rounds_added") or 0)}
+            v["review_rounds"] = {"used": rounds_used(t, bool(gate_min(s, t))), "of": rounds, "added": int(t.get("review_rounds_added") or 0)}
         v["after_refs"] = after_refs(s, t)
         block = settings_block(s, t)
         if getattr(args, "evidence", False):
@@ -443,7 +443,7 @@ def gate_step(s, t):
     runs, done = t.get("review_runs") or [], {r["round"] for r in mine}
     if mine and mine[-1]["head"] == head and mine[-1]["verdict"] == "changes":
         return f"{s.ref(t)}: Herdr's reviewer asked for changes to {head[:7]}: fix them, commit, then run ready again."
-    if any(r["head"] == head and r["round"] not in done and (hc_json("get", r["address"]) or {}).get("state") == "live" for r in runs):
+    if any(r["head"] == head and r["round"] not in done and (k := hc_json("get", r["address"]) or {}).get("state") == "live" and agent_running(k) for r in runs):
         return f"{s.ref(t)}: Herdr's reviewer is still reviewing {head[:7]}; its findings come to you as a message."
     on, rounds = review_limits(s, t)
     if len(runs) >= rounds:
@@ -559,8 +559,10 @@ def cmd_review_more(args):
             ht, folder = own_path(), shlex.quote(s.loc["folder"])
             from .news import send_or_hold
             r = send_or_hold(live[-1]["address"],
-                     f"Your Assistant added one review round to {s.ref(t)}: {rounds + 1} in all. Have your final commit reviewed, "
-                     f"record it with `{ht} reviewed {s.ref(t)} --folder {folder} --report \"<findings, a line>\"`, then run ready again.")
+                     f"Your Assistant added one review round to {s.ref(t)}: {rounds + 1} in all. " + (
+                         f"Run `{ht} ready {s.ref(t)} --folder {folder}` again: Herdr starts its reviewer." if gate_min(s, t) else
+                         f"Have your final commit reviewed, record it with `{ht} reviewed {s.ref(t)} --folder {folder} --report "
+                         f"\"<findings, a line>\"`, then run ready again."))
             told = live[-1]["address"] if r else None
         v = view(s, t)
     say(args, {**v, "rounds": rounds + 1, "told": told},
@@ -762,12 +764,13 @@ def gate_verdict(s, t, args, text):
     if git(wt, "rev-parse", "HEAD")[1] != rn["head"] or git(wt, "status", "--porcelain", "--untracked-files=no")[1]:
         raise Fail(f"{wt} has moved on from {rn['head'][:7]} or has uncommitted changes: this round's verdict no longer applies.")
     must = args.must_fix if args.must_fix is not None else (0 if args.passed else None)
-    if must is None or must < 0 or (args.passed and must):
-        raise Fail("Say --pass (nothing at Must fix), or --changes \"…\" --must-fix N: N findings at or above Must fix.")
+    if must is None or must < 0 or bool(args.passed) != (must == 0):  # findings below Must fix never block
+        raise Fail("Say --pass (nothing at Must fix; --notes for the rest), or --changes \"…\" --must-fix N: N (1 or more) findings at or above Must fix.")
     t.setdefault("reviews", []).append({"round": rn["round"], "head": rn["head"], "by": me, "started_by": "herdr-task",
                                         "verdict": "pass" if args.passed else "changes", "must_fix": must,
                                         "report": (text or args.notes or "").strip()[:2000], "at": now()})
-    t.pop("review_out", None)
+    for k in ("review_out", "progress"):
+        t.pop(k, None)
     s.dirty = True
     if args.passed:
         msg = f"{s.ref(t)}: review round {rn['round']} passed. " + (gate_step(s, t) or finalize(s, t))
@@ -785,7 +788,7 @@ def cmd_state(args, state):
         t = s.find(args.id)
         if state == "reopen":
             state = "running" if t.get("started") and t["state"] not in ("queued", "scheduled") else "todo"
-            for k in ("reviews", "review", "auto_merge", "merged", "nothing_to_merge", "accepted_at"):
+            for k in ("reviews", "review", "review_runs", "review_out", "auto_merge", "merged", "nothing_to_merge", "accepted_at"):
                 t.pop(k, None)
         if state == "done" and t.get("worktree") and merged_here(s, t):
             t["merged"] = True

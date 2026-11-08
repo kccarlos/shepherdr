@@ -4,12 +4,12 @@ import re
 SHA = re.compile(r"[0-9a-f]{40}")
 
 
-def _check(r, ints=(), strs=(), shas=(), lists=(), enums=None, caps=None, extra=(), optional=()):
+def _check(r, ints=(), strs=(), shas=(), lists=(), enums=None, caps=None, extra=()):
     if not isinstance(r, dict):
         raise ValueError("record is not an object")
     keys = set(ints) | set(strs) | set(shas) | set(lists) | set(enums or {}) | set(caps or {}) | set(extra)
-    if set(r) - keys - set(optional) or keys - set(r):
-        raise ValueError(f"keys differ: {sorted(set(r) ^ keys)}")
+    if set(r) != keys:
+        raise ValueError(f"keys differ: {sorted(set(r) ^ keys, key=repr)}")
     for k in ints:
         if type(r[k]) is not int:
             raise ValueError(f"{k} is not an int")
@@ -31,7 +31,9 @@ def _check(r, ints=(), strs=(), shas=(), lists=(), enums=None, caps=None, extra=
 
 
 def validate_review_run(r):
-    _check(r, ints=("round", "at"), strs=("address", "cli", "model"), shas=("head",))
+    _check(r, ints=("round", "at"), strs=("address", "cli"), shas=("head",), extra=("model",))
+    if r["model"] is not None and (not isinstance(r["model"], str) or not r["model"]):
+        raise ValueError("model is a non-empty string or null")
     if r["round"] < 1:
         raise ValueError("round starts at 1")
 

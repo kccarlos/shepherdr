@@ -26,6 +26,7 @@ class GateEvidence(unittest.TestCase):
         bad("reviews", started_by="worker")
         bad("reviews", must_fix=2)
         bad("review_runs", round=0)
+        bad("review_runs", model="")
         bad("reviews", must_fix="0")
         bad("reviews", report="x" * 2001)
         bad("checks", exit=True)
@@ -35,6 +36,9 @@ class GateEvidence(unittest.TestCase):
         bad("verdicts", extra=1)
 
     def test_edge_cases(self):
+        validate_review_run({**example("review_runs"), "model": None})
+        with self.assertRaises(ValueError):
+            validate_verdict({1: 2})
         r = example("reviews"); del r["started_by"]
         with self.assertRaises(ValueError):
             validate_review(r)

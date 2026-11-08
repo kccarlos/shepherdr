@@ -3,7 +3,7 @@
 What the merge gate (docs/factory.md section 6) reads from a task's store entry `t`, and what its producers
 (herdr-task, the checks runner, the verifier) must write. G4 consumes it; G2, G3 and G5 produce it. The validator is
 `test/contract_gate_evidence.py`; each producer's test runs it on the records its own code really writes.
-Unknown extra keys are rejected. `sha`/`head` are 40-hex SHAs. Times (`at`, `started_at`, `finished_at`) are ms ints.
+Unknown extra keys are rejected. `review_runs[].model` is a non-empty string, or null when the CLI's default model ran. `sha`/`head` are 40-hex SHAs. Times (`at`, `started_at`, `finished_at`) are ms ints.
 
 ## `t["review_runs"][]`: a reviewer herdr-task started
 ```json

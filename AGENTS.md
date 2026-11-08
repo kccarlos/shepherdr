@@ -79,6 +79,7 @@ How to run, build and lay out the code: [docs/develop.md](docs/develop.md).
 
 - In a throwaway core's terminal, unsetting `HC_SESSION` alone makes hc reach the live core: also set
   `HC_SOCKET=$HC_TERMINAL_SOCKET` (herdr-task's guard allows that).
+- Ask-pane tests run the real pane on a pty (`test_herdr_task.AskPane`); a stuck pane must be killed or the test hangs.
 - herdr-task refuses to run hc with a changed `HC_SESSION`: for a real run on a throwaway core, put a tiny hc shim first
   on PATH that runs `HC_SESSION=<name> hc "$@"`, and leave `HC_SESSION` unset for herdr-task itself.
 - Checks run inside a throwaway core's terminal inherit its `HC_SESSION`, so

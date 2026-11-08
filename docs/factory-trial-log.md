@@ -83,3 +83,6 @@ answer (2026-11-08). It becomes the role allow lists in phase 3 (docs/factory.md
   end up in task branches and conflict once origin has them under other SHAs (FAC-11, 15, 28, 29, 35, 37, 38).
 - Size call: FAC-49 (agy reviewer sandbox) at ~154 production lines incl. a 40-line profile, limit ~120; growth from
   the read confinement and per-run agy state the person added mid-task. Accepted by the Assistant.
+- Size call: FAC-50 (consent-path probe) to ~70 lines (limit ~30) to fix round 1's two blockers (the news never went
+  out; a fresh tick process repeated the probe and the news). The separate start-up probe in the scheduler is left for
+  a follow-up.

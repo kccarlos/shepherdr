@@ -69,3 +69,7 @@ answer (2026-11-08). It becomes the role allow lists in phase 3 (docs/factory.md
   (`--settings` allow list, G6), or must not run checks (G3 runs them).
 - G2's gate_step diffs `<stored start>..<head>`, and `start` never moves on a rebase: FAC-15's reviewer would have
   got 939 lines in 12 files (other tasks' merged work mixed in, cut at 20k characters) for a ~103-line change.
+- FAC-28's tests left three ask panes ("Ship?": t6s, t6t, t6v, children of its worker t6q) on the person's live
+  herdr-core, although briefs say a throwaway core. A sheepdog watching that core would turn them into phone
+  questions. FAC-28 was told to stop exactly those three and to move every ask-pane test and real run to a throwaway
+  core (HC_SESSION shim plus HC_SOCKET). The real ask t79 (FAC-31 design approval) stays.

@@ -4293,14 +4293,14 @@ class AskPane(unittest.TestCase):
         self.tmp = tempfile.mkdtemp(prefix="ask-pane-")
         self.addCleanup(shutil.rmtree, self.tmp, True)
         os.makedirs(os.path.join(self.tmp, "asks"))
-        with open(os.path.join(self.tmp, "asks", "ab1.json"), "w") as f:
-            json.dump({"id": "ab1", "question": "Ship it?", "options": ["Yes, ship", "Wait for review", "Drop it"],
-                       "recommend": "Wait for review"}, f)
         self.env = {**os.environ, "HERDR_TASK_STORE": self.tmp}
 
     def pane(self, feed):
         """Runs the real pane on a pseudo-terminal, sends `feed` once its prompt is up; returns (screen, record)."""
         import pty, select, time
+        with open(os.path.join(self.tmp, "asks", "ab1.json"), "w") as f:  # fresh each run: no answer left over
+            json.dump({"id": "ab1", "question": "Ship it?", "options": ["Yes, ship", "Wait for review", "Drop it"],
+                       "recommend": "Wait for review"}, f)
         pid, fd = pty.fork()
         if pid == 0:
             os.execve(sys.executable, [sys.executable, os.path.join(BIN, "herdr-task"), "_ask-pane", "ab1"], self.env)
@@ -4318,12 +4318,20 @@ class AskPane(unittest.TestCase):
                 os.write(fd, feed)
                 sent = True
         try:
-            os.kill(pid, 9)  # a pane that never answered (the old one) must not hang the test
-        except OSError:
-            pass
-        os.waitpid(pid, 0)
+            for _ in range(20):  # the pane ends by itself once answered
+                done, status = os.waitpid(pid, os.WNOHANG)
+                if done:
+                    break
+                time.sleep(0.1)
+            else:
+                os.kill(pid, 9)  # a pane that never answered (the old one) must not hang the test
+                os.waitpid(pid, 0)
+                self.fail("the pane did not end")
+        finally:
+            os.close(fd)
+        self.assertEqual(status, 0, "the pane crashed")
         with open(os.path.join(self.tmp, "asks", "ab1.json")) as f:
-            return out.decode(), json.load(f)
+            return out.decode(errors="replace"), json.load(f)
 
     def test_the_screen_parses_as_a_question_card_on_the_recommended_option(self):
         screen, _ = self.pane(b"1")
@@ -4336,6 +4344,12 @@ class AskPane(unittest.TestCase):
 
     def test_typed_words_still_answer(self):
         self.assertEqual(self.pane(b"2 weeks, then ship\r")[1]["answer"], "2 weeks, then ship")
+
+    def test_typing_edits_like_a_terminal(self):
+        for keys, want in ((b"\xc2\xb2 maybe\r", "\xb2 maybe"), ("\u6539\u5929\r".encode(), "\u6539\u5929"),
+                           (b"n\x7f1\r", "Yes, ship"), (b"\x7f2\r", "Wait for review"),
+                           (b"\x1b[B3\r", "Drop it"), (b"\x1b[B\x1b[A1", "Yes, ship")):
+            self.assertEqual(self.pane(keys)[1]["answer"], want, keys)
 
     def test_a_recommended_no_needs_a_yes_to_be_tappable(self):
         import argparse
@@ -4352,4 +4366,8 @@ class AskPane(unittest.TestCase):
                 ask.cmd_ask(args(["Wait for review", "Ship now"], "Wait for review"))
             with self.assertRaisesRegex(ask.Fail, "own terminal"):
                 ask.cmd_ask(args(["Wait for review", "Yes, ship"], "Wait for review"))
+            with self.assertRaisesRegex(ask.Fail, "own terminal"):  # "Do it" is no negative, "Do not" is
+                ask.cmd_ask(args(["Do it now", "Hold"], "Do it now"))
+            with self.assertRaisesRegex(ask.Fail, "starts with"):
+                ask.cmd_ask(args(["Do not ship", "Ship"], "Do not ship"))
             run.assert_not_called()

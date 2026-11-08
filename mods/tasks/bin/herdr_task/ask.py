@@ -11,6 +11,7 @@ Assistant has ended, so a restarted one can still find the answer.
 """
 
 import base64
+import codecs
 import json
 import os
 import secrets
@@ -24,7 +25,7 @@ from .output import say
 
 ASKS = os.path.join(STORE, "asks")
 # Sheepdog's rail refuses an approving answer whose words open with one of these (supervisor/inputs.go negativeWords)
-NEGATIVE = {"no", "nope", "nah", "don't", "dont", "do", "stop", "cancel", "never", "deny", "decline", "reject", "wait", "hold", "negative"}
+NEGATIVE = {"no", "nope", "nah", "don't", "dont", "stop", "cancel", "never", "deny", "decline", "reject", "wait", "hold", "negative"}
 MSG_MAX = 300  # the question in the OSC report, cut: hc refuses an overlong sequence
 
 
@@ -64,12 +65,13 @@ def cmd_ask(args):
     question = " ".join((args.question or "").split())
     options = [" ".join(o.split()) for o in args.option or []]
     recommend = None if args.recommend is None else " ".join(args.recommend.split())
-    if not question or len(options) < 2 or not all(options) or len(set(options)) < len(options):
-        raise Fail('Say the question and at least two different options: herdr-task ask "<question>" --option A --option B --recommend A')
+    if not question or not 2 <= len(options) <= 9 or not all(options) or len(set(options)) < len(options):
+        raise Fail('Say the question and two to nine different options: herdr-task ask "<question>" --option A --option B --recommend A')
     if recommend not in options:
         raise Fail(f"--recommend must be one of the options: {', '.join(options) or 'none given'}")
-    first = (recommend.lower().split() or [""])[0].strip(".!?,;:")
-    if first in NEGATIVE and not any(o.lower().startswith("yes") for o in options):
+    words = [w.strip(".!?,;:") for w in recommend.lower().split()]
+    first = " ".join(words[:2]) if words[:2] == ["do", "not"] else (words or [""])[0]
+    if first in NEGATIVE | {"do not"} and not any(o.lower().startswith("yes") for o in options):
         raise Fail(f'Sheepdog can\'t tap a recommended option that starts with "{first}" unless another option starts with "Yes": reword it or add one.')
     if not os.environ.get("HC_TERMINAL_ID"):  # the answer's news goes to the asker's terminal
         raise Fail("Run it from an agent's own terminal (there's no HC_TERMINAL_ID here).")
@@ -100,27 +102,46 @@ def report(state, kind=None, msg=None):
 
 
 def read_answer(count):
-    """One answer: a digit alone (sheepdog's tap sends no Enter) answers once nothing follows it for a moment;
-    anything else is a line of words, as typed. Without a terminal, a plain line."""
+    """One answer, read key by key: a digit alone (sheepdog's tap sends no Enter) answers once nothing follows it for a
+    moment; anything else is a line of words, as typed (Backspace edits, arrow keys are ignored). Without a terminal,
+    a plain line."""
     if not sys.stdin.isatty():
         return input("> ")
     fd, old = sys.stdin.fileno(), termios.tcgetattr(sys.stdin.fileno())
+    dec, buf, esc = codecs.getincrementaldecoder("utf-8")("replace"), "", None
     try:
         tty.setcbreak(fd)  # before the prompt shows: switching later can drop a key typed in between
         sys.stdout.write("> ")
         sys.stdout.flush()
-        ch = os.read(fd, 1).decode(errors="replace")
-        if not ch:
-            raise EOFError
-        if ch.isascii() and ch.isdigit() and 1 <= int(ch) <= count and count < 10 and not select.select([fd], [], [], 0.3)[0]:
-            return ch
+        while True:
+            if len(buf) == 1 and buf.isascii() and buf.isdigit() and 1 <= int(buf) <= count \
+                    and not select.select([fd], [], [], 0.3)[0]:
+                return buf
+            data = os.read(fd, 1024)
+            if not data:
+                raise EOFError
+            for ch in dec.decode(data):
+                if esc == "esc":  # an escape sequence (an arrow key) is swallowed up to its last character
+                    esc = "seq" if ch in "[O" else None
+                elif esc == "seq":
+                    esc = None if "@" <= ch <= "~" else esc
+                elif ch == "\x1b":
+                    esc = "esc"
+                elif ch in "\r\n":
+                    return buf
+                elif ch in "\x7f\b":
+                    if buf:
+                        buf = buf[:-1]
+                        sys.stdout.write("\b \b")
+                elif ch == "\x04" and not buf:
+                    raise EOFError
+                elif ch.isprintable():
+                    buf += ch
+                    sys.stdout.write(ch)
+                sys.stdout.flush()
     finally:
         termios.tcsetattr(fd, termios.TCSADRAIN, old)
-    if ch in "\r\n":
-        return ""
-    sys.stdout.write(ch)
-    sys.stdout.flush()
-    return ch + input("")
+        sys.stdout.write("\r\n")
 
 
 def cmd_ask_pane(args):

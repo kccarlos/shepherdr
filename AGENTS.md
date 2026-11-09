@@ -74,6 +74,8 @@ How to run, build and lay out the code: [docs/develop.md](docs/develop.md).
 - Screenshots on the Mac mini (no agent-browser): headless Brave over CDP (`--remote-debugging-port`, a Bun WebSocket)
   drives the built web app; a Bun stub answering `/api/ws` with a snapshot, and a chat for each watch message's keys,
   renders all of it.
+- Parallel tasks' screenshot scripts share headless Brave's CDP port 9333 and capture each other's pages: give each
+  task's script its own `--remote-debugging-port`.
 - Crash recovery for real: a throwaway core, `HC_SESSION=<name> hc ...` with `HC_TERMINAL_SOCKET` and Claude's
   `CLAUDE_*` env unset (`CLAUDE_CODE_CHILD_SESSION` turns off transcripts).
 - The web app's kernel.ts rewrites the URL when it's imported: read a special address (like `?preview`) in a module

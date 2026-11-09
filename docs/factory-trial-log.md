@@ -180,3 +180,7 @@ answer (2026-11-08). It becomes the role allow lists in phase 3 (docs/factory.md
 - Shepherdr status bug (orchestrator, FAC-41): a Ready task stayed "Working again" for an hour while its worker sat
   idle and done; a turn that ends without changes doesn't bring it back to Ready (same family as FAC-39/42's
   reviewer-exit drops). Fix: return to Ready when the agent rests with HEAD unchanged since ready.
+- FAC-53 started with the folder's review.min 3 (missed when the rule went to 2): rounds 3-4 passed, round 5 found a
+  real major (delta reviews re-sent the whole diff from round 3 on), and its 11-line fix ran out of rounds. Counted
+  as its one continue: review.min 1 plus review-more, one Argon round on the fix; a Must-fix there means a recap.
+  Tasks added from now carry review.min 2 explicitly.

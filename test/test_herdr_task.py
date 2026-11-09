@@ -2133,6 +2133,12 @@ class LoopBreaker(GateReview):
             self.assertEqual(self.why(), [])
         with mock.patch.object(budget, "now", lambda: 1000 + 120001):
             self.assertIn("time estimate (2m of 1m)", self.why()[0])
+        with mock.patch.object(budget, "now", lambda: 1000 + 10 ** 7):
+            self.task["state"] = "ready"  # waiting for the person's Accept: no time counts
+            self.assertEqual(self.why(), [])
+            self.task["state"] = "running"
+            self.task["recaps"] = [{"decision": "continue", "why": "w", "at": 1000 + 10 ** 7 - 120000}]
+            self.assertEqual(self.why(), [])  # counts from the decision, not the start
         self.task.pop("estimate_time")
         with mock.patch.object(budget, "now", lambda: 10 ** 12):
             self.assertEqual(self.why(), [])
@@ -2153,6 +2159,9 @@ class LoopBreaker(GateReview):
             f.write(line("m2")[30:])
         self.assertIn("token estimate (2k of 500)", self.why()[0])
         self.assertEqual(self.task["tokens"][log]["sum"], 2000)
+        self.task["recaps"] = [{"decision": "continue", "why": "w", "at": 1, "tokens": 1500}]
+        self.assertEqual(self.why(), [])  # 500 since the decision
+        self.task.pop("recaps")
         from herdr_task.settings import set_task
         set_task(self.task, "estimate.tokens", "3M")
         set_task(self.task, "estimate.time", "1h30m")
@@ -2187,6 +2196,7 @@ class LoopBreaker(GateReview):
         self.assertTrue(self.task["attention"].startswith("Recap required: review round 2 still has 1"))
         self.assertIn("RECAP.md", self.told[-1])
         self.assertIn("Don't fix anything more", self.told[-1])
+        self.assertIn("gate.txt still says hi", self.told[-1])  # the findings, for the recap
         self.assertEqual(self.task["recap"]["round"], 2)
         with self.assertRaises(self.commands.Fail) as e:
             self.ready()

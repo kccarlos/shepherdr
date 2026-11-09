@@ -112,11 +112,14 @@ def triggers(s, t):
     again = sorted(set.union(set(), *[x & y for i, x in enumerate(flagged) for y in flagged[i + 1:]]))
     if again:
         why.append("the same file flagged in two rounds: " + ", ".join(again[:3]))
-    est = t.get("estimate_time")
-    if est and t.get("started") and now() - t["started"] > 2 * est:
-        why.append(f"over twice its time estimate ({time_words(now() - t['started'])} of {time_words(est)})")
+    # Budgets count from the last decision (else from its start); time only while it works, not
+    # while it waits in Ready for the person.
+    est, dec = t.get("estimate_time"), (t.get("recaps") or [{}])[-1]
+    began = dec.get("at") or t.get("started")
+    if est and began and t["state"] == "running" and now() - began > 2 * est:
+        why.append(f"over twice its time estimate ({time_words(now() - began)} of {time_words(est)})")
     est = t.get("estimate_tokens")
-    used = token_sum(s, t) if est else 0
+    used = token_sum(s, t) - (dec.get("tokens") or 0) if est else 0
     if est and used > 2 * est:
         why.append(f"over twice its token estimate ({tokens_words(used)} of {tokens_words(est)})")
     return list(dict.fromkeys(why))
@@ -147,9 +150,14 @@ def budget_pass(s, t):
     return True
 
 
+def last_findings(t):
+    r = next((r for r in reversed(rounds_since(t)) if r.get("verdict") == "changes"), None)
+    return f"\n\nThe last review round's findings:\n{r['report']}\n\n" if r and r.get("report") else " "
+
+
 def stop_words(s, t, why, again):
     wt = t.get("worktree") or "the worktree"
-    return (f"Stop {s.ref(t)}: Herdr's loop-breaker says recap first ({'; '.join(why)}). Don't fix anything more. "
+    return (f"Stop {s.ref(t)}: Herdr's loop-breaker says recap first ({'; '.join(why)}).{last_findings(t)}Don't fix anything more. "
             f"Write RECAP.md at {wt}/RECAP.md, untracked and never committed, half a page at most: the goal, what was "
             f"tried round by round, the recurring findings and the premise behind them, and the options (one more round, "
             f"split, new approach, drop). Then end your turn and wait: your Assistant decides what happens next."
@@ -203,8 +211,9 @@ def cmd_recap(args):
             raise Fail("Say why in one line: --why \"…\".")
         if args.decide == "continue" and t.get("recaps"):
             raise Fail(f"{s.ref(t)} already had its one continue after a recap: split it, give it a new approach, or drop it.")
+        found = last_findings(t)  # before the decision starts the round count afresh
         t.setdefault("recaps", []).append({"decision": args.decide, "why": " ".join(args.why.split())[:300], "at": now(),
-                                           "reasons": rc.get("reasons", [])})
+                                           "reasons": rc.get("reasons", []), "tokens": token_sum(s, t)})
         t.pop("recap")
         if (t.get("attention") or "").startswith("Recap required"):
             t.pop("attention", None)
@@ -215,8 +224,8 @@ def cmd_recap(args):
             from .commands import tell, workers
             from .launch import own_path
             if workers(s, t):
-                told = tell(s, t, f"Your Assistant read the recap of {s.ref(t)} and says go on: {args.why.strip()} "
-                                  f"Carry on, then run `{own_path()} ready {s.ref(t)} --folder {shlex.quote(s.loc['folder'])}` again.", None)[0]
+                told = tell(s, t, f"Your Assistant read the recap of {s.ref(t)} and says go on: {args.why.strip()}"
+                                  f"{found}Carry on, then run `{own_path()} ready {s.ref(t)} --folder {shlex.quote(s.loc['folder'])}` again.", None)[0]
     say(args, {"decision": args.decide, "told": told},
         f"{s.ref(t)}: recap decided: {args.decide}" + (f"; told {told}." if told else "." if args.decide == "continue" else
                                                        "; act on it yourself (new tasks, a new brief, or the person's cancel)."))

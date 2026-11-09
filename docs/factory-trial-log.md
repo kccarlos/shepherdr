@@ -194,3 +194,7 @@ answer (2026-11-08). It becomes the role allow lists in phase 3 (docs/factory.md
   FAC-51's AGENTS.md line added now that vm/ is merged.
 - FAC-56 scope call: the VM's reviewer stays herdr-task's sandboxed agy (FAC-49: unattended, never prompts), the one
   exception to "permissions skipped", noted in vm/README.md; no reviewer-launch code change (the host runs it too).
+- FAC-54 merged and installed: the loop-breaker is now code. Its first tick flagged FAC-40 on its pre-existing rounds
+  and told the worker to stop mid-build; the Assistant recorded the decision already made (`recap --decide new`, the
+  side panel; FAC-40 had used 3.9M Claude tokens) and told the worker to carry on. Recap decisions go through
+  `herdr-task recap` from now on, and new tasks get `--set estimate.time/estimate.tokens`.

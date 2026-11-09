@@ -133,3 +133,6 @@ answer (2026-11-08). It becomes the role allow lists in phase 3 (docs/factory.md
 - FAC-54 added: loop-breaker and per-task budget in code (Opus worker, Argon review, min 2, at most 3 rounds), queued
   behind 7 running tasks (limit 3). Cancelled FAC-32/34 still have idle workers (t72, t73) and reviewers (t11f, t11b);
   left for the person to end.
+- FAC-15: cut to its core (commands.py +44/-54, 8 tests). The worker merged origin/kc-factory into its branch to clear
+  a test-file conflict; the Assistant reset its stored start d6722e06 -> c5917bb7 (the merge-base), so the Argon round
+  sees only FAC-15's 2 files. That round is one of its last two; a Must-fix finding means a recap, not a fix.

@@ -1,5 +1,14 @@
-// The board home's usage strip (screens/Home.tsx), apart from the screen so a test can run it: contracts/board-data.md's
-// pools as the canvas draws them, one tile per window.
+// The board home's readers (screens/Home.tsx), apart from the screen so a test can run them: contracts/board-data.md's
+// pools as the canvas draws them, one tile per window; and which deliverables it shows.
+import { validateLink } from '@shared/board-contract.ts'
+
+/** a deliverable from GET api/deliverables the strip may show: an artifact card, or a design link that fits the
+ *  contract and goes to a real host (it becomes a link the person opens) */
+export function shownDeliverable(x: { kind?: unknown; id?: unknown; url?: unknown }) {
+  if (!('kind' in x)) return typeof x.id === 'string'
+  try { return !validateLink(x).length && !!new URL(x.url as string).host } catch { return false }
+}
+
 export type Pool = { pool: string; five_hour_left: number | null; week_left: number | null; five_hour_reset: string | null; week_reset: string | null; state: string }
 
 const NAMES: Record<string, string> = { claude: 'claude', codex: 'codex', 'antigravity-gemini': 'gemini', 'antigravity-claude-gpt': 'antigravity' }

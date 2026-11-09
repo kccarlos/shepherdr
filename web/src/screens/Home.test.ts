@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
 import { validateAsk, validateLink, validatePool, validateTask } from '@shared/board-contract.ts'
-import { tiles } from '../board.ts'
+import { shownDeliverable, tiles } from '../board.ts'
 import fx from './home.fixture.json'
 
 // the home reads what contracts/board-data.md says; its fixture (the proof stub's data too) fits the contract
@@ -30,4 +30,13 @@ test('only the window at its floor says so', () => {
 test('a window with no reset still says it is empty or at its floor', () => {
   const t = tiles([{ pool: 'codex', five_hour_left: null, week_left: 0, five_hour_reset: null, week_reset: null, state: 'floor' }, { pool: 'claude', five_hour_left: 3, week_left: null, five_hour_reset: null, week_reset: null, state: 'floor' }])
   expect(t.map((x) => x.note)).toEqual(['empty', 'at its floor'])
+})
+
+test('the strip shows artifact cards and design links that fit the contract, nothing else', () => {
+  const at = 1762600000000
+  const shown = [{ id: 'proof-1', title: 'p', at, thumb: null }, { kind: 'link', title: 'Canvas', url: 'https://claude.ai/design/x', at },
+    { kind: 'link', title: 'x', url: 'data:text/html,<script>alert(1)</script>', at }, { kind: 'link', title: 'x', url: 'javascript:alert(1)', at },
+    { kind: 'link', title: 'x', url: 'https://', at }, { kind: 'link', title: 'x', url: 'https://a.example', at, extra: 1 }, { kind: 'other', url: 'https://a.example' }, { title: 'no id', at }]
+    .map(shownDeliverable)
+  expect(shown).toEqual([true, true, false, false, false, false, false, false])
 })

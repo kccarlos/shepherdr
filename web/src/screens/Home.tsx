@@ -7,7 +7,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { openArtifact, panesHere, placeOf, setUI, useSnap, useUI } from '../kernel.ts'
 import { GROUPS } from '../groups.ts'
 import { machineName, type Snapshot, type Task } from '@shared/types.ts'
-import { hhmm, tiles, type Pool } from '../board.ts'
+import { hhmm, shownDeliverable, tiles, type Pool } from '../board.ts'
 
 export type Agent = { role: 'worker' | 'reviewer' | 'verifier' | 'checks'; cli: string | null; model: string | null; address: string; parent: string | null; state: string }
 export type Ask = { id: string; question: string; options: string[]; recommend: string; task: string | null; answer: string | null; at: number }
@@ -32,7 +32,8 @@ const STATE: Record<string, string> = { blocked: 'waiting for you' }
 const DOT: Record<string, string> = { working: 'var(--sd-working)', blocked: 'var(--sd-blocked)', done: 'var(--sd-done)', idle: 'var(--sd-idle)' }
 const STATUS_DOT: Partial<Record<Task['status'], string>> = { need: DOT.blocked, ready: DOT.done, merging: DOT.done, work: DOT.working }
 
-const card = 'rounded-[var(--sd-radius)] border border-[var(--sd-line)] bg-[var(--sd-card)]'
+const box = 'rounded-[var(--sd-radius)] border bg-[var(--sd-card)]'
+const card = `${box} border-[var(--sd-line)]`
 const h2 = 'm-0 font-display text-lg font-semibold'
 const muted = 'text-[13px] text-[var(--sd-muted)]'
 const Needs = ({ children }: { children: ReactNode }) => (
@@ -63,7 +64,7 @@ export function Home() {
   const latest = new Map(dl.flatMap((d) => d.agents).map((a) => [`${a.ref}:${a.address}`, a.latest]))
   const proofs = new Set(dl.flatMap((d) => d.tasks.map((t) => t.proof?.id)))
   const refs = new Set(tasks.map(refOf))
-  const shown = dl.flatMap((d) => d.tasks.filter((t) => refs.has(t.ref)).flatMap((t) => t.deliverables.map((x) => ({ ...x, ref: t.ref })))).sort((a, b) => b.at - a.at).slice(0, 6)
+  const shown = dl.flatMap((d) => d.tasks.filter((t) => refs.has(t.ref)).flatMap((t) => t.deliverables.filter(shownDeliverable).map((x) => ({ ...x, ref: t.ref })))).sort((a, b) => b.at - a.at).slice(0, 6)
   const nodes = tasks.flatMap((t) => treeOf(t).map((n) => ({ t, ...n })))
   const running = nodes.reduce((n, x) => n + (live(x.w) ? 1 : 0) + x.kids.length, 0)
   return (
@@ -130,7 +131,7 @@ export function Home() {
                     <h2 className={`m-0 text-[13px] font-semibold tracking-[0.2px] uppercase ${status === 'need' ? 'text-[var(--sd-primary-text)]' : 'text-[var(--sd-muted)]'}`}>{label}</h2>
                     <span className={`${muted} tabular-nums`}>{rows.length}</span>
                   </div>
-                  <div className={`flex flex-col overflow-hidden ${card} ${status === 'need' ? 'border-[var(--sd-blocked)]' : ''}`}>
+                  <div className={`flex flex-col overflow-hidden ${box} ${status === 'need' ? 'border-[var(--sd-blocked)]' : 'border-[var(--sd-line)]'}`}>
                     {rows.map((t) => <Row key={t.id} t={t} />)}
                   </div>
                 </section>
@@ -174,11 +175,11 @@ export function Home() {
                       <div className="flex min-h-9 items-center gap-2.5">
                         <Dot c={DOT[w.state]} />
                         <div className="flex min-w-0 flex-auto flex-col">
-                          <span className="text-sm"><span className="font-mono text-xs text-[var(--sd-muted)]">{t.id}</span> worker</span>
+                          <span className="text-sm"><span className="font-mono text-xs text-[var(--sd-muted)]">{refOf(t)}</span> worker</span>
                           <span className="text-xs text-[var(--sd-muted)]">{who(w)} · {STATE[w.state] ?? w.state}</span>
                         </div>
                         {made?.thumb ? (
-                          <a href={`?artifact=${encodeURIComponent(made.id)}`} onClick={(e) => { e.preventDefault(); openArtifact(made.id) }} aria-label={`Preview ${t.id}: ${made.title}`}
+                          <a href={`?artifact=${encodeURIComponent(made.id)}`} onClick={(e) => { e.preventDefault(); openArtifact(made.id) }} aria-label={`Preview ${refOf(t)}: ${made.title}`}
                             className="box-border h-11 w-16 flex-none overflow-hidden rounded-[var(--sd-radius-sm)] border border-[var(--sd-line)] bg-[var(--sd-code)]">
                             <img src={made.thumb} alt="" className="size-full object-cover" />
                           </a>
@@ -212,7 +213,7 @@ function Row({ t }: { t: Task }) {
     <button type="button" onClick={() => pick(t.id)} className="flex min-h-11 w-full cursor-pointer flex-wrap items-center gap-x-3 gap-y-2 border-0 border-b border-[var(--sd-line)] bg-transparent px-3.5 py-2.5 text-left text-[var(--sd-fg)] last:border-b-0">
       <Dot c={STATUS_DOT[t.status]} s={8} />
       <div className="flex min-w-0 flex-[999_1_300px] flex-col gap-0.5">
-        <div className="flex min-w-0 items-baseline gap-2"><span className="font-mono text-xs text-[var(--sd-muted)]">{t.id}</span><span className="text-[15px]/snug font-medium">{t.name}</span></div>
+        <div className="flex min-w-0 items-baseline gap-2"><span className="font-mono text-xs text-[var(--sd-muted)]">{refOf(t)}</span><span className="text-[15px]/snug font-medium">{t.name}</span></div>
         {t.sub ? <span className={`text-[13px] ${t.status === 'need' ? 'text-[var(--sd-primary-text)]' : 'text-[var(--sd-muted)]'}`}>{t.sub}</span> : null}
       </div>
       <div className="flex flex-none flex-wrap items-center justify-end gap-1.5">

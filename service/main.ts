@@ -7,6 +7,7 @@
 //   SHEPHERDR_WEB=on|off           serve the web app and share it on the tailnet (default on)
 // Serve from (service/host.ts): one machine serves the web app and holds the shared data; on the others the service
 // reads and writes it there, keeps their settings in step (service/sync.ts) and doesn't share /shepherdr.
+import { refusedPage } from "./refused.ts";
 import { existsSync, readFileSync, writeFileSync, mkdirSync, statSync, rmSync } from "node:fs";
 import { join, normalize } from "node:path";
 import { randomBytes } from "node:crypto";
@@ -563,7 +564,7 @@ const server = Bun.serve<{ who: string }>({
     const socket = path === "/api/ws" || path === "/api/terminal" || path === "/api/browser" || path === "/api/voice";
     const viaTailnet = req.headers.has("tailscale-user-login");
     const pass = gate(req, g, socket, viaTailnet && trustedPeer(srv.requestIP(req)?.port, PORT));
-    if (!pass.ok) return new Response(pass.why, { status: pass.status });
+    if (!pass.ok) return pass.status === 403 && viaTailnet && req.method === "GET" && (req.headers.get("accept") ?? "").includes("text/html") ? refusedPage(pass.status, pass.why, WEB) : new Response(pass.why, { status: pass.status });
     if (path === "/api/browser") {
       // a task's browser (2.1's Browser panel): this machine's tasks
       const t = compat.taskOf(url.searchParams.get("task") ?? "");

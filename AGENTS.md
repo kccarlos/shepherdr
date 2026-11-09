@@ -60,6 +60,8 @@ How to run, build and lay out the code: [docs/develop.md](docs/develop.md).
 - Another machine in herdr-task tests: run herdr-task as a subprocess with `HERDR_TASK_STORE=<tmp>` and a fake hc first on
   PATH (see AutomationFromAnotherMachine).
 - Bun.spawn ignores a PATH changed inside a test: point the service at fakes with `SHEPHERDR_HERDR_APP` / `SHEPHERDR_HC`.
+- bun runs every service/*.test.ts in one process: env read at module load freezes at the first file that imports it, so
+  read env at call time or set it in test/preload.ts.
 - Python tests that patch `os.environ["PATH"]` do reach `subprocess.run` (unlike Bun.spawn): a fake `git` first on PATH
   can make one git call hang (see Scheduled.test_a_tick_stuck_in_git_doesnt_freeze_the_queue on FAC-10's branch).
 - No herdr-app window runs on the dev VM: window-mod UI can only be syntax-checked here, not screenshot. No ImageMagick

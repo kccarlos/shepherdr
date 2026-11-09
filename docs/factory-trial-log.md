@@ -147,3 +147,7 @@ answer (2026-11-08). It becomes the role allow lists in phase 3 (docs/factory.md
   finish(even_if_busy=True)) exists on kc-factory today, and data loss is always fixed: FAC-55 (Sonnet, ~5 lines plus
   a test with the real finish) guards it on its own. Finding 2 came only with the cut, so it goes with G4. Its branch
   and worktree are kept; the person cancels the task.
+- FAC-40: round 2 (Must fix 4, same as round 1) met the loop-breaker, but the worker hadn't been told the hand rule
+  and had already fixed and re-readied (round 3, t11q, running). Counted as its one continue; a Must-fix in round 3
+  is its second trigger. The hand rule (recap instead of fixing) was then sent to every active worker (FAC-39, 40,
+  42, 43, 50).

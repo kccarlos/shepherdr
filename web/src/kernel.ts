@@ -203,7 +203,7 @@ export interface UI {
   /** phone: Chat, Needs you, Tasks or Artifacts */
   tab: 'chat' | 'needs' | 'tasks' | 'artifacts'
   /** a wide screen's right-hand column: Needs you, the place's Tasks or its Artifacts, remembered on this device */
-  side: 'needs' | 'tasks' | 'artifacts' | 'files' | 'changes'
+  side: 'needs' | 'tasks' | 'artifacts' | 'files' | 'changes' | 'board'
   /** the tab bar's open panel button pressed again: the right-hand column hides, as 3.0's side panel (wide screens) */
   sideShut?: boolean
   /** a space's other agent tabs (t:<address>) shown as their chat rather than their terminal (3.0's Chat | Terminal) */
@@ -392,7 +392,7 @@ const SIDE = 'shepherdr.side'
 function loadSide(): UI['side'] {
   try {
     const side = localStorage.getItem(SIDE)
-    return side === 'artifacts' || side === 'files' || side === 'changes' ? side : 'tasks'
+    return side === 'artifacts' || side === 'files' || side === 'changes' || side === 'board' ? side : 'tasks'
   } catch {
     return 'tasks'
   }

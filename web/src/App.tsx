@@ -39,6 +39,7 @@ import { PANE_MIN } from './panes.ts'
 import { ChatColumn, Frame, PanelColumn, PlacesColumn, PlacesToggle } from './Frame.tsx'
 import { PanelSheet, TabBody, TaskPanel, TaskTabs } from './Panel.tsx'
 import { openAccept, useAccepting } from './screens/Accept.tsx'
+import { Home } from './screens/Home.tsx'
 import * as TK from '@core/tasks.js'
 
 /** a line's first letter a capital, as the window writes every reason (core/tasks.js) */
@@ -424,8 +425,8 @@ function SideList({ snap }: { snap: Snapshot }) {
   // Herdr's own Files and Changes, the space's folder (the tab bar's buttons, as shared "workspace.panels" has them)
   const Space = registry.views.spacePanel
   const herdr = (shown === 'files' || shown === 'changes') && Space && (snap.panels ?? ['files', 'changes']).includes(shown) ? shown : null
-  const side = herdr ?? ((shown === 'artifacts' && Artifacts) || (shown === 'needs' && Needs) ? shown : 'tasks')
-  const title = { tasks: 'Tasks', needs: 'Needs you', artifacts: 'Artifacts', files: 'Files', changes: 'Changes' }[side]
+  const side = herdr ?? ((shown === 'artifacts' && Artifacts) || (shown === 'needs' && Needs) || shown === 'board' ? shown : 'tasks')
+  const title = { tasks: 'Tasks', needs: 'Needs you', artifacts: 'Artifacts', files: 'Files', changes: 'Changes', board: 'Board' }[side]
   return (
     <section className="@container/side flex min-h-0 min-w-0 flex-1 flex-col border-l border-line" aria-label={title}>
       <Head>
@@ -440,7 +441,7 @@ function SideList({ snap }: { snap: Snapshot }) {
           <Space place={place} what={herdr} />
         </div>
       ) : (
-        <div className="min-h-0 flex-1 touch-pan-y overflow-x-hidden overflow-y-auto overscroll-contain">{side === 'needs' && Needs ? <Needs /> : side === 'artifacts' && Artifacts ? <Artifacts placeId={place.id} /> : Tasks ? <Tasks placeId={place.id} /> : null}</div>
+        <div className="min-h-0 flex-1 touch-pan-y overflow-x-hidden overflow-y-auto overscroll-contain">{side === 'board' ? <Home /> : side === 'needs' && Needs ? <Needs /> : side === 'artifacts' && Artifacts ? <Artifacts placeId={place.id} /> : Tasks ? <Tasks placeId={place.id} /> : null}</div>
       )}
     </section>
   )

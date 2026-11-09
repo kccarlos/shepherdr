@@ -1,0 +1,379 @@
+{
+ "place": {
+  "id": "mini:factory-run",
+  "name": "factory-run",
+  "machine": "mini",
+  "level": 2,
+  "status": "idle",
+  "mode": "regular",
+  "chat": "mini:factory-run/assistant",
+  "assistantTab": {
+   "name": "Assistant",
+   "named": false,
+   "state": "idle",
+   "live": true,
+   "cli": "claude opus"
+  }
+ },
+ "tasks": [
+  {
+   "id": "FAC-34",
+   "name": "Sheepdog: Assistant as the factory's one voice (note)",
+   "status": "need",
+   "sub": "Asks you one question \u00b7 see asks for you",
+   "left": "12m",
+   "agents": [
+    {
+     "role": "worker",
+     "cli": "claude",
+     "model": null,
+     "address": "term-34",
+     "parent": null,
+     "state": "blocked"
+    }
+   ],
+   "size": {
+    "added": 40,
+    "removed": 2,
+    "limit": 120
+   }
+  },
+  {
+   "id": "FAC-29",
+   "name": "Web app 403 from the Mac mini itself",
+   "status": "ready",
+   "sub": "2 review rounds clean \u00b7 checks green \u00b7 proof attached",
+   "proof": "proof-0029",
+   "artifacts": [
+    "proof-0029"
+   ],
+   "agents": [
+    {
+     "role": "worker",
+     "cli": "agy",
+     "model": "gemini-4-argon-high",
+     "address": "term-29",
+     "parent": null,
+     "state": "ended"
+    },
+    {
+     "role": "reviewer",
+     "cli": "agy",
+     "model": "gemini-4-argon-high",
+     "address": "term-29r",
+     "parent": null,
+     "state": "ended"
+    },
+    {
+     "role": "checks",
+     "cli": null,
+     "model": null,
+     "address": "term-29c",
+     "parent": null,
+     "state": "working"
+    }
+   ],
+   "size": {
+    "added": 31,
+    "removed": 9,
+    "limit": 60
+   }
+  },
+  {
+   "id": "FAC-15",
+   "name": "G4 The gate, and merging in code",
+   "status": "work",
+   "sub": "Opus review before ready",
+   "left": "1h",
+   "agents": [
+    {
+     "role": "worker",
+     "cli": "claude",
+     "model": null,
+     "address": "term-15",
+     "parent": null,
+     "state": "working"
+    },
+    {
+     "role": "reviewer",
+     "cli": "claude",
+     "model": "opus",
+     "address": "term-15r",
+     "parent": "term-15",
+     "state": "working"
+    }
+   ],
+   "size": {
+    "added": 180,
+    "removed": 40,
+    "limit": 250
+   }
+  },
+  {
+   "id": "FAC-31",
+   "name": "Designer: factory board on Sheepdog design system",
+   "status": "work",
+   "sub": "Drawing the home artboard",
+   "left": "1h",
+   "artifacts": [
+    "canvas-0031"
+   ],
+   "agents": [
+    {
+     "role": "worker",
+     "cli": "claude",
+     "model": "opus",
+     "address": "term-31",
+     "parent": null,
+     "state": "working"
+    }
+   ],
+   "size": {
+    "added": 0,
+    "removed": 0,
+    "limit": null
+   }
+  },
+  {
+   "id": "FAC-28",
+   "name": "Ask pane: a sheepdog question card",
+   "status": "work",
+   "sub": "Herdr's reviewer is on it",
+   "artifacts": [
+    "proof-0028"
+   ],
+   "agents": [
+    {
+     "role": "worker",
+     "cli": "claude",
+     "model": null,
+     "address": "term-28",
+     "parent": null,
+     "state": "idle"
+    },
+    {
+     "role": "reviewer",
+     "cli": "agy",
+     "model": "gemini-4-argon-high",
+     "address": "term-28r",
+     "parent": null,
+     "state": "working"
+    }
+   ],
+   "size": {
+    "added": 150,
+    "removed": 12,
+    "limit": 200
+   }
+  },
+  {
+   "id": "FAC-32",
+   "name": "Usage wiring plan (doc)",
+   "status": "work",
+   "sub": "Planning the doc outline",
+   "left": "25m",
+   "agents": [
+    {
+     "role": "worker",
+     "cli": "codex",
+     "model": "gpt-5.5",
+     "address": "term-32",
+     "parent": null,
+     "state": "working"
+    }
+   ],
+   "size": {
+    "added": 60,
+    "removed": 0,
+    "limit": null
+   }
+  },
+  {
+   "id": "FAC-30",
+   "name": "Gate hardening: real reviewer only, min only raises",
+   "status": "queued",
+   "sub": "After FAC-15",
+   "agents": [],
+   "size": {
+    "added": 0,
+    "removed": 0,
+    "limit": 80
+   }
+  },
+  {
+   "id": "FAC-33",
+   "name": "Usage wiring (code)",
+   "status": "queued",
+   "sub": "After FAC-15, FAC-32",
+   "agents": [],
+   "size": {
+    "added": 0,
+    "removed": 0,
+    "limit": 200
+   }
+  },
+  {
+   "id": "FAC-12",
+   "name": "G1 Gate evidence contract",
+   "status": "done",
+   "agents": [],
+   "size": {
+    "added": 90,
+    "removed": 3,
+    "limit": 120
+   }
+  }
+ ],
+ "asks": [
+  {
+   "id": "a1b2c3",
+   "question": "Mute the worker panes as one space, so the Assistant is the factory's only voice on your phone?",
+   "options": [
+    "Mute them",
+    "Keep each voice"
+   ],
+   "recommend": "Mute them",
+   "task": "FAC-34",
+   "terminal": "term-34",
+   "answer": null,
+   "at": 1794162480000
+  }
+ ],
+ "usage": [
+  {
+   "pool": "claude",
+   "five_hour_left": 95,
+   "week_left": 18,
+   "five_hour_reset": "2026-11-08T21:40:00Z",
+   "week_reset": "2026-11-09T01:40:00Z",
+   "state": "ok"
+  },
+  {
+   "pool": "codex",
+   "five_hour_left": null,
+   "week_left": 0,
+   "five_hour_reset": null,
+   "week_reset": "2026-11-09T00:40:00Z",
+   "state": "floor"
+  },
+  {
+   "pool": "antigravity-gemini",
+   "five_hour_left": 70,
+   "week_left": 64,
+   "five_hour_reset": "2026-11-08T20:40:00Z",
+   "week_reset": "2026-11-12T12:40:00Z",
+   "state": "ok"
+  },
+  {
+   "pool": "antigravity-claude-gpt",
+   "five_hour_left": null,
+   "week_left": null,
+   "five_hour_reset": null,
+   "week_reset": null,
+   "state": "unknown"
+  }
+ ],
+ "deliverables": {
+  "folder": "/srv/factory",
+  "machine": null,
+  "tasks": [
+   {
+    "ref": "FAC-29",
+    "title": "Web app 403 from the Mac mini itself",
+    "proof": {
+     "id": "proof-0029",
+     "title": "The board opens from the Mac mini again",
+     "version": 2,
+     "thumb": "api/artifacts/proof-0029/file/after.png?v=2"
+    },
+    "deliverables": [
+     {
+      "id": "proof-0029",
+      "title": "The board opens from the Mac mini again",
+      "version": 2,
+      "at": 1794161400000,
+      "thumb": "api/artifacts/proof-0029/file/after.png?v=2"
+     }
+    ]
+   },
+   {
+    "ref": "FAC-31",
+    "title": "Designer: factory board on Sheepdog design system",
+    "proof": null,
+    "deliverables": [
+     {
+      "kind": "link",
+      "title": "sheepdog factory board",
+      "url": "https://claude.ai/design/x",
+      "at": 1794162000000
+     },
+     {
+      "id": "canvas-0031",
+      "title": "Board home, first pass",
+      "version": 1,
+      "at": 1794160200000,
+      "thumb": "api/artifacts/canvas-0031/file/home.png?v=1"
+     }
+    ]
+   },
+   {
+    "ref": "FAC-28",
+    "title": "Ask pane: a sheepdog question card",
+    "proof": null,
+    "deliverables": [
+     {
+      "id": "proof-0028",
+      "title": "Ask pane: a question card on the phone",
+      "version": 1,
+      "at": 1794159600000,
+      "thumb": "api/artifacts/proof-0028/file/card.png?v=1"
+     }
+    ]
+   }
+  ],
+  "agents": [
+   {
+    "ref": "FAC-29",
+    "address": "term-29",
+    "at": 1794163200000,
+    "ended": null,
+    "by": "agent",
+    "latest": {
+     "id": "proof-0029",
+     "title": "The board opens from the Mac mini again",
+     "version": 2,
+     "at": 1794161400000,
+     "thumb": "api/artifacts/proof-0029/file/after.png?v=2"
+    }
+   },
+   {
+    "ref": "FAC-31",
+    "address": "term-31",
+    "at": 1794163200000,
+    "ended": null,
+    "by": "agent",
+    "latest": {
+     "id": "canvas-0031",
+     "title": "Board home, first pass",
+     "version": 1,
+     "at": 1794160200000,
+     "thumb": "api/artifacts/canvas-0031/file/home.png?v=1"
+    }
+   },
+   {
+    "ref": "FAC-28",
+    "address": "term-28",
+    "at": 1794163200000,
+    "ended": null,
+    "by": "agent",
+    "latest": {
+     "id": "proof-0028",
+     "title": "Ask pane: a question card on the phone",
+     "version": 1,
+     "at": 1794159600000,
+     "thumb": "api/artifacts/proof-0028/file/card.png?v=1"
+    }
+   }
+  ]
+ }
+}

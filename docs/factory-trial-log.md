@@ -118,3 +118,18 @@ answer (2026-11-08). It becomes the role allow lists in phase 3 (docs/factory.md
 - After FAC-49's install (~15:00): the Sonnet tasks went back from Opus to sandboxed Argon reviewers (review.min back
   to the folder's 3), since Claude reviewers in plan mode can't record verdicts. Five pre-sandbox reviewers that were
   blocked (t106, t10t, t10w, t10y, t114) were ended; FAC-32, 34, 39, 42 and 50 re-readied with round limit 10.
+- Assistant session 2 takes over (16:47, after the full stop at ~15:40). The stop had interrupted every reviewer
+  mid-round (t11c, t113, t118, t119, t11g, t11d) and FAC-43's worker; each got a nudge to carry on, which keeps its
+  context (cheaper than a fresh round). FAC-15's round-8 reviewer t110 (on 12271222, which the worker is rewriting for
+  the core cut) was ended so only one reviewer runs per task; FAC-15 review.rounds 10 = exactly the two more rounds.
+- Calls: review.min 2 on FAC-15, 39-43, 50 (day one's rule is 2 rounds; the folder still says 3). All reviews stay
+  Argon, since Claude reviewers in plan mode can't record verdicts. The loop-breaker by hand counts from this
+  takeover: the next herdr-task round with a Must-fix finding on any of them stops it for a RECAP.md, and the
+  Assistant decides. FAC-50 (Must fix 3, 5, 3, 4, 2 over five rounds) gets round 8 as its last before a recap.
+  FAC-42's Preview.tsx at 109 lines (limit ~100, from review fixes) accepted.
+- FAC-51 conflicts with kc-factory: its rebase waits for the person's VM decision (the base keeps moving, and an
+  Opus turn spent now would likely be spent again). Its AGENTS.md line (Tart: sync before stop; guest self-update;
+  keychain over ssh) is held until it merges, since vm/ isn't on the base yet.
+- FAC-54 added: loop-breaker and per-task budget in code (Opus worker, Argon review, min 2, at most 3 rounds), queued
+  behind 7 running tasks (limit 3). Cancelled FAC-32/34 still have idle workers (t72, t73) and reviewers (t11f, t11b);
+  left for the person to end.

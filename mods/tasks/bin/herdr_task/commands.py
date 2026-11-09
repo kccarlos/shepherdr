@@ -437,23 +437,41 @@ def gate_passes(t, head):
     return sum(1 for r in t.get("reviews") or [] if r.get("started_by") == "herdr-task" and r["head"] == head and r["verdict"] == "pass")
 
 
+def fork_of(wt, base, tip):
+    """Where tip left its base: the merge-base with the local base or the remote's (new worktrees branch from the
+    remote's, which can be ahead of the local one); the later of the two."""
+    from .github import remote_of
+    mbs = []
+    for ref in (base, f"refs/remotes/{remote_of(wt)}/{base}"):
+        ok, out, _ = git(wt, "merge-base", ref, tip)
+        if ok and out and out not in mbs:
+            mbs.append(out)
+    return mbs[1] if len(mbs) > 1 and git(wt, "merge-base", "--is-ancestor", mbs[0], mbs[1])[0] else (mbs[0] if mbs else "")
+
+
 def review_diff(wt, base, head, mine):
     """(what the diff is, the diff) for a gate round (FAC-53). Round 1 and a re-review of the same head: the whole
     change from the merge-base (never the stored start, stale after a rebase). Later: only what changed since the last
-    reviewed head (after a rebase, the range-diff of the task's own commits), and a line of the earlier findings."""
-    mb = git(wt, "merge-base", base, head)[1] or base
+    reviewed head, and a line of the earlier findings. If the base moved (a rebase, or the base merged in), the
+    difference between the task's own change then and now, not the base's commits."""
+    mb = fork_of(wt, base, head) or base
     whole = (f"Its diff (git diff {mb}..{head})", git(wt, "diff", f"{mb}..{head}")[1])
     prev = mine[-1]["head"] if mine else None
     if not prev or prev == head or not git(wt, "cat-file", "-e", prev)[0]:
         return whole
-    if git(wt, "merge-base", "--is-ancestor", prev, head)[0]:
+    old = fork_of(wt, base, prev)
+    if old == mb and git(wt, "merge-base", "--is-ancestor", prev, head)[0]:
         what, out = f"Only what changed since the last reviewed head {prev[:7]} (git diff {prev}..{head})", git(wt, "diff", f"{prev}..{head}")[1]
+    elif not old:
+        return whole
     else:
-        old = git(wt, "merge-base", base, prev)[1]
-        if not old:
-            return whole
-        what = f"The branch was rebased since the last reviewed head {prev[:7]}; only the rebase delta (git range-diff {old}..{prev} {mb}..{head})"
-        out = git(wt, "range-diff", f"{old}..{prev}", f"{mb}..{head}")[1]
+        import difflib
+        def tidy(text):
+            return [re.sub(r"^@@ -[0-9,]+ \+[0-9,]+ @@", "@@", x) for x in text.splitlines() if not x.startswith("index ")]
+        then, now_ = (tidy(git(wt, "diff", f"{a}..{b}")[1]) for a, b in ((old, prev), (mb, head)))
+        what = (f"The branch's base moved since the last reviewed head {prev[:7]}; only how the task's own change differs now "
+                f"(its diff {old[:7]}..{prev[:7]} against {mb[:7]}..{head[:7]})")
+        out = "\n".join(difflib.unified_diff(then, now_, "reviewed", "now", lineterm="", n=2)) or "(none)"
     earlier = "; ".join(f"round {r['round']} ({r['head'][:7]}) {r['verdict']}: {' '.join((r.get('report') or 'no findings').split())[:200]}" for r in mine)
     return (f"{what}. Earlier rounds, to know what was fixed: {earlier}. The whole change is `git diff {mb}..{head}`", out)
 
@@ -476,7 +494,7 @@ def gate_step(s, t):
     busy = next((r for r in runs if r["round"] not in done and (k := hc_json("get", r["address"]) or {}).get("state") == "live" and agent_running(k)), None)
     if busy:
         return (f"{s.ref(t)}: Herdr's reviewer ({busy['address']}) is still reviewing {busy['head'][:7]}; no second one starts. "
-                f"Its findings come to you as a message.")
+                + ("Its findings come to you as a message." if busy["head"] == head else "Run ready again once it finishes."))
     on, rounds = review_limits(s, t)
     if len(runs) >= rounds:
         t["review_out"] = now()

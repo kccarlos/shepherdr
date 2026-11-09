@@ -1860,9 +1860,39 @@ class GateReview(unittest.TestCase):
         self.change("fixed")
         self.ready()
         p = self.prompt(1)
-        self.assertIn("rebased", p)
-        self.assertIn("range-diff", p)
+        self.assertIn("base moved", p)
         self.assertNotIn("other.txt", p)  # the base's own commit isn't in the delta
+        self.assertIn("+fixed", p)
+
+    def test_after_the_base_is_merged_in_the_delta_has_none_of_its_commits(self):
+        self.ready()
+        self.verdict("term-1", passed=False, changes="fix it", must_fix=1)
+        with open(os.path.join(self.main, "other.txt"), "w") as f:
+            f.write("moved base")
+        self.git(self.main, "add", "other.txt")
+        self.git(self.main, "commit", "-q", "-m", "base moved")
+        self.git(self.wt, "merge", "-q", "--no-edit", "main")
+        self.change("fixed")
+        self.ready()
+        p = self.prompt(1)
+        self.assertIn("+fixed", p)
+        self.assertNotIn("+moved base", p)
+
+    def test_the_base_is_the_remotes_when_it_is_ahead_of_the_local_one(self):
+        self.git(self.main, "update-ref", "refs/remotes/origin/main", self.git(self.main, "rev-parse", "main"))
+        self.git(self.main, "remote", "add", "origin", self.main)
+        self.git(self.main, "checkout", "-q", "-b", "up", "main")
+        with open(os.path.join(self.main, "up.txt"), "w") as f:
+            f.write("upstream pr")
+        self.git(self.main, "add", "up.txt")
+        self.git(self.main, "commit", "-q", "-m", "pr")
+        self.git(self.main, "update-ref", "refs/remotes/origin/main", self.git(self.main, "rev-parse", "up"))
+        self.git(self.main, "checkout", "-q", "main")
+        self.git(self.wt, "reset", "-q", "--hard", "origin/main")  # a worktree made from the remote's base
+        self.change("mine")
+        self.ready()
+        self.assertIn("+mine", self.prompt(0))
+        self.assertNotIn("upstream pr", self.prompt(0))
 
     def test_no_second_reviewer_while_one_is_live_even_for_an_older_head(self):
         self.ready()

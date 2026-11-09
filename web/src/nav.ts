@@ -6,7 +6,7 @@
 import type { UI } from './kernel.ts'
 
 /** what of the screen is a step in the history */
-export type Screen = Pick<UI, 'place' | 'task' | 'tab' | 'sheet' | 'viewer' | 'settings' | 'search' | 'drawer' | 'photo' | 'adding' | 'archived' | 'board'>
+export type Screen = Pick<UI, 'place' | 'task' | 'tab' | 'sheet' | 'viewer' | 'settings' | 'search' | 'drawer' | 'photo' | 'adding' | 'archived'>
 
 /** the layers over a place or task, each its own step */
 const LAYERS = ['drawer', 'settings', 'search', 'sheet', 'viewer', 'photo', 'adding', 'archived'] as const
@@ -20,8 +20,8 @@ export interface Entry {
 }
 
 export function screenOf(ui: Screen): Screen {
-  const { place, task, tab, sheet, viewer, settings, search, drawer, photo, adding, archived, board } = ui
-  return { place, task, tab, sheet, viewer, settings, search, drawer, photo, adding, archived, board }
+  const { place, task, tab, sheet, viewer, settings, search, drawer, photo, adding, archived } = ui
+  return { place, task, tab, sheet, viewer, settings, search, drawer, photo, adding, archived }
 }
 
 /** settings: shut, a phone's list of sections, or a section */
@@ -30,7 +30,7 @@ const settingsStep = (s: Screen) => (!s.settings ? 0 : s.settings.section === nu
 /** Which step a screen is. Switching tabs, a settings section, an artifact's version or the picture shown is the same
  *  step: it replaces it rather than adding one. A section opened from a phone's list of them is a step of its own. */
 export function stepKey(s: Screen) {
-  return JSON.stringify([s.place, s.task, s.sheet, s.viewer?.artifact ?? null, settingsStep(s), s.search, s.drawer, !!s.photo, !!s.adding, s.archived, s.board])
+  return JSON.stringify([s.place, s.task, s.sheet, s.viewer?.artifact ?? null, settingsStep(s), s.search, s.drawer, !!s.photo, !!s.adding, s.archived])
 }
 
 const open = (s: Screen, l: (typeof LAYERS)[number]) => !!s[l]
@@ -46,7 +46,7 @@ export function decide(entry: Entry | null, next: Screen): 'push' | 'replace' | 
   if (k === entry.key) return 'replace'
   if (k === entry.prev) return 'back'
   const cur = entry.screen
-  if (cur.place !== next.place || cur.task !== next.task || cur.board !== next.board) return 'push'
+  if (cur.place !== next.place || cur.task !== next.task) return 'push'
   if (settingsStep(cur) === 1 && settingsStep(next) === 2) return 'push'
   const opened = LAYERS.some((l) => open(next, l) && !open(cur, l))
   const closed = LAYERS.some((l) => !open(next, l) && open(cur, l))
@@ -75,7 +75,6 @@ export function urlOf(s: Screen, phone: boolean, path = location.pathname, slug:
   if (phone && !s.task && s.tab !== 'chat') q.set('tab', s.tab)
   if (s.task && s.sheet) q.set('item', s.sheet)
   if (s.viewer) q.set('artifact', s.viewer.artifact)
-  if (s.board) q.set('board', '')
   return `${path}?${q}`
 }
 
@@ -94,7 +93,6 @@ export function screenOfUrl(search: string, desktop: boolean, tabOf: (t: string 
     photo: null,
     adding: false,
     archived: null,
-    board: q.has('board'),
   }
 }
 

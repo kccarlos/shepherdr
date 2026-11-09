@@ -85,8 +85,6 @@ export default function App() {
   const device = useUI((u) => u.device)
   const search = useUI((u) => u.search)
   const keyboard = useUI((u) => u.keyboard)
-  // the board's home (screens/Home.tsx), on a desktop opened with ?board, while no task or Settings is open
-  const board = useUI((u) => u.board && !u.task && !u.settings)
   useKeyboard()
   if (!snap) return <Loading />
   return (
@@ -104,7 +102,7 @@ export default function App() {
         <Bar key={i} />
       ))}
       <div className="relative flex min-h-0 flex-1 flex-col">
-        {device === 'phone' ? <PhoneLayout snap={snap} /> : board ? <Home /> : <WideLayout snap={snap} />}
+        {device === 'phone' ? <PhoneLayout snap={snap} /> : <WideLayout snap={snap} />}
         <PanelSheet />
         {registry.overlays.map((O, i) => (
           <O key={i} />
@@ -399,8 +397,8 @@ function SideList({ snap }: { snap: Snapshot }) {
   // Herdr's own Files and Changes, the space's folder (the tab bar's buttons, as shared "workspace.panels" has them)
   const Space = registry.views.spacePanel
   const herdr = (shown === 'files' || shown === 'changes') && Space && (snap.panels ?? ['files', 'changes']).includes(shown) ? shown : null
-  const side = herdr ?? ((shown === 'artifacts' && Artifacts) || (shown === 'needs' && Needs) ? shown : 'tasks')
-  const title = { tasks: 'Tasks', needs: 'Needs you', artifacts: 'Artifacts', files: 'Files', changes: 'Changes' }[side]
+  const side = herdr ?? ((shown === 'artifacts' && Artifacts) || (shown === 'needs' && Needs) || shown === 'board' ? shown : 'tasks')
+  const title = { tasks: 'Tasks', needs: 'Needs you', artifacts: 'Artifacts', files: 'Files', changes: 'Changes', board: 'Board' }[side]
   return (
     <section className="@container/side flex min-h-0 min-w-0 flex-1 flex-col border-l border-line" aria-label={title}>
       <Head>
@@ -415,7 +413,7 @@ function SideList({ snap }: { snap: Snapshot }) {
           <Space place={place} what={herdr} />
         </div>
       ) : (
-        <div className="min-h-0 flex-1 touch-pan-y overflow-x-hidden overflow-y-auto overscroll-contain">{side === 'needs' && Needs ? <Needs /> : side === 'artifacts' && Artifacts ? <Artifacts placeId={place.id} /> : Tasks ? <Tasks placeId={place.id} /> : null}</div>
+        <div className="min-h-0 flex-1 touch-pan-y overflow-x-hidden overflow-y-auto overscroll-contain">{side === 'board' ? <Home /> : side === 'needs' && Needs ? <Needs /> : side === 'artifacts' && Artifacts ? <Artifacts placeId={place.id} /> : Tasks ? <Tasks placeId={place.id} /> : null}</div>
       )}
     </section>
   )

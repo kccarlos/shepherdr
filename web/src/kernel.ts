@@ -199,12 +199,10 @@ export interface UI {
   place: string
   /** the open task: its agent's chat */
   task: string | null
-  /** a desktop shows the board's home (screens/Home.tsx, ?board) while no task is open */
-  board: boolean
   /** phone: Chat, Needs you, Tasks or Artifacts */
   tab: 'chat' | 'needs' | 'tasks' | 'artifacts'
   /** a wide screen's right-hand column: Needs you, the place's Tasks or its Artifacts, remembered on this device */
-  side: 'needs' | 'tasks' | 'artifacts' | 'files' | 'changes'
+  side: 'needs' | 'tasks' | 'artifacts' | 'files' | 'changes' | 'board'
   /** the tab bar's open panel button pressed again: the right-hand column hides, as 3.0's side panel (wide screens) */
   sideShut?: boolean
   /** a space's other agent tabs (t:<address>) shown as their chat rather than their terminal (3.0's Chat | Terminal) */
@@ -393,7 +391,7 @@ const SIDE = 'shepherdr.side'
 function loadSide(): UI['side'] {
   try {
     const side = localStorage.getItem(SIDE)
-    return side === 'artifacts' || side === 'files' || side === 'changes' ? side : 'tasks'
+    return side === 'artifacts' || side === 'files' || side === 'changes' || side === 'board' ? side : 'tasks'
   } catch {
     return 'tasks'
   }
@@ -446,7 +444,6 @@ let state: State = {
     allDone: loadAllDone(),
     shut: loadShut(),
     archived: null,
-    board: params.has('board'),
     taskFilter: loadTaskFilter(),
     thisSpace: loadThisSpace(),
     filter: {},
@@ -611,7 +608,7 @@ export function useDraft(key: string): [string, (v: string) => void] {
 /* ---------- address bar and Back (nav.ts) ---------- */
 
 /** what of the screen makes a step in the history (nav.ts) */
-const STEP_FIELDS = new Set<keyof UI>(['place', 'task', 'tab', 'sheet', 'viewer', 'settings', 'search', 'drawer', 'photo', 'adding', 'archived', 'board'])
+const STEP_FIELDS = new Set<keyof UI>(['place', 'task', 'tab', 'sheet', 'viewer', 'settings', 'search', 'drawer', 'photo', 'adding', 'archived'])
 
 /** the history entry on screen, as the app wrote it */
 let entry: Entry | null = null

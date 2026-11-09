@@ -1,10 +1,10 @@
-// The board's home on a desktop (docs/factory.md section 3; the approved canvas's "home" artboard), read only: the
-// usage pools, the tasks by status, the asks, the agent tree and the deliverables that are new to look at. Its data is
-// contracts/board-data.md's (snapshot tasks' agents, asks, usage) and GET api/deliverables. Where the canvas drew a
-// dashed "needs: …" chip and the contract sends nothing, the chip stays. The canvas's send box comes in a follow-up
-// that reuses the chat's own Composer.
+// The board's home, a side panel beside Tasks and Artifacts (docs/factory.md section 3; the approved canvas's "home"
+// artboard, in one column at the panel's width), read only: the usage pools, the tasks by status, the asks, the agent
+// tree and the deliverables that are new to look at. Its data is contracts/board-data.md's (snapshot tasks' agents,
+// asks, usage) and GET api/deliverables. Where the canvas drew a dashed "needs: …" chip and the contract sends nothing,
+// the chip stays. The canvas's send box comes in a follow-up that reuses the chat's own Composer.
 import { useEffect, useState, type ReactNode } from 'react'
-import { openArtifact, panesHere, placeOf, setUI, useSnap, useUI } from '../kernel.ts'
+import { openArtifact, openTask, placeOf, setUI, useSnap, useUI } from '../kernel.ts'
 import { GROUPS } from '../groups.ts'
 import { machineName, type Snapshot, type Task } from '@shared/types.ts'
 import { hhmm, shownDeliverable, tiles, type Pool } from '../board.ts'
@@ -60,7 +60,7 @@ export function Home() {
     return () => { current = false }
   }, [fresh])
   // the usual Tasks panel on its Done filter, as the app opens a filter elsewhere (the voice plugin's tasks nav)
-  const leave = () => setUI({ board: false, side: 'tasks', sideShut: false, taskFilter: 'done' })
+  const leave = () => setUI({ side: 'tasks', taskFilter: 'done' })
   const latest = new Map(dl.flatMap((d) => d.agents).map((a) => [`${a.ref}:${a.address}`, a.latest]))
   const proofs = new Set(dl.flatMap((d) => d.tasks.map((t) => t.proof?.id)))
   const refs = new Set(tasks.map(refOf))
@@ -68,8 +68,8 @@ export function Home() {
   const nodes = tasks.flatMap((t) => treeOf(t).map((n) => ({ t, ...n })))
   const running = nodes.reduce((n, x) => n + (live(x.w) ? 1 : 0) + x.kids.length, 0)
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto bg-[var(--sd-bg)] text-[15px]/normal text-[var(--sd-fg)]">
-      <div className="mx-auto box-border flex max-w-[1360px] flex-col gap-5 px-[clamp(16px,3vw,32px)] pt-5 pb-12">
+    <div className="bg-[var(--sd-bg)] text-[15px]/normal text-[var(--sd-fg)]">
+      <div className="mx-auto box-border flex max-w-[1360px] flex-col gap-5 px-4 pt-4 pb-12">
         <header className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-2.5">
             <img src="icon.svg" alt="" className="size-8" />
@@ -203,20 +203,17 @@ export function Home() {
   )
 }
 
-/** a task from the board: it opens over the board's space, even where split panes kept on this device hold it */
-const pick = (id: string) => setUI((ui) => ({ ...(panesHere(ui).length ? { split: { ...ui.split, pane: -1 } } : {}), task: id, pick: null, cur: 0 }))
-
 function Row({ t }: { t: Task }) {
   const agents = agentsOf(t)
   const worker = agents.filter((a) => a.role === 'worker').at(-1), reviewer = agents.filter((a) => a.role === 'reviewer').at(-1)
   return (
-    <button type="button" onClick={() => pick(t.id)} className="flex min-h-11 w-full cursor-pointer flex-wrap items-center gap-x-3 gap-y-2 border-0 border-b border-[var(--sd-line)] bg-transparent px-3.5 py-2.5 text-left text-[var(--sd-fg)] last:border-b-0">
+    <button type="button" onClick={() => openTask(t.id)} className="flex min-h-11 w-full cursor-pointer flex-wrap items-center gap-x-3 gap-y-2 border-0 border-b border-[var(--sd-line)] bg-transparent px-3.5 py-2.5 text-left text-[var(--sd-fg)] last:border-b-0">
       <Dot c={STATUS_DOT[t.status]} s={8} />
       <div className="flex min-w-0 flex-[999_1_300px] flex-col gap-0.5">
-        <div className="flex min-w-0 items-baseline gap-2"><span className="font-mono text-xs text-[var(--sd-muted)]">{refOf(t)}</span><span className="text-[15px]/snug font-medium">{t.name}</span></div>
+        <div className="flex min-w-0 items-baseline gap-2"><span className="shrink-0 font-mono text-xs whitespace-nowrap text-[var(--sd-muted)]">{refOf(t)}</span><span className="text-[15px]/snug font-medium">{t.name}</span></div>
         {t.sub ? <span className={`text-[13px] ${t.status === 'need' ? 'text-[var(--sd-primary-text)]' : 'text-[var(--sd-muted)]'}`}>{t.sub}</span> : null}
       </div>
-      <div className="flex flex-none flex-wrap items-center justify-end gap-1.5">
+      <div className="flex min-w-0 flex-wrap items-center justify-end gap-1.5">
         {worker || t.agent || 'agents' in t ? <Chip>{worker ? who(worker) : (t.agent?.cli ?? 'not started')}</Chip> : null}
         {reviewer ? <Chip>review · {who(reviewer)}</Chip> : null}
         <span className={`min-w-11 text-right ${muted} tabular-nums`}>{t.left ?? ''}</span>

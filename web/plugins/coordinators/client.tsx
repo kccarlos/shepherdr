@@ -15,7 +15,7 @@ import { openWorktree } from '@client/screens/Worktree.tsx'
 import { act, definePlugin, getState, has, registry, removeSpace, setUI, useSnap, useStore, useUI } from '@client/kernel.ts'
 import { Dialog } from '@client/rowmenu.tsx'
 import { sectionOf, Switch } from '@client/Settings.tsx'
-import { AttentionBadge, DiffIcon, Dot, field, FolderIcon, ic, IconButton, KeyboardIcon, Menu, MenuItem, MenuLabel, MenuSeparator, ModelIcon, MoreIcon, PageIcon, PlanIcon, PlusIcon, Primary, RenameIcon, RestartIcon, SplitIcon, TasksIcon, TermIcon, XIcon } from '@client/ui.tsx'
+import { AttentionBadge, CrookIcon, DiffIcon, Dot, field, FolderIcon, ic, IconButton, KeyboardIcon, Menu, MenuItem, MenuLabel, MenuSeparator, ModelIcon, MoreIcon, PageIcon, PlanIcon, PlusIcon, Primary, RenameIcon, RestartIcon, SplitIcon, TasksIcon, TermIcon, XIcon } from '@client/ui.tsx'
 import { openAddSpace } from '@plugins/places/add.tsx'
 import { toast } from '@plugins/alerts/toasts.tsx'
 import { openKeybinds } from '@plugins/keyboard/client.tsx'
@@ -423,7 +423,7 @@ function Tab({ place, t, on, i, drag }: { place: Place; t: BarTab; on: boolean; 
 
 /** 3.0's side panels' buttons, one style for all: the icon, its word where the bar has room (the open one keeps it),
  *  a count after it (Tasks': what needs you and what is Ready, everywhere). The open one pressed again hides it. */
-type Panel = 'files' | 'changes' | 'tasks' | 'artifacts'
+type Panel = 'files' | 'changes' | 'tasks' | 'artifacts' | 'board'
 
 function PanelButton({ place, id, label, Icon, roomy, badge }: { place: Place; id: Panel; label: string; Icon: (p: { className?: string }) => ReactNode; roomy: boolean; badge?: ReactNode }) {
   const on = useUI((u) => u.side === id && !u.sideShut)
@@ -514,6 +514,8 @@ function TabBar({ place }: { place: Place }) {
       {herdr.includes('changes') ? <PanelButton place={place} id="changes" label="Changes" Icon={DiffIcon} roomy={roomy} /> : null}
       <PanelButton place={place} id="tasks" label="Tasks" Icon={TasksIcon} roomy={roomy} badge={<TasksCount />} />
       {registry.views.artifacts ? <PanelButton place={place} id="artifacts" label="Artifacts" Icon={PageIcon} roomy={roomy} /> : null}
+      {/* the factory board's home (src/screens/Home.tsx) */}
+      <PanelButton place={place} id="board" label="Board" Icon={CrookIcon} roomy={roomy} />
     </div>
   )
 }

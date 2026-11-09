@@ -69,6 +69,8 @@ How to run, build and lay out the code: [docs/develop.md](docs/develop.md).
   `pkill -f` on its path (it matches the calling shell).
 - Autopilot wake replay: print `herdr_task.autopilot.message()` (patch `heartbeat_of`/`direction_of`), then
   `claude -p --append-system-prompt templates/assistant.md` in a scratch repo with fake herdr-task/hc on PATH.
+- A board task page opens only from a hash in a fresh load (`#board-task=<id>`): index.html copies it to
+  `window.shepherdrLink`, so setting location.hash later doesn't open it.
 - Web stub: a place's `chat` is its chat key string (the chat object goes only in the watch reply). Headless screenshots
   never show native `title=` tooltips: check with `document.querySelectorAll('[title]')`.
 - Screenshots on the Mac mini (no agent-browser): headless Brave over CDP (`--remote-debugging-port`, a Bun WebSocket)

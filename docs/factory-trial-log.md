@@ -198,3 +198,6 @@ answer (2026-11-08). It becomes the role allow lists in phase 3 (docs/factory.md
   and told the worker to stop mid-build; the Assistant recorded the decision already made (`recap --decide new`, the
   side panel; FAC-40 had used 3.9M Claude tokens) and told the worker to carry on. Recap decisions go through
   `herdr-task recap` from now on, and new tasks get `--set estimate.time/estimate.tokens`.
+- Friction: FAC-56's worker edited vm/README.md after ready without committing, so herdr-task silently couldn't
+  record its finished Argon round (record_verdict refuses a dirty worktree) and the task sat at Needs you. A stash let
+  the verdict record (round 1: changes, 2 at Must fix). The tick should say why a finished round isn't recorded.

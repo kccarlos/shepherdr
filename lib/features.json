@@ -406,7 +406,8 @@
       },
       "web": {
         "files": [
-          "src/screens/Accept.tsx"
+          "src/screens/Accept.tsx",
+          "src/screens/BoardTask.tsx"
         ]
       },
       "forms": {

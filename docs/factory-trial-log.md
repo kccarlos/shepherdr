@@ -184,3 +184,5 @@ answer (2026-11-08). It becomes the role allow lists in phase 3 (docs/factory.md
   real major (delta reviews re-sent the whole diff from round 3 on), and its 11-line fix ran out of rounds. Counted
   as its one continue: review.min 1 plus review-more, one Argon round on the fix; a Must-fix there means a recap.
   Tasks added from now carry review.min 2 explicitly.
+- Person's answer to ask 67ed5b: B2 ships as a side panel (third choice beside Tasks and Artifacts); the ?board
+  handling leaves kernel.ts and nav.ts. FAC-44 (phone layout) brief updated to match before it starts.

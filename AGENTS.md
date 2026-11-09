@@ -7,7 +7,7 @@ How to run, build and lay out the code: [docs/develop.md](docs/develop.md).
 - Quick checks are fine here (seconds): `bin/sync-shared --check`, `python3 -m unittest discover -s test` and the
   `node --check` loop in [docs/develop.md](docs/develop.md). The installer tests use throwaway roots only.
 - Agent shells may lack `node` on PATH (nvm): prefix `$HOME/.nvm/versions/node/<ver>/bin` for the node checks and the
-  chat-log test. One test module runs from `test/` (`cd test && python3 -m unittest test_herdr_task.Revive`).
+  chat-log test (and `Feedback.test_the_chat_reads_it_as_a_news_row`, which errors without it). One test module runs from `test/` (`cd test && python3 -m unittest test_herdr_task.Revive`).
 - Agent shells on the Mac mini lack PIL and ImageMagick: `sips` resizes and crops; `swiftc` with CoreGraphics/ImageIO
   does the rest (alpha cutouts, composites).
 - On macOS, bun and its children see no TCP sockets through netstat or the pcblist sysctl (0 bytes); nettop still lists

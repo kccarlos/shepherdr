@@ -55,8 +55,8 @@ export function Preview({ id: first, folder, on }: { id: string; folder: string;
   const arrow = 'flex size-11 items-center justify-center rounded-[var(--sd-radius-md)] text-[var(--sd-fg)] disabled:opacity-40'
   const agent = it && d ? d.agents.find((a) => it.id && a.by === 'agent' && a.ref === it.ref && a.latest.id === it.id) : null
   return (
-    <div data-device={innerWidth < 640 ? 'phone' : 'desktop'} className="h-full overflow-y-auto bg-[var(--sd-bg)] font-[var(--sd-font-ui)] text-[0.9375rem] text-[var(--sd-fg)]">
-      <nav aria-label="Preview" className="flex items-center justify-between gap-4 border-b border-[var(--sd-line)] bg-[var(--sd-card)] px-4 py-2 sm:px-8">
+    <div data-device={innerWidth < 640 ? 'phone' : 'desktop'} className="h-full overflow-y-auto bg-[var(--sd-bg)] font-[family-name:var(--sd-font-ui)] text-[0.9375rem] text-[var(--sd-fg)]">
+      <nav aria-label="Preview" className="flex items-center justify-between gap-4 border-b border-[var(--sd-line)] bg-[var(--sd-card)] px-4 pt-[calc(env(safe-area-inset-top)+0.5rem)] pb-2 sm:px-8">
         <button type="button" onClick={back} className="inline-flex min-h-11 items-center gap-1.5 text-[0.875rem] text-[var(--sd-primary-text)]"><ChevronLeftIcon aria-hidden className="size-4" />board</button>
         {it ? <div className={`flex items-center gap-1 ${chip}`}>
           <button type="button" aria-label="Previous item" disabled={n < 1} onClick={() => open(items[n - 1].key)} className={arrow}><ChevronLeftIcon aria-hidden className="size-4.5" /></button>
@@ -72,20 +72,20 @@ export function Preview({ id: first, folder, on }: { id: string; folder: string;
                 <span>{it.url ? 'design' : 'artifact'}</span><span className={mono}>{it.ref}</span>
                 <time>{new Date(it.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time>
               </div>
-              <h1 className="font-[var(--sd-font-display)] text-[1.75rem]/[1.2] font-semibold">{it.title}</h1>
+              <h1 className="font-display text-[1.75rem]/[1.2] font-semibold">{it.title}</h1>
             </header>
             <Body key={it.key} it={it} on={d && d.machine ? `&on=${encodeURIComponent(d.machine)}` : ''} />
           </main>
           <aside className="flex min-w-0 flex-[1_1_300px] flex-col gap-4">
             <section aria-label="Made by" className={card}>
-              <h2 className="font-[var(--sd-font-display)] text-[1.125rem] font-semibold">made by</h2>
+              <h2 className="font-display text-[1.125rem] font-semibold">made by</h2>
               <span><span className={mono}>{it.ref}</span> {agent ? `agent ${agent.address}` : 'its task'}</span>
               <a href={`?task=${encodeURIComponent(d && d.machine ? `${d.machine}:${it.ref}` : it.ref)}`} className="inline-flex min-h-11 items-center text-[var(--sd-primary-text)] no-underline">open the task · {it.task}</a>
             </section>
             {items.length > 1 ? <section aria-label="Next" className="flex flex-col gap-2.5">
               <h2 className="text-[0.8125rem] font-semibold tracking-wide text-[var(--sd-muted)] uppercase">next</h2>
-              {items.filter((x) => x.key !== it.key).slice(0, 2).map((x) => (
-                <a key={x.key} href={previewUrl(x.key, folder, on)} onClick={(e) => { e.preventDefault(); open(x.key) }} className={`${card} gap-1 text-[var(--sd-fg)] no-underline`}>
+              {[...items.slice(n + 1), ...items.slice(0, n)].slice(0, 2).map((x) => (
+                <a key={x.key} href={previewUrl(x.key, folder, on)} onClick={(e) => { if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button) return; e.preventDefault(); open(x.key) }} className={`${card} gap-1 text-[var(--sd-fg)] no-underline`}>
                   <span className={`flex gap-2 ${chip}`}><span>{x.url ? 'design' : 'artifact'}</span><span className={`ml-auto ${mono}`}>{x.ref}</span></span>
                   <span className="font-medium">{x.title}</span>
                 </a>))}

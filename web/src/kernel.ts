@@ -1,3 +1,4 @@
+import { preview } from './preview-query.ts'
 import { actionable, attentionCounts } from './attention.ts'
 // The screen's small kernel: plugin slots, the store (server data + what's on screen), and the link to the server.
 import { useSyncExternalStore, type FC, type ReactNode } from 'react'
@@ -618,7 +619,7 @@ let backing: ReturnType<typeof setTimeout> | null = null
 /** write the screen into the history: a new step, or in place of the one on screen */
 function write(how: 'push' | 'replace') {
   // a deliverable's preview (Preview.tsx) keeps its own address, a resize included
-  if (new URLSearchParams(location.search).has('preview')) return
+  if (preview) return
   const screen = screenOf(state.ui)
   const url = urlOf(screen, state.ui.device === 'phone', location.pathname, (id) => slugOf(state.snap, id))
   const next: Entry = { shep: 1, key: stepKey(screen), prev: how === 'push' ? (entry?.key ?? null) : (entry?.prev ?? null), screen }
@@ -648,6 +649,7 @@ function syncUrl(replace = false) {
 
 /** the first entry: a reload keeps its steps; a link (an alert's) gets the steps that lead to it */
 function startHistory() {
+  if (preview) return
   const st = history.state as Entry | null
   if (st?.shep) {
     entry = st
@@ -687,6 +689,7 @@ function forgetJump() {
 if (state.ui.jump) forgetJump()
 
 addEventListener('popstate', (e) => {
+  if (preview) return
   const st = (e as PopStateEvent).state as Entry | null
   if (backing) {
     // the step back the app asked for: the screen already shows it, and what changed meanwhile goes in now
@@ -842,7 +845,7 @@ function sayLater(at = Date.now()): ReturnType<typeof setTimeout> {
 
 /** back on screen (or on the network): an open link must answer a ping, any other is tried again at once */
 function wake() {
-  if (document.visibilityState !== 'visible' || new URLSearchParams(location.search).has('preview')) return
+  if (document.visibilityState !== 'visible' || preview) return
   if (ws?.readyState === WebSocket.OPEN) {
     if (pinging) return
     const sock = ws

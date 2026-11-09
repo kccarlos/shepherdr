@@ -1,4 +1,4 @@
-import { opened } from './preview-query.ts'
+import { preview } from './preview-query.ts'
 import './styles.css'
 import './theme.ts'
 import { StrictMode, useState } from 'react'
@@ -110,8 +110,6 @@ const off: string[] = await fetch('api/me').then((r) => r.json()).then((m) => m.
 Object.assign(window, { shepherdrOff: off })
 installPlugins(loaded.filter((p: ClientPlugin | null): p is ClientPlugin => p !== null && !off.includes(p.name)), enabled.filter((n: string) => !off.includes(n)), user)
 // a deliverable's preview (Preview.tsx previewUrl) is its own screen: no link to the service's snapshot or history
-const q = new URLSearchParams(opened)
-const preview = !!q.get('preview') && !!q.get('folder')?.startsWith('/')
 if (!preview) {
   connect()
   watchViewport((keyboard) => setUI({ keyboard }))
@@ -119,9 +117,8 @@ if (!preview) {
 watchScrolling()
 watchKeys()
 
-if (preview) history.replaceState(null, '', location.pathname + opened)
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    {preview ? <Preview id={q.get('preview')!} folder={q.get('folder')!} on={q.get('on')} /> : <App />}
+    {preview ? <Preview {...preview} /> : <App />}
   </StrictMode>,
 )

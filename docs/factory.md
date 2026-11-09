@@ -199,6 +199,16 @@ Evidence: an agy experiment ([agent-comm.md](agent-comm.md)). Contract-first agr
 - **The verifier never calls a failure a flake** until it has reproduced it on a fresh clone, with before and after screenshots.
 - **No unattended part depends on a path that needs a macOS consent prompt** (Documents, Desktop, Downloads, removable volumes), unless access was granted beforehand and a probe at start proves it. This bit twice: the factory stalled 3 hours on Documents (2026-11-08), and a nightly waited 53 minutes on the external SSD.
 
+## 11b. Direction after day one (2026-11-08)
+
+Keep Shepherdr (herdr-native) as the base and adopt three ideas from Paperclip (github.com/paperclipai/paperclip), each in its smallest form:
+- **Heartbeat coordination.** The Assistant does not live for hours: it gets a fresh session every few hours with a written handoff, so each turn re-reads less. Task state lives in the task store and trial log, not in the Assistant's chat. Done by hand at first.
+- **A per-task budget with a loop-breaker.** Triggers: review rounds, the finding count not dropping, the same area flagged twice, time or Claude tokens over 2× the estimate. On a trigger the worker writes a recap, and the Assistant chooses continue-once, split, a new approach or drop. A second trigger forces a change of direction.
+- **Atomic claim.** One worker and one reviewer per task at a time.
+- **ACP** (Agent Client Protocol), which Paperclip uses to drive Claude without parsing screens, is worth a later look for sheepdog and herdr. Note only; no task yet.
+
+After these, the factory's next work is real sheepdog backlog, not more factory features.
+
 ## 12. Rules that are only prompts (known)
 
 These depend on the model, and no code backs them yet:

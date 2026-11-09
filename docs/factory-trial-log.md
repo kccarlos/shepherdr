@@ -163,3 +163,6 @@ answer (2026-11-08). It becomes the role allow lists in phase 3 (docs/factory.md
 - Friction: a reviewer-exit notice (`<hc>tX ... exited</hc>`) landing in a Ready worker's chat counts as "at work
   again", so a task that passed its gate drops out of Ready (FAC-42 after rounds 5-6 passed) until its worker says
   ready again. The notice shouldn't count as work, or ready should come back by itself when nothing changed.
+- FAC-40 round 4 (after the split): 1 major, a security one (link deliverables rendered without validateLink, so
+  javascript:/data: hrefs), plus 2 minors, in a new area. Security is always fixed: ~5 lines, review.rounds 6 for
+  exactly the two passes. A Must-fix in round 5 takes the "new to look at" strip out of the task.

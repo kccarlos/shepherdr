@@ -107,6 +107,8 @@ How to run, build and lay out the code: [docs/develop.md](docs/develop.md).
   `mods/tasks/bin/herdr-task` or the `herdr_task/` folder beside it (`zipfile.is_zipfile` says which).
 - Tart guests (vm/): run `sync` before `tart stop` or the last writes are lost; Herdr in a guest updates itself from
   releases.herdr.dev (vm/ blocks it); guest logins need the keychain unlocked over ssh (vm/README.md).
+- factory-vm (the long-lived factory VM, vm/README.md): reach it with `vm/factory-vm.sh ssh` or `status`, never
+  `hc machine add` against the host's live core (its settings push and bundle copy would overwrite the guest's).
 
 ## Add-ons
 

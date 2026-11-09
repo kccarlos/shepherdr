@@ -1,9 +1,10 @@
-// The board's home on a desktop (docs/factory.md section 3; the approved canvas's "home" artboard): the box that tells
-// the space's Assistant, the usage pools, the tasks by status, the asks, the agent tree and the deliverables that are
-// new to look at. Its data is contracts/board-data.md's (snapshot tasks' agents, asks, usage) and GET api/deliverables.
-// Where the canvas drew a dashed "needs: …" chip and the contract sends nothing, the chip stays.
+// The board's home on a desktop (docs/factory.md section 3; the approved canvas's "home" artboard), read only: the
+// usage pools, the tasks by status, the asks, the agent tree and the deliverables that are new to look at. Its data is
+// contracts/board-data.md's (snapshot tasks' agents, asks, usage) and GET api/deliverables. Where the canvas drew a
+// dashed "needs: …" chip and the contract sends nothing, the chip stays. The canvas's send box comes in a follow-up
+// that reuses the chat's own Composer.
 import { useEffect, useState, type ReactNode } from 'react'
-import { act, openArtifact, panesHere, placeOf, setUI, useSnap, useUI } from '../kernel.ts'
+import { openArtifact, panesHere, placeOf, setUI, useSnap, useUI } from '../kernel.ts'
 import { GROUPS } from '../groups.ts'
 import { machineName, type Snapshot, type Task } from '@shared/types.ts'
 import { hhmm, tiles, type Pool } from '../board.ts'
@@ -57,7 +58,8 @@ export function Home() {
       .then((all) => current && setDl(all.filter(Boolean)))
     return () => { current = false }
   }, [fresh])
-  const leave = () => setUI({ board: false })
+  // the usual Tasks panel on its Done filter, as the app opens a filter elsewhere (the voice plugin's tasks nav)
+  const leave = () => setUI({ board: false, side: 'tasks', sideShut: false, taskFilter: 'done' })
   const latest = new Map(dl.flatMap((d) => d.agents).map((a) => [`${a.ref}:${a.address}`, a.latest]))
   const proofs = new Set(dl.flatMap((d) => d.tasks.map((t) => t.proof?.id)))
   const refs = new Set(tasks.map(refOf))
@@ -87,7 +89,6 @@ export function Home() {
             ))}
           </section>
         </header>
-        {place ? <Tell chat={place.chat} offline={offline} /> : null}
         <section aria-label="New to look at" className="flex flex-col gap-2.5">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <div className="flex flex-wrap items-baseline gap-2.5"><h2 className="m-0 font-display text-xl font-semibold">new to look at</h2><span className={muted}>what agents made for you</span></div>
@@ -221,37 +222,5 @@ function Row({ t }: { t: Task }) {
         {t.status === 'ready' ? <span className="inline-flex min-h-9 items-center rounded-full border border-[var(--sd-fg)] px-3.5 text-sm font-medium">Review</span> : null}
       </div>
     </button>
-  )
-}
-
-/** the "tell the factory" box: what it says goes to the space's Assistant, as the chat's own box sends it */
-function Tell({ chat, offline }: { chat: string; offline: boolean }) {
-  const [text, setText] = useState('')
-  const [busy, setBusy] = useState(false)
-  const send = async () => {
-    if (!text.trim() || offline || busy) return
-    setBusy(true)
-    const r = await act({ type: 'send', chat, text: text.trim(), human: true }).catch(() => null)
-    setBusy(false)
-    if (r) setText('')
-  }
-  const off = !text.trim() || offline || busy
-  return (
-    <section aria-label="Send a request" className="flex flex-col gap-2 rounded-[var(--sd-radius-lg)] border border-[var(--sd-line)] bg-[var(--sd-card)] p-3.5 shadow-soft">
-      <div className="flex flex-wrap items-end gap-2.5">
-        <div className="flex min-w-0 flex-[999_1_420px] flex-col gap-1.5">
-          <label htmlFor="board-ask" className="text-sm font-medium">tell the factory what you want</label>
-          <textarea id="board-ask" rows={2} value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) send() }}
-            placeholder="e.g. make the board show which model each worker runs"
-            className="box-border w-full resize-none rounded-[var(--sd-radius)] border border-[var(--sd-line)] bg-[var(--sd-bg)] px-3.5 py-[11px] font-[inherit] text-[var(--sd-fg)] placeholder:text-[var(--sd-muted)]" />
-        </div>
-        <button type="button" disabled={off} onClick={send}
-          className={`h-11 rounded-full border-none px-[22px] font-semibold ${off ? 'bg-[var(--sd-track)] text-[var(--sd-muted)]' : 'cursor-pointer bg-[var(--sd-primary)] text-[var(--sd-on-primary)]'}`}>Send</button>
-      </div>
-      <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--sd-muted)]">
-        <span>Goes to this space's Assistant. It plans the work and asks you only for decisions.</span>
-        <Needs>which chat is the factory's Assistant</Needs>
-      </div>
-    </section>
   )
 }

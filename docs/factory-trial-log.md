@@ -186,3 +186,9 @@ answer (2026-11-08). It becomes the role allow lists in phase 3 (docs/factory.md
   Tasks added from now carry review.min 2 explicitly.
 - Person's answer to ask 67ed5b: B2 ships as a side panel (third choice beside Tasks and Artifacts); the ?board
   handling leaves kernel.ts and nav.ts. FAC-44 (phone layout) brief updated to match before it starts.
+- Person's decisions (~20:10, via the orchestrator): B2 as a side panel; the factory moves into a VM; Claude quota
+  may be used to zero now (no 2% floor). FAC-56 (factory-vm: long-lived Tart VM, 8 CPU / 10 GB, Shepherdr from the
+  fork inside, permissions skipped there, max_running 4; Tailscale and an optional fork token as asks) started at
+  once on the orchestrator's word (Opus worker, Argon review, min 2, at most 3 rounds). The host factory stays as is
+  until the VM one is proven. FAC-54 converging (Must fix 3, 1, then a pass): one more round for its second pass.
+  FAC-51's AGENTS.md line added now that vm/ is merged.

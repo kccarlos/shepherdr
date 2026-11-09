@@ -36,7 +36,7 @@ const Section = ({ label, heading, children, className = '' }: { label: string; 
   <section aria-label={label} className={`${card} ${className}`}>{heading ? <h2 className={h2}>{heading}</h2> : null}{children}</section>
 )
 const Tail = ({ text }: { text: string }) => text ? (
-  <details className="text-xs"><summary className="cursor-pointer text-[var(--sd-muted)]">output</summary>
+  <details className="text-xs"><summary className="flex min-h-11 cursor-pointer items-center text-[var(--sd-muted)]">output</summary>
     <pre className="m-0 mt-1 max-h-60 overflow-auto whitespace-pre-wrap font-mono text-[var(--sd-fg)] [overflow-wrap:anywhere]">{text}</pre></details>
 ) : null
 

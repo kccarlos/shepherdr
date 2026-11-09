@@ -875,7 +875,7 @@ function PhoneHome({ snap }: { snap: Snapshot }) {
       <PhoneTop
         left={<MenuButton />}
         // as 3.0's panels: the chat names its space; Tasks and Artifacts are their panels, everything in them
-        name={tab === 'tasks' ? 'Tasks' : tab === 'artifacts' ? 'Artifacts' : place.name}
+        name={tab === 'tasks' ? 'Tasks' : tab === 'artifacts' ? 'Artifacts' : tab === 'board' ? 'Board' : place.name}
         icon={tab === 'chat' ? <PlaceIcon level={2} className="text-fg2" /> : undefined}
         kind={tab === 'chat' ? placeKind(snap, place) : undefined}
         mark={tab === 'chat' ? <PlaceMarks place={place} /> : undefined}
@@ -899,7 +899,7 @@ function PhoneHome({ snap }: { snap: Snapshot }) {
           ) : null}
         </div>
       ) : (
-        <div className="min-h-0 flex-1 touch-pan-y overflow-x-hidden overflow-y-auto overscroll-contain">{tab === 'needs' && registry.views.needs ? <registry.views.needs /> : tab === 'artifacts' && Artifacts ? <Artifacts placeId={place.id} /> : Tasks ? <Tasks placeId={place.id} /> : null}</div>
+        <div className="min-h-0 flex-1 touch-pan-y overflow-x-hidden overflow-y-auto overscroll-contain">{tab === 'board' ? <Home /> : tab === 'needs' && registry.views.needs ? <registry.views.needs /> : tab === 'artifacts' && Artifacts ? <Artifacts placeId={place.id} /> : Tasks ? <Tasks placeId={place.id} /> : null}</div>
       )}
       {/* the keyboard is up: the message box sits right on it, so more of the chat shows */}
       {keyboard ? null : <PhoneBar />}
@@ -922,6 +922,7 @@ function PhoneBar() {
             ...(registry.views.needs ? [['needs', 'Needs you', BellIcon] as const] : []),
             ['tasks', 'Tasks', TasksIcon],
             ...(registry.views.artifacts ? [['artifacts', 'Artifacts', PageIcon] as const] : []),
+            ['board', 'Board', TasksIcon],
           ] as const
         ).map(([k, l, Icon]) => (
           <button

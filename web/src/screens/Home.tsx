@@ -213,11 +213,11 @@ function Row({ t }: { t: Task }) {
         <div className="flex min-w-0 items-baseline gap-2"><span className="shrink-0 font-mono text-xs whitespace-nowrap text-[var(--sd-muted)]">{refOf(t)}</span><span className="text-[15px]/snug font-medium">{t.name}</span></div>
         {t.sub ? <span className={`text-[13px] ${t.status === 'need' ? 'text-[var(--sd-primary-text)]' : 'text-[var(--sd-muted)]'}`}>{t.sub}</span> : null}
       </div>
-      <div className="flex min-w-0 flex-wrap items-center justify-end gap-1.5">
+      <div className="flex min-w-0 flex-[1_1_auto] flex-wrap items-center justify-end gap-1.5">
         {worker || t.agent || 'agents' in t ? <Chip>{worker ? who(worker) : (t.agent?.cli ?? 'not started')}</Chip> : null}
         {reviewer ? <Chip>review · {who(reviewer)}</Chip> : null}
         <span className={`min-w-11 text-right ${muted} tabular-nums`}>{t.left ?? ''}</span>
-        {t.status === 'ready' ? <span className="inline-flex min-h-9 items-center rounded-full border border-[var(--sd-fg)] px-3.5 text-sm font-medium">Review</span> : null}
+        {t.status === 'ready' ? <span className="inline-flex min-h-11 items-center rounded-full border border-[var(--sd-fg)] px-3.5 text-sm font-medium">Review</span> : null}
       </div>
     </button>
   )

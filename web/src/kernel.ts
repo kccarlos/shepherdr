@@ -201,7 +201,7 @@ export interface UI {
   /** the open task: its agent's chat */
   task: string | null
   /** phone: Chat, Needs you, Tasks or Artifacts */
-  tab: 'chat' | 'needs' | 'tasks' | 'artifacts'
+  tab: 'chat' | 'needs' | 'tasks' | 'artifacts' | 'board'
   /** a wide screen's right-hand column: Needs you, the place's Tasks or its Artifacts, remembered on this device */
   side: 'needs' | 'tasks' | 'artifacts' | 'files' | 'changes' | 'board'
   /** the tab bar's open panel button pressed again: the right-hand column hides, as 3.0's side panel (wide screens) */

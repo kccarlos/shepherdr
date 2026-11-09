@@ -316,7 +316,7 @@ interface State {
 
 // Shepherdr 3 has no Needs you view: what needs you is the Tasks panel's first section (an old link's tab goes there)
 function tabOf(t: string | null): UI['tab'] {
-  return t === 'needs' ? 'tasks' : t === 'tasks' || t === 'artifacts' ? t : 'chat'
+  return t === 'needs' ? 'tasks' : t === 'tasks' || t === 'artifacts' || t === 'board' ? t : 'chat'
 }
 
 const TASK_FILTER = 'shepherdr.taskFilter'

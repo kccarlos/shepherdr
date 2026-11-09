@@ -922,7 +922,7 @@ function PhoneBar() {
             ...(registry.views.needs ? [['needs', 'Needs you', BellIcon] as const] : []),
             ['tasks', 'Tasks', TasksIcon],
             ...(registry.views.artifacts ? [['artifacts', 'Artifacts', PageIcon] as const] : []),
-            ['board', 'Board', TasksIcon],
+            ['board', 'Board', CrookIcon],
           ] as const
         ).map(([k, l, Icon]) => (
           <button

@@ -109,7 +109,10 @@ What the guest setup (`factory-vm-guest.sh`) does, all in the guest's own files:
 - The factory folder is `~/dev/sheepdog-trial` (tasks VMT-n, 4 at once, herdr-task's own reviewer with one passing
   round): a clone of herdr-sheepdog with no remote, so `ready` never pushes or opens a pull request. Repos live under
   `~/dev`, never `~/Documents`. Another repo: clone it into `~/dev`, add a `spaces` entry with its folder, rerun setup.
-- The reviewer is Claude (plan mode with a read-only allow list: herdr-task's code fixes that, not settings). An agy
+- The reviewer is Claude (plan mode with a read-only allow list: herdr-task's code fixes that, not settings). Told its
+  shell runs only reads, it never tried its verdict command, so setup adds one line to the guest's
+  `~/.config/herdr-core/templates/reviewer.md` saying the command runs (Shepherdr updates then write `reviewer.md.new`
+  beside it). An agy
   reviewer runs in herdr-task's sandbox, which copies a token file this guest lacks (agy signs in through the keychain
   here); agy reviewers wait for a setting that turns that sandbox off inside a VM.
 - Tasks start without a Herdr window: `herdr-task start <n> --space factory` (no Assistant: no parent terminal).
@@ -117,6 +120,8 @@ What the guest setup (`factory-vm-guest.sh`) does, all in the guest's own files:
 The host reaches it over plain ssh (`factory-vm.sh ssh`/`status`, the key above, the address from `tart ip`), never
 with `hc machine add` against the host's live core: a linked machine gets the host window's settings pushed to it
 and herdr-task's bundle copied on, which would replace the guest's settings.
+To accept a Ready task from the host (the folder has no remote, so it merges locally into the clone's `main`):
+`vm/factory-vm.sh ssh 'herdr-task accept VMT-<n> --folder ~/dev/sheepdog-trial'`.
 
 After a reboot:
 - Host: nothing starts factory-vm by itself. Run `vm/factory-vm.sh start` (needs the SSD's consent granted to the
@@ -130,6 +135,6 @@ nightly's `sd-qa` (6 GB) fill the Mac mini, and a gate verifier's clone can't bo
 for those, or give it less memory.
 
 Still needs the person:
-- Tailscale: installed in the guest (`brew install tailscale`, the system daemon) and waiting for its login link to be
-  approved (an ask names it), so the board opens from the phone.
+- Tailscale: setup installs it (Homebrew's daemon, `tailscale up --hostname=factory-vm`); its login link waits for the
+  person's approval (the checks print it; an ask names it), so the board opens from the phone.
 - Optionally a fine-grained GitHub token limited to the fork, replacing the guest's full `gh` login.

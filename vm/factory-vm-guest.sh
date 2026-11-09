@@ -36,6 +36,8 @@ checks() { # one line per CLI login and service
   done
   printf '%-8s %s\n' core "$(hc server status --json | jq -r '"hc \(.version), \(.live) live terminals"')"
   printf '%-8s %s\n' service "$(curl -s -o /dev/null -w 'http %{http_code} on 127.0.0.1:7788' http://127.0.0.1:7788/)"
+  printf '%-8s %s\n' tailscale "$(tailscale status --json 2>/dev/null | jq -r 'if .BackendState == "Running" then "on, " + .Self.DNSName
+    elif .AuthURL != "" then .BackendState + ": the person approves " + .AuthURL else .BackendState end' || echo 'not installed')"
   printf '%-8s %s\n' tasks "$(herdr-task config --folder "$TRIAL")"
 }
 
@@ -85,6 +87,21 @@ e.setdefault("agents", {})["feedback"] = False
 s = d.setdefault("spaces", {}).setdefault("factory", {})
 s["folder"] = folder
 s.setdefault("tasks", {}).update({"max_running": 4, "review_min": 1, "review_rounds": 3, "merge": "ask"})'
+
+    # A Claude reviewer runs in plan mode and, told its shell runs only the read commands, never tries its verdict
+    # command (on its allow list all the same): the guest's reviewer instructions say so. Shepherdr's updates then
+    # leave this edited template alone and write their own beside it as reviewer.md.new.
+    t=.config/herdr-core/templates/reviewer.md
+    grep -q '# factory-vm verdict' "$t" ||
+      echo '- In plan mode, your `herdr-task review` verdict command is on your allow list and runs without a prompt: run it to record your verdict. # factory-vm verdict' >>"$t"
+
+    # Tailscale, so the board opens from the phone: the open-source daemon from Homebrew. Its login is the person's: the
+    # checks print the link to approve until it's done.
+    command -v tailscale >/dev/null || HOMEBREW_NO_AUTO_UPDATE=1 brew install -q tailscale </dev/null
+    [ -e /Library/LaunchDaemons/com.tailscale.tailscaled.plist ] || { sudo tailscaled install-system-daemon; sleep 3; }
+    if [ "$(tailscale status --json 2>/dev/null | jq -r '.BackendState + " " + .AuthURL')" = "NeedsLogin " ]; then
+      (nohup tailscale up --hostname=factory-vm >/tmp/tailscale-up.log 2>&1 &); sleep 8
+    fi
 
     # The service (launchd, from the install) and the scheduler (herdr-task keeps it under herdr-core).
     launchctl kickstart "gui/$(id -u)/dev.shepherdr.service" 2>/dev/null || true

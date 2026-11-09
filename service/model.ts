@@ -141,17 +141,18 @@ export class Model {
   }
 
   /** Each task's diff size (git diff --numstat in its folder): at work from its base, done from its start to its head;
-   *  read again each minute, a done one once. */
-  private sizes = new Map<string, { added: number; removed: number; at: number; done: boolean }>();
+   *  read again when its range changes (done, reopened) and each minute while it isn't done. */
+  private sizes = new Map<string, { added: number; removed: number; at: number; range: string }>();
   private async readSizes(rows: any[]) {
-    const due = rows.filter((r) => r.range && !(this.sizes.get(r.key)?.done) && Date.now() - (this.sizes.get(r.key)?.at ?? 0) > 60_000);
+    const due = rows.filter((r) => { const c = this.sizes.get(r.key);
+      return r.range && (c?.range !== r.range || (r.section !== "done" && Date.now() - c!.at > 60_000)); });
     await Promise.all(due.slice(0, 12).map(async (r) => {
-      this.sizes.set(r.key, { added: 0, removed: 0, ...this.sizes.get(r.key), at: Date.now(), done: false });
+      this.sizes.set(r.key, { added: 0, removed: 0, ...this.sizes.get(r.key), at: Date.now(), range: r.range });
       const out = await exec(this.hub, ["git", "-C", r.folder, "diff", "--numstat", r.range], r.machine ?? null, 20).catch(() => null);
       if (out?.code !== 0) return;
       const n = out.stdout.split("\n").map((l) => l.split("\t")).filter((x) => x.length >= 3);
       const sum = (i: number) => n.reduce((a, x) => a + (Number(x[i]) || 0), 0);
-      this.sizes.set(r.key, { added: sum(0), removed: sum(1), at: Date.now(), done: r.section === "done" });
+      this.sizes.set(r.key, { added: sum(0), removed: sum(1), at: Date.now(), range: r.range });
     }));
     if (due.length) this.soon();
   }
@@ -278,7 +279,9 @@ export class Model {
       const mine = live.filter((a) => a.role !== "reviewer" && a.role !== "helper");
       const worker = mine.find((a) => a.status === "blocked")?.address ?? mine[0]?.address ?? null;
       const last = task.agents?.[task.agents.length - 1];
-      const status = (a: string) => { const k: any = this.hub.terminals.get(a); return k?.state === "live" ? (typeof k.status === "object" ? k.status?.state ?? null : null) : undefined; };
+      // a live terminal's status; undefined: gone, or its agent exited into its kept shell (as agentsOf skips it)
+      const status = (a: string) => { const k: any = this.hub.terminals.get(a), st = typeof k?.status === "object" ? k.status?.state ?? null : null;
+        return k?.state !== "live" || (!st && k.labels?.["herdr.role"] !== "checks" && SHELL.test(String(k.foreground?.name ?? ""))) ? undefined : st; };
       const { added = 0, removed = 0 } = this.sizes.get(taskKey(list, task)) ?? {};
       return {
         key: taskKey(list, task), ref: refOf(list, task), title: task.title, section: p.section, needs: p.needs,
@@ -303,7 +306,7 @@ export class Model {
         logs: (Array.isArray(task.agents) ? task.agents : []).map((a: any) => a.log).filter((x: unknown) => typeof x === "string"),
         // the board's fields (contracts/board-data.md), and the commits its size counts
         board: boardOf(task, list.machine ?? null, status, { added, removed }),
-        range: task.branch && task.start ? (p.section === "done" ? `${task.start}..${task.head ?? task.branch}` : `${task.base ?? task.start}...${task.branch}`) : null,
+        range: task.branch && task.start ? (p.section === "done" ? `${task.start}..${task.head ?? task.own ?? task.branch}` : `${task.base ?? task.start}...${task.branch}`) : null,
       };
     }));
     // (the board's fields go out in the snapshot only)

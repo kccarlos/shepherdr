@@ -119,3 +119,47 @@ test("pools: codex's spent week is floor, a window it lacks is null", async () =
   const codex = snap.usage.find((p: any) => p.pool === "codex");
   expect(codex).toMatchObject({ five_hour_left: null, week_left: 0, state: "floor" });
 });
+
+test("an agent that exited into its kept shell is ended, not idle", async () => {
+  const h: any = hub({ t6n: null, t86: null });
+  for (const k of h.terminals.values()) k.foreground = { name: "zsh" };
+  const m: any = new Model(h, { put() {} } as any);
+  m.lists.set(null, [{ slug: "factory", name: "factory-run", prefix: "FAC", folder: tmp, machine: null, tasks: real.tasks }]);
+  let b: any = null;
+  m.onBuild = (x: any) => { b = x; };
+  m.build();
+  const t = b.rows.find((r: any) => r.id === 15).board;
+  expect(t.agents.slice(0, 2).map((a: any) => a.state)).toEqual(["ended", "ended"]);
+});
+
+test("a size is read again when its range moves: done, then reopened", async () => {
+  const repo = mkdtempSync(join(tmp, "size-"));
+  git(repo, "init", "-q", "-b", "main"); writeFileSync(join(repo, "a"), "1\n"); git(repo, "add", "."); git(repo, "commit", "-qm", "base");
+  const start = git(repo, "rev-parse", "HEAD");
+  git(repo, "checkout", "-qb", "work"); writeFileSync(join(repo, "a"), "1\n2\n3\n"); git(repo, "commit", "-qam", "w");
+  const m: any = new Model(hub({}) as any, { put() {} } as any);
+  const row = (section: string, range: string) => ({ key: "k", folder: repo, machine: null, section, range });
+  await m.readSizes([row("working", `main...work`)]);
+  expect(m.sizes.get("k")).toMatchObject({ added: 2, removed: 0 });
+  writeFileSync(join(repo, "a"), "1\n2\n3\n4\n"); git(repo, "commit", "-qam", "w2");
+  const head = git(repo, "rev-parse", "HEAD");
+  // done within the minute: its range changed, so it's read again
+  await m.readSizes([row("done", `${start}..${head}`)]);
+  expect(m.sizes.get("k")).toMatchObject({ added: 3 });
+  // reopened and worked on: read again, not kept as done
+  writeFileSync(join(repo, "a"), "1\n2\n3\n4\n5\n"); git(repo, "commit", "-qam", "w3");
+  await m.readSizes([row("working", `main...work`)]);
+  expect(m.sizes.get("k")).toMatchObject({ added: 4 });
+});
+
+test("odd records still fit: the last --model, an ask with an empty task, a window over spent", async () => {
+  const { modelIn, openAsks, poolsOf } = await import("./board.ts");
+  expect(modelIn(["claude", "--model", "sonnet", "--model", "opus"])).toBe("opus");
+  expect(modelIn(["claude", "--model", "--verbose"])).toBeNull();
+  const dir = mkdtempSync(join(tmp, "asks-"));
+  writeFileSync(join(dir, "a1.json"), JSON.stringify({ ...real.asks.find((a: any) => a.answer == null), id: "a1", task: "" }));
+  expect(openAsks(dir).flatMap(validateAsk)).toEqual([]);
+  const [p] = poolsOf([{ name: "claude", five: -0.4, week: 30, five_reset: null, week_reset: null }]);
+  expect(validatePool(p)).toEqual([]);
+  expect(p).toMatchObject({ five_hour_left: 0, state: "floor" });
+});

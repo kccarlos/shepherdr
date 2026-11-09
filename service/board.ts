@@ -9,8 +9,10 @@ const LIVE = ["working", "blocked", "idle", "done"];
 /** The model an argv names (--model x, --model=x, -m x), null: the CLI's default. */
 export function modelIn(argv: unknown): string | null {
   const a = Array.isArray(argv) ? argv.map(String) : [];
-  const i = a.findIndex((x) => x === "--model" || x === "-m");
-  return (i >= 0 ? a[i + 1] : a.find((x) => x.startsWith("--model="))?.slice(8)) || null;
+  // the last one wins, as a CLI's parser takes it
+  const i = a.findLastIndex((x) => x === "--model" || x === "-m" || x.startsWith("--model="));
+  const v = i < 0 ? null : a[i].startsWith("--model=") ? a[i].slice(8) : a[i + 1];
+  return v && !v.startsWith("-") ? v : null;
 }
 
 /** A task's board fields. task: its store record; on: its machine (null: here), terminal addresses there are on/addr;
@@ -39,14 +41,16 @@ export function openAsks(dir: string) {
   return files.flatMap((f) => {
     try {
       const { to, answered_at, ...a } = JSON.parse(readFileSync(join(dir, f), "utf8"));
-      return a.answer == null ? [{ ...a, terminal: a.terminal ?? null, answer: null }] : [];
+      return a.answer == null ? [{ ...a, task: a.task || null, terminal: a.terminal || null, answer: null }] : [];
     } catch { return []; }
   }).sort((x, y) => x.at - y.at);
 }
 
 /** usage.py's pools as the board reads them, with their state: unknown with no window, floor at 5 % (5 hours) or 1 % (week). */
 export const poolsOf = (pools: any[]) => pools.map((p) => {
-  const f = p.five ?? null, w = p.week ?? null;
+  // % left, kept within 0..100 (codexbar can report a window a little over spent)
+  const pct = (v: unknown) => (typeof v === "number" ? Math.min(100, Math.max(0, v)) : null);
+  const f = pct(p.five), w = pct(p.week);
   return { pool: p.name, five_hour_left: f, week_left: w, five_hour_reset: p.five_reset ?? null, week_reset: p.week_reset ?? null,
     state: f === null && w === null ? "unknown" : (f !== null && f <= 5) || (w !== null && w <= 1) ? "floor" : "ok" };
 });

@@ -141,3 +141,9 @@ answer (2026-11-08). It becomes the role allow lists in phase 3 (docs/factory.md
   showed every one already on origin, so kc-factory got a record-only merge (`-s ours`, tree unchanged) of
   845b8549, e6d99909 and c4c55727. FAC-39..43 and 51 now merge cleanly with no worker turn and no new head (a new head
   would need two new review rounds). From now on the Assistant pushes its doc commits at once.
+- FAC-15 (G4) dropped, by the orchestrator's standing call: its second recap trigger (Argon round 9 on bdc1432: a
+  blocker and a major after the core cut; RECAP.md in its worktree recommended fixing both, about 6 lines). Finding 1
+  (accept on a PR task force-deletes commits made locally after ready; merge_now matches GitHub's headRefOid, then
+  finish(even_if_busy=True)) exists on kc-factory today, and data loss is always fixed: FAC-55 (Sonnet, ~5 lines plus
+  a test with the real finish) guards it on its own. Finding 2 came only with the cut, so it goes with G4. Its branch
+  and worktree are kept; the person cancels the task.

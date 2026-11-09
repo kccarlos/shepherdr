@@ -806,10 +806,10 @@ def record_verdict(s, t, rn, passed, must, text):
     for k in ("review_out", "progress"):
         t.pop(k, None)
     s.dirty = True
-    if passed:
+    if t.get("mode") == "worktree" and budget_pass(s, t):  # a recap first: no next round, no merge, no fixing
+        msg = f"{s.ref(t)}: review round {rn['round']} {'passed' if passed else 'asked for changes'}; {t['recap']['title']}."
+    elif passed:
         msg = f"{s.ref(t)}: review round {rn['round']} passed. " + (gate_step(s, t) or finalize(s, t))
-    elif t.get("mode") == "worktree" and budget_pass(s, t):
-        msg = f"{s.ref(t)}: review round {rn['round']} asked for changes; {t['recap']['title']}."
     else:
         sent, _ = tell(s, t, (f"Herdr's review round {rn['round']} of {s.ref(t)} ({rn['head'][:7]}) found what must be fixed:\n"
                               f"{text.strip()}\n\nFix these, commit, then run `{own_path()} ready {s.ref(t)} --folder "

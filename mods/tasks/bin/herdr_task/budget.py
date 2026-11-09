@@ -132,13 +132,12 @@ def budget_pass(s, t):
         if t.get("attention") != t["recap"]["title"]:  # something else changed it: the recap still waits
             t["attention"], t["attention_at"] = t["recap"]["title"], now()
             s.dirty = True
+        unmergeable(s, t)
         return True
     why = triggers(s, t)
     if not why:
         return False
-    # Never mergeable while a recap is open, nor after it (drop, split): Working until its next ready.
-    back_to_work(s, t, "a recap is required")
-    t.pop("auto_merge", None)
+    unmergeable(s, t)
     again = bool(t.get("recaps"))
     title = ("Recap required again: change direction" if again else f"Recap required: {why[0]}")[:120]
     t["recap"] = {"at": now(), "reasons": why, "round": len(rounds_since(t)), "title": title}
@@ -155,6 +154,14 @@ def budget_pass(s, t):
 def last_findings(t):
     r = next((r for r in reversed(rounds_since(t)) if r.get("verdict") == "changes"), None)
     return f"\n\nThe last review round's findings:\n{r['report']}\n\n" if r and r.get("report") else " "
+
+
+def unmergeable(s, t):
+    """Never mergeable while a recap is open, nor after it (drop, split): Working until its next ready."""
+    from .commands import back_to_work
+    back_to_work(s, t, "a recap is required")
+    if t.pop("auto_merge", None) is not None:
+        s.dirty = True
 
 
 def stop_words(s, t, why, again):

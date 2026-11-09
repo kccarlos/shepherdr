@@ -2189,6 +2189,21 @@ class LoopBreaker(GateReview):
         idle = [{"address": "w1", "status": {"state": "idle"}, "labels": {}}]
         self.assertEqual(task_status(self.task, idle)[0], "needs")
 
+    def test_a_reviewer_in_flight_when_a_recap_opens_never_passes_it_on(self):
+        from unittest import mock
+        import herdr_task.budget as budget
+        self.ready()
+        self.task.update(started=1000, estimate_time=60000)
+        with mock.patch.object(budget, "now", lambda: 200000), mock.patch.object(self.commands, "workers", lambda s, t: []):
+            budget.budget_pass(self.store, self.task)  # over its time while round 1 is being reviewed
+        self.verdict("term-1", passed=True)
+        self.assertEqual(len(self.task["review_runs"]), 1)  # no next round started
+        self.assertEqual(self.task["state"], "running")
+        self.task.update(state="ready", auto_merge="checks")  # however it got there
+        budget.budget_pass(self.store, self.task)
+        self.assertEqual(self.task["state"], "running")
+        self.assertNotIn("auto_merge", self.task)
+
     def recap(self, decide=None, why="w"):
         import argparse
         from unittest import mock

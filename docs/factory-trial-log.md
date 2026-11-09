@@ -169,3 +169,7 @@ answer (2026-11-08). It becomes the role allow lists in phase 3 (docs/factory.md
 - FAC-52 (Assistant template, +10 lines of template text): docs rule, so review.min 1; round 1 had passed, the
   round-2 reviewer t127 was ended unread, and the task went to Ready (PR #34). FAC-39 hit the same reviewer-exit
   drop out of Ready as FAC-42; a nudge to ready again fixed both.
+- FAC-40 round 5: 2 majors from the same premise as round 3 (the board replaces the whole layout, so visibleChats,
+  read marks and toasts treat hidden chats as on screen; links leave the board up). Third trigger, so a new approach
+  in the same task: mount the board inside the usual layout's middle column and remove the special cases the
+  full-layout mount needed. review.rounds 8 (two rounds for two passes); a Must-fix after this drops and re-plans B2.

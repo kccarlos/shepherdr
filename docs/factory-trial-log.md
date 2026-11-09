@@ -151,3 +151,12 @@ answer (2026-11-08). It becomes the role allow lists in phase 3 (docs/factory.md
   and had already fixed and re-readied (round 3, t11q, running). Counted as its one continue; a Must-fix in round 3
   is its second trigger. The hand rule (recap instead of fixing) was then sent to every active worker (FAC-39, 40,
   42, 43, 50).
+- FAC-50 (start-up probe) dropped at its recap after round 8 (Must fix 3, 5, 3, 4, 2, 3, 2; ~150 production lines
+  against a 30-line brief). Every round found a new hole in one premise: a persisted per-app hang record serving the
+  15 s tick, the long-lived scheduler and other apps at once. The smallest version already ships: locate()'s FAC-10
+  timeout says "git didn't answer ... (on macOS: may this app open that folder?)", and section 11 has the fix.
+  Branch, worktree and RECAP.md kept; the person removes the task.
+- FAC-40 (B2) split at its second trigger (round 3: 2 majors, both from the send box and leaving the board, the
+  premise being a board that replaces the whole layout and so owns app-wide state). It ships read-only, with "show
+  them" as a plain link; the send box comes back as a follow-up that reuses the chat Composer (add it once FAC-40 is
+  accepted). Rounds 4-5 of 5 are left for the two passes; a Must-fix there comes back to the Assistant.

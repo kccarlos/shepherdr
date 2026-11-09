@@ -437,6 +437,27 @@ def gate_passes(t, head):
     return sum(1 for r in t.get("reviews") or [] if r.get("started_by") == "herdr-task" and r["head"] == head and r["verdict"] == "pass")
 
 
+def review_diff(wt, base, head, mine):
+    """(what the diff is, the diff) for a gate round (FAC-53). Round 1 and a re-review of the same head: the whole
+    change from the merge-base (never the stored start, stale after a rebase). Later: only what changed since the last
+    reviewed head (after a rebase, the range-diff of the task's own commits), and a line of the earlier findings."""
+    mb = git(wt, "merge-base", base, head)[1] or base
+    whole = (f"Its diff (git diff {mb}..{head})", git(wt, "diff", f"{mb}..{head}")[1])
+    prev = mine[-1]["head"] if mine else None
+    if not prev or prev == head or not git(wt, "cat-file", "-e", prev)[0]:
+        return whole
+    if git(wt, "merge-base", "--is-ancestor", prev, head)[0]:
+        what, out = f"Only what changed since the last reviewed head {prev[:7]} (git diff {prev}..{head})", git(wt, "diff", f"{prev}..{head}")[1]
+    else:
+        old = git(wt, "merge-base", base, prev)[1]
+        if not old:
+            return whole
+        what = f"The branch was rebased since the last reviewed head {prev[:7]}; only the rebase delta (git range-diff {old}..{prev} {mb}..{head})"
+        out = git(wt, "range-diff", f"{old}..{prev}", f"{mb}..{head}")[1]
+    earlier = "; ".join(f"round {r['round']} ({r['head'][:7]}) {r['verdict']}: {' '.join((r.get('report') or 'no findings').split())[:200]}" for r in mine)
+    return (f"{what}. Earlier rounds, to know what was fixed: {earlier}. The whole change is `git diff {mb}..{head}`", out)
+
+
 def gate_step(s, t):
     """A gate folder's ready (FAC-13): None once its head has review.min passing rounds from
     herdr-task's own reviewer; else starts the next one for that head (or says why it waits)."""
@@ -451,8 +472,11 @@ def gate_step(s, t):
     runs, done = t.get("review_runs") or [], {r["round"] for r in mine}
     if mine and mine[-1]["head"] == head and mine[-1]["verdict"] == "changes":
         return f"{s.ref(t)}: Herdr's reviewer asked for changes to {head[:7]}: fix them, commit, then run ready again."
-    if any(r["head"] == head and r["round"] not in done and (k := hc_json("get", r["address"]) or {}).get("state") == "live" and agent_running(k) for r in runs):
-        return f"{s.ref(t)}: Herdr's reviewer is still reviewing {head[:7]}; its findings come to you as a message."
+    # Never two reviewers at once (FAC-53): a live one on any head, even an older one, holds the next round back.
+    busy = next((r for r in runs if r["round"] not in done and (k := hc_json("get", r["address"]) or {}).get("state") == "live" and agent_running(k)), None)
+    if busy:
+        return (f"{s.ref(t)}: Herdr's reviewer ({busy['address']}) is still reviewing {busy['head'][:7]}; no second one starts. "
+                f"Its findings come to you as a message.")
     on, rounds = review_limits(s, t)
     if len(runs) >= rounds:
         t["review_out"] = now()
@@ -464,12 +488,12 @@ def gate_step(s, t):
     argv = argv_for({**rv, "perm": "read-only" if rv["agent"] == "codex" else "full" if sand else "plan"})
     at = now()
     code = round_code({"round": len(runs) + 1, "head": head, "at": at}) if sand else None
-    diff = git(wt, "diff", f"{t['start']}..{head}")[1]
+    shown, diff = review_diff(wt, t.get("base") or "main", head, mine)
     cmd = f"{ht} review {ref} --folder {folder}"
     check = (settings_for(s, t.get("space"))["tasks"].get("check") or "").strip()
     prompt = "\n\n".join([
         instructions("reviewer"), f"The task, {ref}:\n" + ((t.get("prompt") or "").strip() or t["title"]),
-        f"Review commit {head} in {wt}. Its diff (git diff {t['start']}..{head})" + (", cut: run it for the rest" if len(diff) > 20000 else "")
+        f"Review commit {head} in {wt}. {shown}" + (", cut: run it for the rest" if len(diff) > 20000 else "")
         + f":\n{diff[:20000]}",
         f"Must fix: {MUST_WORDS[rows['Must fix']]}. Herdr started you, not the worker. "
         + (f"You run in a sandbox: you can read only this worktree, its git history and the system's tools, write only in "

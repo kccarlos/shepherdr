@@ -1830,6 +1830,48 @@ class GateReview(unittest.TestCase):
         self.assertEqual(len(self.runs), 1)
         self.assertEqual(self.task["state"], "running")
 
+    def prompt(self, i):
+        cmd = self.runs[i][self.runs[i].index("--") + 1:]
+        return cmd[cmd.index("-i") + 1]
+
+    def test_round_2_after_a_fix_carries_only_the_delta_and_the_earlier_findings(self):
+        # FAC-53: round 1 has the whole change, a later round what changed since the last reviewed head
+        self.ready()
+        self.assertIn("gate.txt", self.prompt(0))
+        self.assertIn("say \"hi\"", self.prompt(0))
+        self.verdict("term-1", passed=False, changes="needs a second line", must_fix=1)
+        new = self.change("say \"hi\" $HOME `date`\nsecond line")
+        self.ready()
+        p = self.prompt(1)
+        self.assertIn(f"git diff {self.head}..{new}", p)
+        self.assertIn("+second line", p)
+        self.assertIn("round 1", p)
+        self.assertIn("changes: needs a second line", p)
+
+    def test_after_a_rebase_only_the_rebase_delta(self):
+        self.ready()
+        self.verdict("term-1", passed=False, changes="fix it", must_fix=1)
+        self.git(self.main, "checkout", "-q", "main")
+        with open(os.path.join(self.main, "other.txt"), "w") as f:
+            f.write("moved base")
+        self.git(self.main, "add", "other.txt")
+        self.git(self.main, "commit", "-q", "-m", "base moved")
+        self.git(self.wt, "rebase", "-q", "main")
+        self.change("fixed")
+        self.ready()
+        p = self.prompt(1)
+        self.assertIn("rebased", p)
+        self.assertIn("range-diff", p)
+        self.assertNotIn("other.txt", p)  # the base's own commit isn't in the delta
+
+    def test_no_second_reviewer_while_one_is_live_even_for_an_older_head(self):
+        self.ready()
+        self.change("moved on")  # a new head, round 1's reviewer still alive and unfinished
+        self.reviewer_term = {"state": "live", "agent": "agy", "foreground": {"name": "agy"}}
+        self.ready()
+        self.assertEqual(len(self.runs), 1)
+        self.assertEqual(len(self.task["review_runs"]), 1)
+
     def test_a_reviewer_gone_without_a_verdict_doesnt_stop_the_next(self):
         self.ready()
         self.reviewer_term = {"state": "live", "agent": "zsh", "foreground": {"name": "zsh"}}  # its CLI exited, the kept shell stays

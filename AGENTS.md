@@ -74,6 +74,8 @@ How to run, build and lay out the code: [docs/develop.md](docs/develop.md).
   renders all of it.
 - Crash recovery for real: a throwaway core, `HC_SESSION=<name> hc ...` with `HC_TERMINAL_SOCKET` and Claude's
   `CLAUDE_*` env unset (`CLAUDE_CODE_CHILD_SESSION` turns off transcripts).
+- The web app's kernel.ts rewrites the URL when it's imported: read a special address (like `?preview`) in a module
+  imported before it in main.tsx.
 
 ## Other machines
 

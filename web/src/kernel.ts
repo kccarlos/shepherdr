@@ -201,7 +201,7 @@ export interface UI {
   /** the open task: its agent's chat */
   task: string | null
   /** phone: Chat, Needs you, Tasks or Artifacts */
-  tab: 'chat' | 'needs' | 'tasks' | 'artifacts'
+  tab: 'chat' | 'needs' | 'tasks' | 'artifacts' | 'board'
   /** a wide screen's right-hand column: Needs you, the place's Tasks or its Artifacts, remembered on this device */
   side: 'needs' | 'tasks' | 'artifacts' | 'files' | 'changes' | 'board'
   /** the tab bar's open panel button pressed again: the right-hand column hides, as 3.0's side panel (wide screens) */
@@ -316,7 +316,7 @@ interface State {
 
 // Shepherdr 3 has no Needs you view: what needs you is the Tasks panel's first section (an old link's tab goes there)
 function tabOf(t: string | null): UI['tab'] {
-  return t === 'needs' ? 'tasks' : t === 'tasks' || t === 'artifacts' ? t : 'chat'
+  return t === 'needs' ? 'tasks' : t === 'tasks' || t === 'artifacts' || t === 'board' ? t : 'chat'
 }
 
 const TASK_FILTER = 'shepherdr.taskFilter'

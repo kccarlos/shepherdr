@@ -36,7 +36,7 @@ const Section = ({ label, heading, children, className = '' }: { label: string; 
   <section aria-label={label} className={`${card} ${className}`}>{heading ? <h2 className={h2}>{heading}</h2> : null}{children}</section>
 )
 const Tail = ({ text }: { text: string }) => text ? (
-  <details className="text-xs"><summary className="cursor-pointer text-[var(--sd-muted)]">output</summary>
+  <details className="text-xs"><summary className="flex min-h-11 cursor-pointer items-center text-[var(--sd-muted)]">output</summary>
     <pre className="m-0 mt-1 max-h-60 overflow-auto whitespace-pre-wrap font-mono text-[var(--sd-fg)] [overflow-wrap:anywhere]">{text}</pre></details>
 ) : null
 
@@ -100,7 +100,7 @@ export function BoardTaskPage() {
             <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 font-medium" style={{ background: `var(--sd-${tone}-soft, var(--sd-track))`, color: `var(--sd-${tone === 'blocked' ? 'blocked-text' : tone})` }}>
               <span aria-hidden="true" className="size-2 rounded-full" style={{ background: `var(--sd-${tone})` }} />{word}
             </span>
-            {t.pr ? <a href={t.pr.url} target="_blank" rel="noreferrer" className="text-[var(--sd-muted)]">PR #{t.pr.number}{t.base ? ` into ${t.base}` : ''}</a> : null}
+            {t.pr ? <a href={t.pr.url} target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center text-[var(--sd-muted)]">PR #{t.pr.number}{t.base ? ` into ${t.base}` : ''}</a> : null}
           </div>
           <h1 className="m-0 font-display text-[32px]/[1.2] font-semibold">{t.name}</h1>
           {t.summary ? <p className="m-0 max-w-[720px] text-[var(--sd-muted)]">{t.summary}</p> : null}
@@ -157,7 +157,7 @@ export function BoardTaskPage() {
                     <span className="font-mono text-[13px] [overflow-wrap:anywhere]">{c.command}</span>
                     <span className="inline-flex items-center gap-1.5 text-[13px] font-medium" style={{ color: `var(--sd-${c.exit === 0 ? 'done' : 'danger'})` }}>
                       <Tick ok={c.exit === 0} />{c.exit === 0 ? 'passed' : `failed · exit ${c.exit}`}
-                      {c.ci ? <a href={c.ci.url ?? undefined} target="_blank" rel="noreferrer" style={{ color: `var(--sd-${CI[c.ci.state] ?? 'muted'})` }}>· CI {c.ci.state}</a> : null}
+                      {c.ci ? (c.ci.url ? <a href={c.ci.url} target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center" style={{ color: `var(--sd-${CI[c.ci.state] ?? 'muted'})` }}>· CI {c.ci.state}</a> : <span style={{ color: `var(--sd-${CI[c.ci.state] ?? 'muted'})` }}>· CI {c.ci.state}</span>) : null}
                     </span>
                   </div>
                   <Tail text={c.output_tail} />

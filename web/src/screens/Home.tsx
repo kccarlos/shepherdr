@@ -60,7 +60,7 @@ export function Home() {
     return () => { current = false }
   }, [fresh])
   // the usual Tasks panel on its Done filter, as the app opens a filter elsewhere (the voice plugin's tasks nav)
-  const leave = () => setUI({ side: 'tasks', taskFilter: 'done' })
+  const leave = () => setUI((u) => ({ ...(u.device === 'phone' ? { tab: 'tasks' as const } : { side: 'tasks' as const }), taskFilter: 'done' }))
   const latest = new Map(dl.flatMap((d) => d.agents).map((a) => [`${a.ref}:${a.address}`, a.latest]))
   const proofs = new Set(dl.flatMap((d) => d.tasks.map((t) => t.proof?.id)))
   const refs = new Set(tasks.map(refOf))
@@ -83,7 +83,7 @@ export function Home() {
           <section aria-label="Usage pools" className="flex flex-wrap gap-2">
             {tiles(snap.usage ?? []).map((p) => (
               <div key={p.label} className={`flex min-w-[164px] flex-[1_1_164px] flex-col gap-[5px] rounded-[var(--sd-radius)] border border-[var(--sd-line)] bg-[var(--sd-card)] px-3 py-2`}>
-                <div className="flex justify-between gap-2 text-xs whitespace-nowrap"><span className="font-medium">{p.label}</span><span className="tabular-nums">{p.left === null ? '' : `${p.left}% left`}</span></div>
+                <div className="flex flex-wrap justify-between gap-x-2 text-xs"><span className="font-medium whitespace-nowrap">{p.label}</span><span className="tabular-nums whitespace-nowrap">{p.left === null ? '' : `${p.left}% left`}</span></div>
                 <div className="h-1 overflow-hidden rounded-full bg-[var(--sd-track)]"><div className="h-full rounded-full bg-[var(--sd-fg)]" style={{ width: `${p.left ?? 0}%` }} /></div>
                 <span className="text-xs text-[var(--sd-muted)]">{p.note}</span>
               </div>
@@ -213,11 +213,11 @@ function Row({ t }: { t: Task }) {
         <div className="flex min-w-0 items-baseline gap-2"><span className="shrink-0 font-mono text-xs whitespace-nowrap text-[var(--sd-muted)]">{refOf(t)}</span><span className="text-[15px]/snug font-medium">{t.name}</span></div>
         {t.sub ? <span className={`text-[13px] ${t.status === 'need' ? 'text-[var(--sd-primary-text)]' : 'text-[var(--sd-muted)]'}`}>{t.sub}</span> : null}
       </div>
-      <div className="flex min-w-0 flex-wrap items-center justify-end gap-1.5">
+      <div className="flex min-w-0 flex-[1_1_auto] flex-wrap items-center justify-end gap-1.5">
         {worker || t.agent || 'agents' in t ? <Chip>{worker ? who(worker) : (t.agent?.cli ?? 'not started')}</Chip> : null}
         {reviewer ? <Chip>review · {who(reviewer)}</Chip> : null}
         <span className={`min-w-11 text-right ${muted} tabular-nums`}>{t.left ?? ''}</span>
-        {t.status === 'ready' ? <span className="inline-flex min-h-9 items-center rounded-full border border-[var(--sd-fg)] px-3.5 text-sm font-medium">Review</span> : null}
+        {t.status === 'ready' ? <span className="inline-flex min-h-11 items-center rounded-full border border-[var(--sd-fg)] px-3.5 text-sm font-medium">Review</span> : null}
       </div>
     </button>
   )

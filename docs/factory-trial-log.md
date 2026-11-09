@@ -177,3 +177,6 @@ answer (2026-11-08). It becomes the role allow lists in phase 3 (docs/factory.md
   there). The remaining choice changes the approved canvas (side panel loses the two-column home), so it went to the
   person as ask 67ed5b (recommend: side panel; else full-screen plus ~6 lines of kernel checks; or drop B2). Worker
   holds. It had paused at 5% weekly citing the usage rule; the floor here is 2%.
+- Shepherdr status bug (orchestrator, FAC-41): a Ready task stayed "Working again" for an hour while its worker sat
+  idle and done; a turn that ends without changes doesn't bring it back to Ready (same family as FAC-39/42's
+  reviewer-exit drops). Fix: return to Ready when the agent rests with HEAD unchanged since ready.

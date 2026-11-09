@@ -1847,6 +1847,10 @@ class GateReview(unittest.TestCase):
         self.assertIn("+second line", p)
         self.assertIn("round 1", p)
         self.assertIn("changes: needs a second line", p)
+        self.verdict("term-2")  # round 3 is another pass of the same head: still the delta, still the earlier rounds
+        p = self.prompt(2)
+        self.assertIn(f"git diff {self.head}..{new}", p)
+        self.assertIn("changes: needs a second line", p)
 
     def test_after_a_rebase_only_the_rebase_delta(self):
         self.ready()

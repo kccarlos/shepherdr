@@ -456,14 +456,15 @@ def review_diff(wt, base, head, mine):
     difference between the task's own change then and now, not the base's commits."""
     mb = fork_of(wt, base, head) or base
     whole = (f"Its diff (git diff {mb}..{head})", git(wt, "diff", f"{mb}..{head}")[1])
-    prev = mine[-1]["head"] if mine else None
-    if not prev or prev == head or not git(wt, "cat-file", "-e", prev)[0]:
+    if not mine:
         return whole
-    old = fork_of(wt, base, prev)
-    if old and old == mb:
+    prev = next((r["head"] for r in reversed(mine) if r["head"] != head), None)  # the last reviewed head that isn't this one
+    earlier = "; ".join(f"round {r['round']} ({r['head'][:7]}) {r['verdict']}: {' '.join((r.get('report') or 'no findings').split())}" for r in mine)
+    old = fork_of(wt, base, prev) if prev and git(wt, "cat-file", "-e", prev)[0] else ""
+    if not old:  # nothing reviewed before this head (another pass of it), or it's gone: the whole change, with the earlier rounds
+        return (f"{whole[0]}. Earlier rounds, to know what was fixed: {earlier}", whole[1])
+    if old == mb:
         what, out = f"Only what changed since the last reviewed head {prev[:7]} (git diff {prev}..{head})", git(wt, "diff", f"{prev}..{head}")[1]
-    elif not old:
-        return whole
     else:
         import difflib
         def files(text):
@@ -477,7 +478,6 @@ def review_diff(wt, base, head, mine):
                 f"(its diff {old[:7]}..{prev[:7]} against {mb[:7]}..{head[:7]})")
         out = "\n".join(l for f in sorted({*then, *now_}) for l in difflib.unified_diff(
             then.get(f, []), now_.get(f, []), f"reviewed/{f}", f"now/{f}", lineterm="", n=2)) or "(none)"
-    earlier = "; ".join(f"round {r['round']} ({r['head'][:7]}) {r['verdict']}: {' '.join((r.get('report') or 'no findings').split())}" for r in mine)
     return (f"{what}. Earlier rounds, to know what was fixed: {earlier}. The whole change is `git diff {mb}..{head}`", out)
 
 

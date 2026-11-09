@@ -1894,6 +1894,37 @@ class GateReview(unittest.TestCase):
         self.assertIn("+mine", self.prompt(0))
         self.assertNotIn("upstream pr", self.prompt(0))
 
+    def test_earlier_findings_are_kept_whole_and_an_amend_on_the_same_base_is_a_plain_delta(self):
+        self.ready()
+        report = "1. [major] a.txt: " + "long " * 60 + "2. [major] b.txt: second finding"
+        self.verdict("term-1", passed=False, changes=report, must_fix=2)
+        self.git(self.wt, "commit", "-q", "--amend", "-m", "amended")
+        self.change("amended again")
+        self.ready()
+        p = self.prompt(1)
+        self.assertIn("2. [major] b.txt: second finding", p)
+        self.assertNotIn("base moved", p)
+
+    def test_a_rebase_delta_names_its_files(self):
+        self.ready()
+        self.verdict("term-1", passed=False, changes="fix it", must_fix=1)
+        self.git(self.main, "checkout", "-q", "main")
+        with open(os.path.join(self.main, "other.txt"), "w") as f:
+            f.write("moved base")
+        self.git(self.main, "add", "other.txt")
+        self.git(self.main, "commit", "-q", "-m", "base moved")
+        self.git(self.wt, "rebase", "-q", "main")
+        self.change("fixed")
+        self.ready()
+        self.assertIn("+++ now/gate.txt", self.prompt(1))
+
+    def test_an_idle_reviewer_of_an_older_head_doesnt_block_the_next(self):
+        self.ready()
+        self.change("moved on")
+        self.reviewer_term = {"state": "live", "agent": "agy", "foreground": {"name": "agy"}, "status": {"state": "idle"}}
+        self.ready()
+        self.assertEqual(len(self.runs), 2)
+
     def test_no_second_reviewer_while_one_is_live_even_for_an_older_head(self):
         self.ready()
         self.change("moved on")  # a new head, round 1's reviewer still alive and unfinished

@@ -460,19 +460,24 @@ def review_diff(wt, base, head, mine):
     if not prev or prev == head or not git(wt, "cat-file", "-e", prev)[0]:
         return whole
     old = fork_of(wt, base, prev)
-    if old == mb and git(wt, "merge-base", "--is-ancestor", prev, head)[0]:
+    if old and old == mb:
         what, out = f"Only what changed since the last reviewed head {prev[:7]} (git diff {prev}..{head})", git(wt, "diff", f"{prev}..{head}")[1]
     elif not old:
         return whole
     else:
         import difflib
-        def tidy(text):
-            return [re.sub(r"^@@ -[0-9,]+ \+[0-9,]+ @@", "@@", x) for x in text.splitlines() if not x.startswith("index ")]
-        then, now_ = (tidy(git(wt, "diff", f"{a}..{b}")[1]) for a, b in ((old, prev), (mb, head)))
+        def files(text):
+            out = {}
+            for chunk in ("\n" + text).split("\ndiff --git ")[1:]:
+                lines = [re.sub(r"^@@ -[0-9,]+ \+[0-9,]+ @@", "@@", x) for x in chunk.splitlines() if not x.startswith("index ")]
+                out[lines[0].split(" b/")[-1]] = lines[1:]
+            return out
+        then, now_ = (files(git(wt, "diff", f"{x}..{y}")[1]) for x, y in ((old, prev), (mb, head)))
         what = (f"The branch's base moved since the last reviewed head {prev[:7]}; only how the task's own change differs now "
                 f"(its diff {old[:7]}..{prev[:7]} against {mb[:7]}..{head[:7]})")
-        out = "\n".join(difflib.unified_diff(then, now_, "reviewed", "now", lineterm="", n=2)) or "(none)"
-    earlier = "; ".join(f"round {r['round']} ({r['head'][:7]}) {r['verdict']}: {' '.join((r.get('report') or 'no findings').split())[:200]}" for r in mine)
+        out = "\n".join(l for f in sorted({*then, *now_}) for l in difflib.unified_diff(
+            then.get(f, []), now_.get(f, []), f"reviewed/{f}", f"now/{f}", lineterm="", n=2)) or "(none)"
+    earlier = "; ".join(f"round {r['round']} ({r['head'][:7]}) {r['verdict']}: {' '.join((r.get('report') or 'no findings').split())}" for r in mine)
     return (f"{what}. Earlier rounds, to know what was fixed: {earlier}. The whole change is `git diff {mb}..{head}`", out)
 
 
@@ -491,7 +496,15 @@ def gate_step(s, t):
     if mine and mine[-1]["head"] == head and mine[-1]["verdict"] == "changes":
         return f"{s.ref(t)}: Herdr's reviewer asked for changes to {head[:7]}: fix them, commit, then run ready again."
     # Never two reviewers at once (FAC-53): a live one on any head, even an older one, holds the next round back.
-    busy = next((r for r in runs if r["round"] not in done and (k := hc_json("get", r["address"]) or {}).get("state") == "live" and agent_running(k)), None)
+    def running(r):
+        k = hc_json("get", r["address"]) or {}
+        if r["round"] in done or k.get("state") != "live" or not agent_running(k):
+            return False
+        if r["head"] != head and status_word(k) in ("idle", "done"):
+            end_reviewer(r["address"])  # its turn ended on an older head: its verdict can never apply, it mustn't block this one
+            return False
+        return True
+    busy = next((r for r in runs if running(r)), None)
     if busy:
         return (f"{s.ref(t)}: Herdr's reviewer ({busy['address']}) is still reviewing {busy['head'][:7]}; no second one starts. "
                 + ("Its findings come to you as a message." if busy["head"] == head else "Run ready again once it finishes."))

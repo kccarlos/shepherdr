@@ -757,6 +757,7 @@ let pruned = false
 let tried = 0
 
 export function connect() {
+  forget()
   if (retrying) clearTimeout(retrying)
   retrying = null
   const url = new URL('api/ws', location.href)

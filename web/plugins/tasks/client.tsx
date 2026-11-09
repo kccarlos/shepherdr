@@ -631,7 +631,7 @@ function TaskList(_: { placeId: string }) {
             <Empty className="pt-3 text-fg3">{here ? `Nothing in ${place.name}.` : 'Nothing to do.'}</Empty>
           ) : (
             <div className="flex flex-col items-center gap-2 px-6 pt-6 pb-4 text-center">
-              <img src="/mascot/sleeping.png" alt="The sheepdog asleep with its headset on" className="w-48 max-w-full" />
+              <img src="mascot/sleeping.png" alt="The sheepdog asleep with its headset on" className="w-48 max-w-full" />
               <h2 className="font-display text-xl/6 font-semibold text-fg">nothing running</h2>
               <p className="text-fg2">No tasks on any machine. Ask an Assistant to plan some, and it starts the work.</p>
             </div>

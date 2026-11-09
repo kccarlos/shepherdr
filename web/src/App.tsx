@@ -9,6 +9,7 @@ import { Fragment, useEffect, useRef, useState, type KeyboardEvent as ReactKeybo
 import {
   agentChat,
   closePane,
+  connect,
   focusPane,
   onlyPane,
   openArtifact,
@@ -128,7 +129,7 @@ function Loading() {
   const offline = lost || slow
   const shape = 'bg-bubble rounded-[var(--sd-radius)]'
   return (
-    <div data-device={device} className="h-full overflow-auto bg-bg px-5 py-6 font-sans text-sm/5 text-fg antialiased phone:text-base/6">
+    <div data-device={device} className="h-full overflow-auto bg-canvas px-5 py-6 font-sans text-sm/5 text-fg antialiased phone:text-base/6">
       <div className="mx-auto flex max-w-xl flex-col gap-4">
         <div className="flex items-center gap-2.5 font-display text-xl/none">
           <span className="grid size-7 place-items-center overflow-hidden rounded-[8px] bg-fg pt-0.5 text-bg">
@@ -145,7 +146,7 @@ function Loading() {
           {offline ? (
             <>
               <p className="text-fg3">The board talks to the Mac mini over Tailscale. Check that this device is on Tailscale and the Mac mini is awake.</p>
-              <button type="button" onClick={() => location.reload()} className="min-h-11 self-start rounded-full border border-fg px-4.5 font-medium">
+              <button type="button" onClick={connect} className="min-h-11 self-start rounded-full border border-fg px-4.5 font-medium">
                 Try now
               </button>
             </>

@@ -6,7 +6,7 @@ import { watch, readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import type { Hub } from "./hub.ts";
 import type { Live } from "./live.ts";
-import { HOME } from "./paths.ts";
+import { HOME, DATA } from "./paths.ts";
 import { READ_LISTS, taskLists, fileIn } from "../core/tasklists.js";
 import * as T from "../core/tasks.js";
 import { isHelper, subagentsOf } from "../core/chat-view.js";
@@ -18,9 +18,13 @@ import * as N from "../core/notify.js";
 const { spaceLevel } = N as any;
 import * as AP from "../core/autopilot.js";
 const { everywhereOf, pilotFor, levelOf, STARTER, currentBeat } = AP as any;
+import { boardOf, openAsks, poolsOf } from "./board.ts";
 
 const SHARED = join(HOME, ".config", "herdr-app", "shared.json");
 const SETTINGS = process.env.HERDR_TASK_SETTINGS || join(HOME, ".herdr", "shepherdr.json");
+// herdr-task's usage pools (usage.py: codexbar, cached a minute in the service's data folder)
+const usagePy = () => [join(process.env.HERDR_APP_HOME || join(HOME, ".config", "herdr-app"), "mods", "tasks", "bin"),
+  join(HOME, ".local", "share", "shepherdr", "mods", "tasks", "bin")].find((d) => existsSync(join(d, "herdr_task", "usage.py")));
 const SHELL = /^(ba|z|fi|da|k|tc|c)?sh$|^nu$|^pwsh$/;
 
 /** Runs a command on a machine through herdr-core (null: here). Output comes back base64. */
@@ -43,7 +47,7 @@ export class Model {
   private timer: ReturnType<typeof setTimeout> | null = null;
 
   /** Told each build: what the screen's snapshot is made from (compat.ts). */
-  onBuild: ((b: { spaces: any[]; sections: any[]; rows: any[]; machines: string[]; known: { name: string; state: string }[]; automations: any[] }) => void) | null = null;
+  onBuild: ((b: { spaces: any[]; sections: any[]; rows: any[]; machines: string[]; known: { name: string; state: string }[]; automations: any[]; asks: any[]; usage: any[] }) => void) | null = null;
 
   /** The service's shared document (the person's pins, sidebar and Notify, in step with the window: lib/bridge.js). */
   doc: () => Record<string, any> = () => ({});
@@ -121,6 +125,36 @@ export class Model {
     this.readShared();
     await Promise.all([this.readAutopilot(), this.readDocs(), this.readLists(null), ...this.machines.map((m) => this.readLists(m))]);
     this.build();
+    void this.readUsage();
+  }
+
+  private usage: any[] = [];
+  private usageAt = 0;
+  /** The usage pools, read at most once a minute (codexbar can take seconds a provider). */
+  private async readUsage() {
+    const bin = usagePy();
+    if (!bin || Date.now() - this.usageAt < 60_000) return;
+    this.usageAt = Date.now();
+    const py = "import sys, json; sys.path.insert(0, sys.argv[1]); from herdr_task import usage; print(json.dumps(usage.read(sys.argv[2])))";
+    const p = Bun.spawn(["python3", "-c", py, bin, DATA], { stdout: "pipe", stderr: "ignore", stdin: "ignore" });
+    try { const out = await new Response(p.stdout).text(); if ((await p.exited) === 0) { this.usage = poolsOf(JSON.parse(out)); this.soon(); } } catch {}
+  }
+
+  /** Each task's diff size (git diff --numstat in its folder): at work from its base, done from its start to its head;
+   *  read again when its range changes (done, reopened) and each minute while it isn't done. */
+  private sizes = new Map<string, { added: number; removed: number; at: number; range: string }>();
+  private async readSizes(rows: any[]) {
+    const due = rows.filter((r) => { const c = this.sizes.get(r.key);
+      return r.range && (c?.range !== r.range || (r.section !== "done" && Date.now() - c!.at > 60_000)); });
+    await Promise.all(due.slice(0, 12).map(async (r) => {
+      this.sizes.set(r.key, { added: 0, removed: 0, ...this.sizes.get(r.key), at: Date.now(), range: r.range });
+      const out = await exec(this.hub, ["git", "-C", r.folder, "diff", "--numstat", r.range], r.machine ?? null, 20).catch(() => null);
+      if (out?.code !== 0) return;
+      const n = out.stdout.split("\n").map((l) => l.split("\t")).filter((x) => x.length >= 3);
+      const sum = (i: number) => n.reduce((a, x) => a + (Number(x[i]) || 0), 0);
+      this.sizes.set(r.key, { added: sum(0), removed: sum(1), at: Date.now(), range: r.range });
+    }));
+    if (due.length) this.soon();
   }
 
   private autopilot: Record<string, any> = {};
@@ -245,6 +279,10 @@ export class Model {
       const mine = live.filter((a) => a.role !== "reviewer" && a.role !== "helper");
       const worker = mine.find((a) => a.status === "blocked")?.address ?? mine[0]?.address ?? null;
       const last = task.agents?.[task.agents.length - 1];
+      // a live terminal's status; undefined: gone, or its agent exited into its kept shell (as agentsOf skips it)
+      const status = (a: string) => { const k: any = this.hub.terminals.get(a), st = typeof k?.status === "object" ? k.status?.state ?? null : null;
+        return k?.state !== "live" || (!st && k.labels?.["herdr.role"] !== "checks" && SHELL.test(String(k.foreground?.name ?? ""))) ? undefined : st; };
+      const { added = 0, removed = 0 } = this.sizes.get(taskKey(list, task)) ?? {};
       return {
         key: taskKey(list, task), ref: refOf(list, task), title: task.title, section: p.section, needs: p.needs,
         sub: secondLine(p, w, p.section === "queued" ? queueReason(list, task, running) : null), left: leftOf(p, w), pct: w?.done ?? null,
@@ -266,9 +304,14 @@ export class Model {
         proof: task.proof?.id ?? null, proofTitle: task.proof?.title ?? null,
         agents: (Array.isArray(task.agents) ? task.agents : []).map((a: any) => ({ address: a.address ?? null, at: a.at ?? 0, ended: a.ended ?? null })),
         logs: (Array.isArray(task.agents) ? task.agents : []).map((a: any) => a.log).filter((x: unknown) => typeof x === "string"),
+        // the board's fields (contracts/board-data.md), and the commits its size counts
+        board: boardOf(task, list.machine ?? null, status, { added, removed }),
+        range: task.branch && task.start ? (p.section === "done" ? `${task.start}..${task.head ?? task.own ?? task.branch}` : `${task.base ?? task.start}...${task.branch}`) : null,
       };
     }));
-    this.live.put("tasks", rows);
+    // (the board's fields go out in the snapshot only)
+    this.live.put("tasks", rows.map(({ board, range, ...r }) => r));
+    void this.readSizes(rows);
 
     const bar = sidebarOf(this.value("spaces-chat"));
     const seen = this.shared["chat.seen"] ?? {};
@@ -299,6 +342,6 @@ export class Model {
     this.live.put("spaces", { spaces, sections: bar.sections });
     // each list's automations (herdr-task auto), with the folder and machine they belong to, for 3.0's Automations group
     const automations = lists.flatMap((l: any) => (Array.isArray(l.automations) ? l.automations : []).map((a: any) => ({ ...a, folder: l.folder, machine: l.machine ?? null, list: l.name })));
-    this.onBuild?.({ spaces, sections: bar.sections, rows, machines: this.machines, known: this.known, automations });
+    this.onBuild?.({ spaces, sections: bar.sections, rows, machines: this.machines, known: this.known, automations, asks: openAsks(join(process.env.HERDR_TASK_STORE || join(HOME, ".herdr", "tasks"), "asks")), usage: this.usage });
   }
 }

@@ -308,7 +308,7 @@ export class Compat {
 
   addrOf(key: string) { return this.chats.get(key) ?? null; }
 
-  snapshot(input: { host: string; user: string; machines: { name: string; here: boolean; state: string }[]; spaces: Space[]; sections: any[]; rows: Row[]; artifacts?: any[]; settings?: SettingSection[]; off?: string[]; offPlugins?: string[]; automations?: any[] }): Snapshot {
+  snapshot(input: { host: string; user: string; machines: { name: string; here: boolean; state: string }[]; spaces: Space[]; sections: any[]; rows: Row[]; artifacts?: any[]; settings?: SettingSection[]; off?: string[]; offPlugins?: string[]; automations?: any[]; asks?: any[]; usage?: any[] }): Snapshot {
     const { host, spaces, rows } = input;
     this.host = host;
     this.rows = rows;
@@ -412,8 +412,10 @@ export class Compat {
         ...(r.said ? { report: { msg: r.section === "working" && r.why ? r.why : r.said.text, ...(r.said.done != null ? { progress: r.said.done } : {}),
           ...(r.said.left != null && !r.said.paused ? { eta: r.said.left } : {}), ...(r.said.paused ? { paused: true } : {}) } }
           : r.section === "working" && r.why ? { report: { msg: r.why, ...(r.pct != null ? { progress: r.pct } : {}) } } : {}),
-        ...(r.worker ? { agent: { chat: `${id}/worker`, role: "worker", cli: "claude", status: r.section === "needs" ? "need" : "work", running: true, age: "", note: "" } } : {}),
+        ...(r.worker ? { agent: { chat: `${id}/worker`, role: "worker", cli: r.board?.agents.find((a: any) => a.address === r.worker)?.cli ?? "claude", status: r.section === "needs" ? "need" : "work", running: true, age: "", note: "" } } : {}),
         ...(!r.worker && r.lastLog ? { agent: { chat: `${id}/worker`, role: "worker", cli: r.lastLog.kind, status: "idle", running: false, age: "", note: "" } } : {}),
+        // the board's agents, gate evidence and size (contracts/board-data.md; the web types them in B2/B3)
+        ...(r.board ?? {}),
       };
       return t;
     });
@@ -476,7 +478,9 @@ export class Compat {
 
     this.chats = chats;
     this.last = {
-      terminalTransport: "core", name: "Shepherdr", host, user: input.user, places, machines, tasks, automations: automationsBySpace(input.automations ?? [], spaces, (s) => places.find((p) => p.id === s.id)?.name ?? s.name), asks: {}, needs, settings: [...(input.settings ?? []), ...notify],
+      terminalTransport: "core", name: "Shepherdr", host, user: input.user, places, machines, tasks, automations: automationsBySpace(input.automations ?? [], spaces, (s) => places.find((p) => p.id === s.id)?.name ?? s.name),
+      // the board's open asks and usage pools (contracts/board-data.md: asks is a list now)
+      asks: (input.asks ?? []) as any, ...({ usage: input.usage ?? [] } as {}), needs, settings: [...(input.settings ?? []), ...notify],
       artifacts: (input.artifacts ?? []).map((a) => artifactOf(a, spaces, (addr) => { const k = kindOfTerm((this as any).terminalsOf?.(addr)); return k ? CLI_NAMES[k] ?? k : null; })),
       sections, last, read, off: input.offPlugins ?? [],
       // the Window page's look switches (shared keys the window reads too): the web follows the same ones

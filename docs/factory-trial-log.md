@@ -166,3 +166,6 @@ answer (2026-11-08). It becomes the role allow lists in phase 3 (docs/factory.md
 - FAC-40 round 4 (after the split): 1 major, a security one (link deliverables rendered without validateLink, so
   javascript:/data: hrefs), plus 2 minors, in a new area. Security is always fixed: ~5 lines, review.rounds 6 for
   exactly the two passes. A Must-fix in round 5 takes the "new to look at" strip out of the task.
+- FAC-52 (Assistant template, +10 lines of template text): docs rule, so review.min 1; round 1 had passed, the
+  round-2 reviewer t127 was ended unread, and the task went to Ready (PR #34). FAC-39 hit the same reviewer-exit
+  drop out of Ready as FAC-42; a nudge to ready again fixed both.

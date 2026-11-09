@@ -26,3 +26,8 @@ test('only the window at its floor says so', () => {
   const t = tiles([{ pool: 'claude', five_hour_left: 4, week_left: 80, five_hour_reset: '2026-11-08T20:00:00Z', week_reset: '2026-11-12T09:00:00Z', state: 'floor' }], Date.parse('2026-11-08T18:40:00Z'))
   expect(t.map((x) => x.note.endsWith(' · at its floor'))).toEqual([true, false])
 })
+
+test('a window with no reset still says it is empty or at its floor', () => {
+  const t = tiles([{ pool: 'codex', five_hour_left: null, week_left: 0, five_hour_reset: null, week_reset: null, state: 'floor' }, { pool: 'claude', five_hour_left: 3, week_left: null, five_hour_reset: null, week_reset: null, state: 'floor' }])
+  expect(t.map((x) => x.note)).toEqual(['empty', 'at its floor'])
+})

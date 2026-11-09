@@ -15,7 +15,7 @@ export function tiles(pools: Pool[], now = Date.now()) {
     // each window's own floor (contracts/board-data.md: 5 % in 5 hours, 1 % in the week)
     return ([['5 hours', p.five_hour_left, p.five_hour_reset, 5], ['week', p.week_left, p.week_reset, 1]] as const)
       .filter(([, left]) => left !== null)
-      .map(([w, left, reset, floor]) => ({ label: `${name} · ${w}`, left, note: !reset ? '' : `${left === 0 ? 'empty until' : 'refills'} ${when(reset, now)}${left && left <= floor ? ' · at its floor' : ''}` }))
+      .map(([w, left, reset, floor]) => ({ label: `${name} · ${w}`, left, note: [reset ? `${left === 0 ? 'empty until' : 'refills'} ${when(reset, now)}` : left === 0 ? 'empty' : '', left && left <= floor ? 'at its floor' : ''].filter(Boolean).join(' · ') }))
   })
 }
 

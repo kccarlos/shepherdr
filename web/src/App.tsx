@@ -85,8 +85,8 @@ export default function App() {
   const device = useUI((u) => u.device)
   const search = useUI((u) => u.search)
   const keyboard = useUI((u) => u.keyboard)
-  // the board's home (screens/Home.tsx), on a desktop opened with ?board, while no task is open
-  const board = useUI((u) => u.board && !u.task)
+  // the board's home (screens/Home.tsx), on a desktop opened with ?board, while no task or Settings is open
+  const board = useUI((u) => u.board && !u.task && !u.settings)
   useKeyboard()
   if (!snap) return <Loading />
   return (

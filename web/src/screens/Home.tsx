@@ -3,7 +3,7 @@
 // new to look at. Its data is contracts/board-data.md's (snapshot tasks' agents, asks, usage) and GET api/deliverables.
 // Where the canvas drew a dashed "needs: …" chip and the contract sends nothing, the chip stays.
 import { useEffect, useState, type ReactNode } from 'react'
-import { act, openArtifact, openTask, placeOf, setUI, useSnap, useUI } from '../kernel.ts'
+import { act, openArtifact, panesHere, placeOf, setUI, useSnap, useUI } from '../kernel.ts'
 import { GROUPS } from '../groups.ts'
 import { machineName, type Snapshot, type Task } from '@shared/types.ts'
 import { hhmm, tiles, type Pool } from '../board.ts'
@@ -18,10 +18,12 @@ const agentsOf = (t: Task) => (t as Task & { agents?: Agent[] }).agents ?? []
 /** the task's ref as herdr-task and api/deliverables say it (another machine's task id is "machine:REF") */
 const refOf = (t: Task) => t.id.slice(t.id.lastIndexOf(':') + 1)
 const live = (a: Agent) => a.state !== 'ended'
-/** a task's workers, each with the agents it started (one nobody of them started goes under the first), while any is live */
+/** a task's workers, each with the agents it started, while any is live */
 function treeOf(t: Task) {
   const all = agentsOf(t), workers = all.filter((a) => a.role === 'worker')
-  const mine = (w: Agent, a: Agent) => a.parent === w.address || (w === workers[0] && !workers.some((x) => x.address === a.parent))
+  // one nobody of them started (herdr-task's gate agents) goes under the newest live worker
+  const head = workers.findLast(live) ?? workers.at(-1)
+  const mine = (w: Agent, a: Agent) => a.parent === w.address || (w === head && !workers.some((x) => x.address === a.parent))
   return workers.map((w) => ({ w, kids: all.filter((a) => a.role !== 'worker' && live(a) && mine(w, a)) })).filter((n) => live(n.w) || n.kids.length)
 }
 const who = (a: Agent) => [a.cli ?? 'checks', a.model].filter(Boolean).join(' ')
@@ -58,7 +60,8 @@ export function Home() {
   const leave = () => setUI({ board: false })
   const latest = new Map(dl.flatMap((d) => d.agents).map((a) => [`${a.ref}:${a.address}`, a.latest]))
   const proofs = new Set(dl.flatMap((d) => d.tasks.map((t) => t.proof?.id)))
-  const shown = dl.flatMap((d) => d.tasks.flatMap((t) => t.deliverables.map((x) => ({ ...x, ref: t.ref })))).sort((a, b) => b.at - a.at).slice(0, 6)
+  const refs = new Set(tasks.map(refOf))
+  const shown = dl.flatMap((d) => d.tasks.filter((t) => refs.has(t.ref)).flatMap((t) => t.deliverables.map((x) => ({ ...x, ref: t.ref })))).sort((a, b) => b.at - a.at).slice(0, 6)
   const nodes = tasks.flatMap((t) => treeOf(t).map((n) => ({ t, ...n })))
   const running = nodes.reduce((n, x) => n + (live(x.w) ? 1 : 0) + x.kids.length, 0)
   return (
@@ -95,7 +98,7 @@ export function Home() {
               {shown.map((v) => {
                 const link = 'kind' in v
                 return (
-                  <a key={link ? v.url : v.id} href={link ? v.url : `?artifact=${encodeURIComponent(v.id)}`} target={link ? '_blank' : undefined} rel="noreferrer"
+                  <a key={`${v.ref}:${link ? v.url : v.id}`} href={link ? v.url : `?artifact=${encodeURIComponent(v.id)}`} target={link ? '_blank' : undefined} rel="noreferrer"
                     onClick={link ? undefined : (e) => { e.preventDefault(); openArtifact(v.id) }}
                     className={`flex flex-col overflow-hidden ${card} text-[var(--sd-fg)] no-underline`}>
                     <div className="box-border flex h-32 items-center justify-center overflow-hidden border-b border-[var(--sd-line)] bg-[var(--sd-code)]">
@@ -166,7 +169,7 @@ export function Home() {
                 {nodes.map(({ t, w, kids }) => {
                   const made = latest.get(`${refOf(t)}:${w.address}`)
                   return (
-                    <li key={w.address} className="flex flex-col gap-1.5">
+                    <li key={`${t.id}:${w.address}`} className="flex flex-col gap-1.5">
                       <div className="flex min-h-9 items-center gap-2.5">
                         <Dot c={DOT[w.state]} />
                         <div className="flex min-w-0 flex-auto flex-col">
@@ -198,11 +201,14 @@ export function Home() {
   )
 }
 
+/** a task from the board: it opens over the board's space, even where split panes kept on this device hold it */
+const pick = (id: string) => setUI((ui) => ({ ...(panesHere(ui).length ? { split: { ...ui.split, pane: -1 } } : {}), task: id, pick: null, cur: 0 }))
+
 function Row({ t }: { t: Task }) {
   const agents = agentsOf(t)
-  const worker = agents.find((a) => a.role === 'worker'), reviewer = agents.filter((a) => a.role === 'reviewer').at(-1)
+  const worker = agents.filter((a) => a.role === 'worker').at(-1), reviewer = agents.filter((a) => a.role === 'reviewer').at(-1)
   return (
-    <button type="button" onClick={() => openTask(t.id)} className="flex min-h-11 w-full cursor-pointer flex-wrap items-center gap-x-3 gap-y-2 border-0 border-b border-[var(--sd-line)] bg-transparent px-3.5 py-2.5 text-left text-[var(--sd-fg)] last:border-b-0">
+    <button type="button" onClick={() => pick(t.id)} className="flex min-h-11 w-full cursor-pointer flex-wrap items-center gap-x-3 gap-y-2 border-0 border-b border-[var(--sd-line)] bg-transparent px-3.5 py-2.5 text-left text-[var(--sd-fg)] last:border-b-0">
       <Dot c={STATUS_DOT[t.status]} s={8} />
       <div className="flex min-w-0 flex-[999_1_300px] flex-col gap-0.5">
         <div className="flex min-w-0 items-baseline gap-2"><span className="font-mono text-xs text-[var(--sd-muted)]">{t.id}</span><span className="text-[15px]/snug font-medium">{t.name}</span></div>

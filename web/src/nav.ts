@@ -46,7 +46,7 @@ export function decide(entry: Entry | null, next: Screen): 'push' | 'replace' | 
   if (k === entry.key) return 'replace'
   if (k === entry.prev) return 'back'
   const cur = entry.screen
-  if (cur.place !== next.place || cur.task !== next.task) return 'push'
+  if (cur.place !== next.place || cur.task !== next.task || cur.board !== next.board) return 'push'
   if (settingsStep(cur) === 1 && settingsStep(next) === 2) return 'push'
   const opened = LAYERS.some((l) => open(next, l) && !open(cur, l))
   const closed = LAYERS.some((l) => !open(next, l) && open(cur, l))

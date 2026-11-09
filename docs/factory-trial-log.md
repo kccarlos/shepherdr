@@ -160,3 +160,6 @@ answer (2026-11-08). It becomes the role allow lists in phase 3 (docs/factory.md
   premise being a board that replaces the whole layout and so owns app-wide state). It ships read-only, with "show
   them" as a plain link; the send box comes back as a follow-up that reuses the chat Composer (add it once FAC-40 is
   accepted). Rounds 4-5 of 5 are left for the two passes; a Must-fix there comes back to the Assistant.
+- Friction: a reviewer-exit notice (`<hc>tX ... exited</hc>`) landing in a Ready worker's chat counts as "at work
+  again", so a task that passed its gate drops out of Ready (FAC-42 after rounds 5-6 passed) until its worker says
+  ready again. The notice shouldn't count as work, or ready should come back by itself when nothing changed.

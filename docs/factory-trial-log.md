@@ -173,3 +173,7 @@ answer (2026-11-08). It becomes the role allow lists in phase 3 (docs/factory.md
   read marks and toasts treat hidden chats as on screen; links leave the board up). Third trigger, so a new approach
   in the same task: mount the board inside the usual layout's middle column and remove the special cases the
   full-layout mount needed. review.rounds 8 (two rounds for two passes); a Must-fix after this drops and re-plans B2.
+- FAC-40: the worker showed the middle-column mount brings back both round-5 findings (the Assistant's chat lives
+  there). The remaining choice changes the approved canvas (side panel loses the two-column home), so it went to the
+  person as ask 67ed5b (recommend: side panel; else full-screen plus ~6 lines of kernel checks; or drop B2). Worker
+  holds. It had paused at 5% weekly citing the usage rule; the floor here is 2%.

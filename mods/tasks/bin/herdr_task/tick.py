@@ -64,7 +64,7 @@ def facts(s, t, report):
             report.setdefault("github_error", []).append(f"{s.ref(t)}: {e}")
         # Kept up to date while it is back at work too (a fix pushed: the problem goes away), so its
         # agent going quiet with the problem still there reads Needs you (on_it()).
-        if t["state"] in ("ready", "running") and problem != t.get("attention"):
+        if t["state"] in ("ready", "running") and problem != t.get("attention") and not t.get("recap"):  # a recap first
             if problem:
                 t["attention"], t["attention_at"] = problem, now()
                 report["attention"].append(t["id"])

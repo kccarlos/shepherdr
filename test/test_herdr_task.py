@@ -2162,12 +2162,32 @@ class LoopBreaker(GateReview):
         self.task["recaps"] = [{"decision": "continue", "why": "w", "at": 1, "tokens": 1500}]
         self.assertEqual(self.why(), [])  # 500 since the decision
         self.task.pop("recaps")
+        self.task["agents"].append({"address": "w2", "log": log})  # a resumed session: the same log, counted once
+        self.assertIn("(2k of 500)", self.why()[0])
         from herdr_task.settings import set_task
         set_task(self.task, "estimate.tokens", "3M")
         set_task(self.task, "estimate.time", "1h30m")
         self.assertEqual((self.task["estimate_tokens"], self.task["estimate_time"]), (3000000, 5400000))
         with self.assertRaises(self.commands.Fail):
             set_task(self.task, "estimate.tokens", "lots")
+
+    def test_a_ready_task_goes_back_to_work_and_the_recap_stays_first(self):
+        from herdr_task.budget import budget_pass
+        from herdr_task.agents import task_status
+        self.rounds(("changes", 2, "a.py"), ("changes", 2, "a.py"))
+        self.task.update(state="ready", auto_merge="checks", pr={"number": 7})
+        self.assertNotIn("recap", self.task)
+        with __import__("unittest").mock.patch.object(self.commands, "workers", lambda s, t: []):
+            self.assertTrue(budget_pass(self.store, self.task))
+        self.assertEqual(self.task["state"], "running")  # never mergeable while (or after) a recap is open
+        self.assertNotIn("auto_merge", self.task)
+        self.task["attention"] = "Checks failing: a check."
+        budget_pass(self.store, self.task)
+        self.assertTrue(self.task["attention"].startswith("Recap required"))
+        # its worker said a status line and went idle: still Needs you, not Working
+        self.task["progress"] = {"set": self.task["attention_at"] + 1, "left": 3600000, "text": "Wrote RECAP.md"}
+        idle = [{"address": "w1", "status": {"state": "idle"}, "labels": {}}]
+        self.assertEqual(task_status(self.task, idle)[0], "needs")
 
     def recap(self, decide=None, why="w"):
         import argparse

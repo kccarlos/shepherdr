@@ -78,8 +78,7 @@ def log_tokens(path, cache):
 def token_sum(s, t):
     """The task's Claude tokens so far, from its Claude agents' logs (cached on the task by log)."""
     caches, total = t.setdefault("tokens", {}), 0
-    for a in t.get("agents") or []:
-        log = a.get("log")
+    for log in dict.fromkeys(a.get("log") for a in t.get("agents") or []):  # a resumed session shares its log
         if not log or "/.claude/" not in log:
             continue
         got = log_tokens(log, caches.get(log) or {})
@@ -128,20 +127,23 @@ def triggers(s, t):
 def budget_pass(s, t):
     """The tick's look at a running or ready worktree task: a trigger opens a recap once, makes the
     task Needs you and tells its worker to stop and write RECAP.md. True when one is open."""
+    from .commands import back_to_work, tell, workers  # commands imports this module
     if t.get("recap"):
-        if not t.get("attention"):  # something else cleared it: the recap still waits
+        if t.get("attention") != t["recap"]["title"]:  # something else changed it: the recap still waits
             t["attention"], t["attention_at"] = t["recap"]["title"], now()
             s.dirty = True
         return True
     why = triggers(s, t)
     if not why:
         return False
+    # Never mergeable while a recap is open, nor after it (drop, split): Working until its next ready.
+    back_to_work(s, t, "a recap is required")
+    t.pop("auto_merge", None)
     again = bool(t.get("recaps"))
     title = ("Recap required again: change direction" if again else f"Recap required: {why[0]}")[:120]
     t["recap"] = {"at": now(), "reasons": why, "round": len(rounds_since(t)), "title": title}
     t["attention"], t["attention_at"] = title, now()
     s.dirty = True
-    from .commands import tell, workers  # commands imports this module
     if workers(s, t):
         try:
             t["recap"]["told"] = tell(s, t, stop_words(s, t, why, again), None)[0]

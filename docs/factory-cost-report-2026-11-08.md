@@ -19,6 +19,10 @@ Claude weekly went from 30% to 9% left. The 5-hour window was emptied twice.
 
 **Gemini (Argon reviewers):** agy keeps its counts in protobuf blobs, so this report uses quota instead. Weekly went from 83% to 56% left: 27 points in 13 hours, at a pace that would empty it in about a day against a 5-day reset. There were 177 agy conversations and 129 recorded review rounds over 51 tasks.
 
+**Gemini, measured** (an agy run decoded agy's own records): 597M tokens over 178 conversations and 4,846 model calls. 91% were cache reads.
+- **98% went to reviewers** (163 conversations). Other runs, such as the FAC-1 audit, used 2%.
+- **The top spenders by task were two documents:** FAC-34, the sheepdog note, at 53M over 8 reviewer conversations, and FAC-32, the usage plan, at 34M. Next came FAC-49 (sandbox, 46M), FAC-15 (G4, 33M), FAC-9 (29M) and FAC-14 (G3, 29M).
+
 ## Findings
 
 ### 1. Endless review-and-fix loops (the main waste)

@@ -136,3 +136,8 @@ answer (2026-11-08). It becomes the role allow lists in phase 3 (docs/factory.md
 - FAC-15: cut to its core (commands.py +44/-54, 8 tests). The worker merged origin/kc-factory into its branch to clear
   a test-file conflict; the Assistant reset its stored start d6722e06 -> c5917bb7 (the merge-base), so the Argon round
   sees only FAC-15's 2 files. That round is one of its last two; a Must-fix finding means a recap, not a fix.
+- Trial-log conflicts (FAC-41 and FAC-51 went Needs you "conflicts with the base"): the task branches started from the
+  old local kc-factory hold the previous Assistant's doc commits, which origin has under other SHAs. `git cherry`
+  showed every one already on origin, so kc-factory got a record-only merge (`-s ours`, tree unchanged) of
+  845b8549, e6d99909 and c4c55727. FAC-39..43 and 51 now merge cleanly with no worker turn and no new head (a new head
+  would need two new review rounds). From now on the Assistant pushes its doc commits at once.

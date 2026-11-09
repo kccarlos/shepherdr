@@ -192,3 +192,5 @@ answer (2026-11-08). It becomes the role allow lists in phase 3 (docs/factory.md
   once on the orchestrator's word (Opus worker, Argon review, min 2, at most 3 rounds). The host factory stays as is
   until the VM one is proven. FAC-54 converging (Must fix 3, 1, then a pass): one more round for its second pass.
   FAC-51's AGENTS.md line added now that vm/ is merged.
+- FAC-56 scope call: the VM's reviewer stays herdr-task's sandboxed agy (FAC-49: unattended, never prompts), the one
+  exception to "permissions skipped", noted in vm/README.md; no reviewer-launch code change (the host runs it too).

@@ -1,5 +1,7 @@
 # The software factory
 
+> **How to use it:** [factory-guide.md](factory-guide.md). This page is the design and its reasons.
+
 The person says what they want once. The factory turns that into merged, verified work. It asks the person only about real product decisions and about the actions they chose to approve. It is tried here, on the person's Shepherdr fork (`kc-factory`), and it plugs into three projects:
 - **sheepdog**: voice, phone and approvals.
 - **herdr-core**: terminals.
@@ -224,6 +226,21 @@ These depend on the model, and no code backs them yet:
 - The Assistant's sequencing judgement and its reading of role policy.
 
 The gate's code checks bound the damage. The reviewer's word is the weakest link and is watched in trial logs.
+
+## 12a. Status (2026-11-08 evening)
+
+- 42 tasks merged (PRs #1-#38). Done:
+  - agy as a worker and reviewer, with the reviewer sandboxed and never prompting;
+  - the ask pane and the designer role;
+  - reviewers started by Herdr (G2) and checks run by Herdr (G3);
+  - delta-only reviews, one reviewer per task, the loop-breaker and per-task budget;
+  - delegation in the Assistant template, and the data-loss fix on Accept;
+  - the board (data, home as a side panel, task page, preview, states);
+  - VM images.
+- Cancelled as over-engineered: full auto-merge (G5-G7 and the gate hardening). Merges stay on Accept.
+- Dropped by the loop-breaker: G4 and FAC-50.
+- In progress: the factory moving into factory-vm, and the board's phone layout (B6).
+- Next: real sheepdog backlog work, not more factory features.
 
 ## 13. Phases
 

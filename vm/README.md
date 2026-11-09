@@ -100,9 +100,13 @@ Each command first probes `TART_HOME` (30 s), so a missing SSD consent stops it 
 
 What the guest setup (`factory-vm-guest.sh`) does, all in the guest's own files:
 - Installs Shepherdr with `./install.sh --yes --no-hooks` (nothing asks there, so no question-card hooks).
-- Permissions skipped: `~/.herdr/shepherdr.json` gives workers `perm: bypassPermissions` (Claude runs with
-  `--dangerously-skip-permissions`; picking agy or codex there gives their skip flags); `~/.claude/settings.json` has
-  `defaultMode: bypassPermissions`; `~/.codex/config.toml` has `approval_policy = "never"` and full access.
+- Permissions skipped: `~/.herdr/shepherdr.json` gives workers `{"agent": "claude", "perm": "bypassPermissions"}`
+  (Claude runs with `--dangerously-skip-permissions`). For agy or codex workers set `everywhere.worker` to
+  `{"agent": "agy", "perm": "full"}` (agy `--dangerously-skip-permissions`) or `{"agent": "codex", "perm": "full"}`
+  (codex `--dangerously-bypass-approvals-and-sandbox`); `bypassPermissions` is Claude's word only. A task's own
+  `--agent` starts that CLI from its defaults without the perm (herdr-task's rule), so change the setting, not the
+  task. `~/.claude/settings.json` has `defaultMode: bypassPermissions`; `~/.codex/config.toml` has
+  `approval_policy = "never"` and `sandbox_mode = "danger-full-access"` (replacing any earlier top-level values).
 - Claude prompts that would stop an unattended run are answered once in `~/.claude.json`: each repo under `~/dev` is
   trusted by name (a repo with its own `.claude/settings.json` is asked about by its root, worktrees too), and the
   "make auto mode your default?" offer a plan-mode Claude shows next to a bypass default.
@@ -135,6 +139,7 @@ nightly's `sd-qa` (6 GB) fill the Mac mini, and a gate verifier's clone can't bo
 for those, or give it less memory.
 
 Still needs the person:
-- Tailscale: setup installs it (Homebrew's daemon, `tailscale up --hostname=factory-vm`); its login link waits for the
-  person's approval (the checks print it; an ask names it), so the board opens from the phone.
+- Tailscale: setup installs it (Homebrew's daemon, `tailscale up --hostname=factory-vm`). A new VM's login link waits
+  for the person's approval (the checks print it); once approved (done for factory-vm), Shepherdr serves the board at
+  `https://factory-vm.<tailnet>.ts.net/shepherdr/`.
 - Optionally a fine-grained GitHub token limited to the fork, replacing the guest's full `gh` login.

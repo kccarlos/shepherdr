@@ -24,6 +24,7 @@ has() { tart list --quiet | grep -qx "$1"; }
 running() { tart list | awk -v n="$1" '$2 == n {print $NF}' | grep -qx running; }
 g() { ssh "${SSHO[@]}" "admin@$(tart ip "$VM")" "$@"; }
 up() {
+  has "$VM" || { echo "no $VM: run '$0 create' first" >&2; return 1; }
   running "$VM" || { echo "booting $VM"; nohup tart run "$VM" --no-graphics >/dev/null 2>&1 & }
   for _ in $(seq 60); do
     if tart ip "$VM" >/dev/null 2>&1 && g true 2>/dev/null; then return; fi

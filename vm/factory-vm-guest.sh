@@ -54,9 +54,11 @@ case ${1:-} in
 
     # Permissions skipped, in the guest's own settings: Claude, Codex; agy and workers through Shepherdr's settings below.
     json_merge .claude/settings.json 'd.setdefault("permissions", {})["defaultMode"] = "bypassPermissions"; d["skipDangerousModePermissionPrompt"] = True'
+    # Codex: any top-level approval_policy and sandbox_mode (before the first [table]) give way to never / full access.
     mkdir -p .codex; touch .codex/config.toml
-    grep -q '^approval_policy' .codex/config.toml ||
-      printf 'approval_policy = "never"\nsandbox_mode = "danger-full-access"\n%s\n' "$(cat .codex/config.toml)" >.codex/config.toml
+    awk 'BEGIN {print "approval_policy = \"never\""; print "sandbox_mode = \"danger-full-access\""}
+         /^[[:space:]]*\[/ {t = 1} !t && /^[[:space:]]*(approval_policy|sandbox_mode)[[:space:]]*=/ {next} {print}' \
+      .codex/config.toml >.codex/config.toml.new && mv .codex/config.toml.new .codex/config.toml
 
     # The factory folder: a local clone (no remote, so ready never pushes or opens a pull request).
     if [ ! -d "$TRIAL/.git" ]; then git clone -q "$TRIAL_FROM" "$TRIAL" </dev/null && git -C "$TRIAL" remote remove origin; fi
@@ -73,8 +75,8 @@ p = d.setdefault("projects", {})
 for f in [os.path.expanduser("~/dev")] + [g[:-5] for g in glob.glob(os.path.expanduser("~/dev/*/.git"))]:
     p.setdefault(f, {})["hasTrustDialogAccepted"] = True'
 
-    # Shepherdr's settings: workers skip permissions (claude --dangerously-skip-permissions, agy and codex the same when
-    # picked), 4 tasks at once here. herdr-task's own reviewer is Claude (plan mode and its read-only allow list are fixed
+    # Shepherdr's settings: workers skip permissions (claude --dangerously-skip-permissions; for agy or codex workers the
+    # perm is "full", which gives their skip flags), 4 tasks at once here. herdr-task's own reviewer is Claude (plan mode and its read-only allow list are fixed
     # in herdr-task's code): an agy reviewer runs in herdr-task's sandbox, which copies a token file this guest lacks (agy
     # signs in through the keychain here). Agy reviewers wait for a setting that skips that sandbox inside a VM.
     export TRIAL
@@ -85,7 +87,7 @@ e["worker"] = {"agent": "claude", "perm": "bypassPermissions"}
 e["reviewer"] = {"agent": "claude"}
 e.setdefault("agents", {})["feedback"] = False
 s = d.setdefault("spaces", {}).setdefault("factory", {})
-s["folder"] = folder
+s["folder"] = os.path.realpath(os.path.expanduser(folder))
 s.setdefault("tasks", {}).update({"max_running": 4, "review_min": 1, "review_rounds": 3, "merge": "ask"})'
 
     # A Claude reviewer runs in plan mode and, told its shell runs only the read commands, never tries its verdict

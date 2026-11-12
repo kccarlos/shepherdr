@@ -71,6 +71,13 @@ export function starting(task, now = Date.now()) {
 // asked, nor a reviewer's turn; a ready said before turns were kept: any work once STARTING_MS have passed.
 export const WORKING_AGAIN = "Working again";
 export const WAITING_BG = "Waiting on a background job";
+export const REVIEWER_ON_IT = "Herdr's reviewer is on it";
+export function reviewRunning(task) {
+  if (!task.head || !task.review_runs?.length) return false;
+  const done = new Set((task.reviews ?? []).filter((r) => r.started_by === "herdr-task").map((r) => r.round));
+  const failed = new Set((task.review_failures ?? []).map((f) => f.address).filter(Boolean));
+  return task.review_runs.some((r) => r.head === task.head && !done.has(r.round) && !failed.has(r.address));
+}
 export function busyAgain(task, live, now = Date.now()) {
   if (task.state !== "ready" || task.merge_requested) return false;
   const seen = task.ready_turns;
@@ -137,6 +144,7 @@ export function place(list, task, { live = [], helpers = [], loaded = true, now 
   // Just started (herdr-task's starting()): its terminal still runs the shell that starts the
   // agent, or the agent is idle before its first message lands.
   else if (starting(task, now)) section = "working";
+  else if (st === "running" && reviewRunning(task)) { section = "working"; if (!task.progress?.text) why = REVIEWER_ON_IT; }
   // Quiet, but on its own background work (SHEP-53, FAC-60, herdr-task's own_work()): a background
   // shell or job still running, or its status says it waits on CI, a build or a review. Kept on the
   // task by its scheduler (task.own_work); Working, saying Waiting on a background job.

@@ -670,7 +670,7 @@ class SchedulerRound(unittest.TestCase):
                    mock.patch.object(au, "store_files", lambda *a: []), mock.patch.object(ap, "autopilot_pass", ran.append),
                    mock.patch.object(home, "home_pass", lambda r: None)]
         patches += [mock.patch.object(au, n, lambda *a, **k: None) for n in (
-            "retry_pass", "archive_pass", "news_pass", "end_done_pass", "memory_guard", "backup_pass", "cli_check_pass", "machines_pass")]
+            "retry_pass", "archive_pass", "news_pass", "watchdog_pass", "end_done_pass", "memory_guard", "backup_pass", "cli_check_pass", "machines_pass")]
         for p in patches:
             p.start()
             self.addCleanup(p.stop)
@@ -3160,9 +3160,9 @@ class Scheduled(unittest.TestCase):
                    mock.patch.object(ap, "autopilot_pass", quiet), mock.patch.object(home, "home_pass", quiet),
                    mock.patch.object(au, "automations_pass", quiet)]
         patches += [mock.patch.object(self.tick, n, quiet) for n in (
-            "revive_pass", "retry_pass", "archive_pass", "news_pass", "end_done_pass", "memory_guard", "lost_logs_pass", "browser_pass", "say")]
+            "revive_pass", "retry_pass", "archive_pass", "news_pass", "watchdog_pass", "end_done_pass", "memory_guard", "lost_logs_pass", "browser_pass", "say")]
         patches += [mock.patch.object(au, n, quiet) for n in (
-            "retry_pass", "archive_pass", "news_pass", "end_done_pass", "memory_guard", "lost_logs_pass", "backup_pass",
+            "retry_pass", "archive_pass", "news_pass", "watchdog_pass", "end_done_pass", "memory_guard", "lost_logs_pass", "backup_pass",
             "cli_check_pass", "machines_pass")]
         for p in patches:
             p.start()
@@ -3915,7 +3915,7 @@ class AutomationFromAnotherMachine(unittest.TestCase):
                    mock.patch.object(ap, "autopilot_pass", lambda r: None), mock.patch.object(home, "home_pass", lambda r: None),
                    mock.patch.dict(os.environ, {"HC_TERMINAL_ID": ""})]
         patches += [mock.patch.object(au, n, lambda *a, **k: None) for n in (
-            "tick_store", "retry_pass", "archive_pass", "news_pass", "end_done_pass", "memory_guard", "backup_pass",
+            "tick_store", "retry_pass", "archive_pass", "news_pass", "watchdog_pass", "end_done_pass", "memory_guard", "backup_pass",
             "cli_check_pass", "machines_pass")]
         for p in patches:
             p.start()
@@ -5688,3 +5688,168 @@ class BusyWorkerDelivery(unittest.TestCase):
         self.screens = ["ctrl+enter to send now\n"]
         self.assertTrue(self.news.news_send("t1", "<herdr-news/>"))
         self.assertIn(["hc", "keys", "t1", "ctrl+enter"], self.calls)
+
+
+class Watchdog(unittest.TestCase):
+    """FAC-62: the tick's model-free watchdog restarts a stuck local Assistant once with restart.sh
+    (HERDR_RESTART_CHAT when chat-backed), alerts once within 2 hours, and holds off when changing or typing."""
+
+    def setUp(self):
+        from unittest import mock
+        sys.path.insert(0, BIN)
+        import herdr_task.agents as agents, herdr_task.assistant_settings as aset, herdr_task.autopilot as autopilot
+        import herdr_task.base as base, herdr_task.commands as commands, herdr_task.home as home
+        import herdr_task.news as news, herdr_task.reactions as reactions, herdr_task.store as store, herdr_task.watchdog as watchdog
+        self.news, self.wd, real_sub = news, watchdog, subprocess.run
+        self.tmp = os.path.realpath(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.store = os.path.join(self.tmp, "tasks")
+        os.makedirs(self.store)
+        self.slug, self.clock = store.slug_of(self.tmp), 1_800_000_000_000
+        self.terms, self.screens, self.raw, self.restarts, self.alerts = {}, {}, "", [], []
+
+        def fake_sub(args, env=None, **kw):
+            if args[0] == "git":
+                return real_sub(args, env=env, **kw)
+            if args[0] == "bash" and os.path.basename(args[1]) == "restart.sh":
+                old, nxt = args[2], f"c{len(self.restarts) + 2}"
+                self.restarts.append((old, nxt, (env or {}).get("HERDR_RESTART_CHAT")))
+                self.terms[nxt] = {**self.terms.pop(old), "address": nxt, "turn": 0, "status": {"state": "idle"}, "created_ms": self.clock}
+                return subprocess.CompletedProcess(args, 0, f"{nxt}\n", "")
+            if args[:2] == ["hc", "ls"]:
+                k, v = args[args.index("--label") + 1].split("=", 1) if "--label" in args else (None, None)
+                items = [t for t in self.terms.values() if not k or (t.get("labels") or {}).get(k) == v]
+                return subprocess.CompletedProcess(args, 0, json.dumps({"terminals": items}), "")
+            if args[:2] == ["hc", "get"]:
+                t = self.terms.get(args[2])
+                return subprocess.CompletedProcess(args, 0 if t else 1, json.dumps(t) if t else "", "")
+            if args[:2] == ["hc", "read"]:
+                return subprocess.CompletedProcess(args, 0, self.screens.get(args[2], ""), "")
+            if args[:2] == ["hc", "label"]:
+                k, v = args[3].split("=", 1)
+                self.terms[args[2]].setdefault("labels", {})[k] = v
+                if k == "herdr.alert":
+                    self.alerts.append((args[2], json.loads(v)))
+                return subprocess.CompletedProcess(args, 0, "", "")
+            if args[:2] == ["hc", "send"]:
+                return subprocess.CompletedProcess(args, 0, "", "")
+            raise AssertionError(f"unexpected {args}")
+
+        p_ = mock.patch.object
+        patches = ([p_(m, "now", lambda: self.clock) for m in (base, agents, news, commands, watchdog)]
+                   + [p_(subprocess, "run", fake_sub), p_(store, "STORE", self.store), p_(watchdog, "STORE", self.store),
+                      p_(news, "STORE", self.store), p_(watchdog, "WATCHDOG", os.path.join(self.store, ".watchdog.json")),
+                      p_(news, "NEWS", os.path.join(self.store, ".news.json")), p_(news, "HELD", os.path.join(self.store, ".held.json")),
+                      p_(autopilot, "STATE", os.path.join(self.store, ".autopilot.json")),
+                      p_(home, "log_news", lambda *_: None), p_(aset, "settings_pass", lambda *_: None),
+                      p_(reactions, "reactions_pass", lambda *_: None), p_(news, "guard", lambda *_: None),
+                      p_(watchdog, "guard", lambda *_: None), p_(watchdog, "held_ask", lambda *_: None),
+                      p_(news, "screen_raw", lambda *_: self.raw)])
+        for p in patches:
+            p.start()
+            self.addCleanup(p.stop)
+        self.coord("c1", chat="p1")
+
+    def coord(self, addr="c1", space="shop", status="done", turn=2, chat=None):
+        labels = {"herdr.role": "coordinator", **({"herdr.coordinator.space": space, "herdr.chat": chat} if chat else {"herdr.space": space})}
+        self.terms[addr] = {"address": addr, "state": "live", "status": {"state": status}, "turn": turn, "foreground": {"name": "claude"}, "labels": labels}
+
+    def save_tasks(self, *rows, delivered=None, inflight=None):
+        with open(os.path.join(self.store, f"{self.slug}.json"), "w") as f:
+            json.dump({"folder": self.tmp, "prefix": "SHOP", "tasks": list(rows)}, f)
+        if delivered is not None:
+            with open(os.path.join(self.store, ".news.json"), "w") as f:
+                json.dump({"delivered": {f"{self.slug}#{k}": v for k, v in delivered.items()}, "outbox": []}, f)
+        if inflight is not None:
+            with open(os.path.join(self.store, ".autopilot.json"), "w") as f:
+                json.dump({"version": 2, "spaces": {"shop": {"on": True, "inflight": inflight}}}, f)
+
+    def tick(self):
+        self.wd.watchdog_pass(report := {})
+        return report
+
+    def test_idle_with_stale_needs_you_restarts_once_and_second_time_alerts(self):
+        t1 = {"id": 1, "title": "Auth", "state": "running", "space": "shop", "attention": "Need API key", "attention_at": self.clock - 10 * 60000}
+        self.save_tasks(t1, delivered={1: {"to": "c1", "turn": 2, "at": self.clock - 10 * 60000, "event": "needs-you"}})
+        self.tick()
+        self.assertEqual(self.restarts, [])
+        self.clock += 21 * 60000  # 31m in Needs you with no turn since news reached c1: restart once
+        self.tick()
+        self.assertEqual((self.restarts, self.alerts), ([("c1", "c2", "p1")], []))
+        self.assertTrue(os.path.isfile(os.path.join(self.store, ".watchdog.json")))
+        self.clock += 60000
+        self.tick()
+        self.terms["c2"].update(status={"state": "done"}, turn=1)
+        self.clock += 35 * 60000  # c2 handled the handoff turn: pre-restart SHOP-1 doesn't re-trigger
+        self.tick()
+        self.assertEqual((len(self.restarts), len(self.alerts)), (1, 0))
+        # Stuck again within 2 hours (failed task): alerts once, doesn't restart or repeat until a turn.
+        t2 = {"id": 2, "title": "Pay", "state": "running", "space": "shop", "agents": [{"address": "w2", "at": self.clock - 5000, "ended": self.clock}]}
+        self.save_tasks(t1, t2, delivered={2: {"to": "c2", "turn": 1, "at": self.clock, "event": "failed"}})
+        self.clock += 31 * 60000
+        self.tick()
+        self.assertEqual((len(self.restarts), len(self.alerts)), (1, 1))
+        self.assertEqual(self.alerts[0][0], "c2")
+        self.assertTrue(self.alerts[0][1]["title"].startswith("shop's Assistant is stuck: SHOP-2 failed"), self.alerts[0][1])
+        self.clock += 5 * 60000
+        self.tick()
+        self.assertEqual(len(self.alerts), 1)
+        # After a turn and past the 2-hour cooldown, a stalled task restarts again.
+        self.terms["c2"]["turn"] = 2
+        self.clock += self.wd.RESTART_COOLDOWN_MS
+        self.terms["w3"] = {"address": "w3", "state": "live", "status": {"state": "working"}, "status_ms": self.clock - 60 * 60000,
+                            "foreground": {"name": "claude"}, "labels": {"herdr.task": f"{self.slug}#3"}}
+        t3 = {"id": 3, "title": "Ship", "state": "running", "space": "shop", "started": self.clock - 60 * 60000, "agents": [{"address": "w3", "at": self.clock - 60 * 60000}]}
+        self.save_tasks(t3, delivered={3: {"to": "c2", "turn": 2, "at": self.clock - 40 * 60000, "event": "stalled", "stall": f"quiet:{self.clock - 60 * 60000}"}})
+        self.tick()
+        self.assertEqual(len(self.restarts), 2)
+
+    def test_ready_behind_and_turn_since_news(self):
+        queued = {"id": 2, "title": "Follow-up", "state": "queued", "space": "shop", "after": [1]}
+        self.save_tasks({"id": 1, "title": "Base", "state": "todo", "space": "shop"}, queued)
+        self.news.news_pass({})
+        self.save_tasks({"id": 1, "title": "Base", "state": "ready", "space": "shop", "ready_at": self.clock}, queued)
+        self.news.news_pass({})  # queued in outbox (not settled yet): left alone
+        self.tick()
+        self.clock += 10000
+        self.news.news_pass({})  # delivered to c1 on turn 2; within grace, left alone
+        self.tick()
+        self.assertEqual(self.restarts, [])
+        self.clock += 2 * 60000
+        self.terms["c1"]["turn"] = 3  # Assistant took a turn after news reached it: left alone
+        self.tick()
+        self.assertEqual(self.restarts, [])
+        self.terms["c1"]["turn"] = 2  # No turn since news reached it: restarted
+        self.tick()
+        self.assertEqual(self.restarts, [("c1", "c2", "p1")])
+
+    def test_busy_changing_assistant_is_left_alone(self):
+        self.terms["c1"]["status"] = {"state": "working"}
+        for step in ("Step 1\n", "Step 2\n", "Step 3\n"):
+            self.screens["c1"] = step
+            self.tick()
+            self.clock += 20 * 60000
+        self.assertEqual((self.restarts, self.alerts), ([], []))
+        self.tick()
+        self.clock += 30 * 60000
+        self.tick()
+        self.assertEqual(len(self.restarts), 1)
+
+    def test_typing_autopilot_and_remote_assistants_hold_it(self):
+        self.coord("vm/c9", space="shop")
+        stale = {"id": 1, "title": "Fix", "state": "running", "space": "shop", "attention": "Ask", "attention_at": self.clock - 35 * 60000}
+        delivered = {1: {"to": "c1", "turn": 2, "at": self.clock - 35 * 60000, "event": "needs-you"}}
+        self.save_tasks(stale, delivered=delivered)
+        self.terms["c1"]["labels"][self.news.TYPING] = str(self.clock - 1000)
+        self.tick()
+        self.terms["c1"]["labels"].pop(self.news.TYPING)
+        self.raw = "❯ wait a second\n"
+        self.tick()
+        self.raw = ""
+        self.save_tasks(stale, delivered=delivered, inflight={"at": self.clock - 60000, "reason": "schedule", "to": "c1", "turn": 2})
+        self.tick()
+        self.assertEqual(self.restarts, [])
+        self.save_tasks(stale, delivered=delivered, inflight=False)
+        self.tick()
+        self.assertEqual(self.restarts, [("c1", "c2", "p1")])
+        self.assertIn("vm/c9", self.terms)

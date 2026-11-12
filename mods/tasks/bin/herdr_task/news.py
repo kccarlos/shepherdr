@@ -105,6 +105,7 @@ def news_pass(report, folder=None):
     except (OSError, ValueError):
         state = {}
     seen, outbox, quiet = state.setdefault("seen", {}), state.setdefault("outbox", []), state.setdefault("quiet", {})
+    delivered = state.setdefault("delivered", {})
     current = {}  # key -> (status, stall mark), to check queued lines against
     for path in store_files(folder):
         d = read_list(path)
@@ -176,18 +177,26 @@ def news_pass(report, folder=None):
     # Still true? A line whose task moved on since (or was removed) goes unsaid.
     def holds(x):
         c = current.get(x["key"])
-        if (folder and c is None) or x["event"] == "backup":
+        if (folder and c is None) or x.get("event") == "backup":
             return True  # another folder's task: not looked at this time; a backup's line is news either way
-        return bool(c) and (c["stall"] == x["stall"] if x["event"] == "stalled" else c["status"] == x["status"])
+        return bool(c) and (c["stall"] == x.get("stall") if x.get("event") == "stalled" else c["status"] == x.get("status"))
     outbox[:] = [x for x in outbox if holds(x) and now() - x["at"] < NEWS_KEEP_MS]
+    for k in [k for k, v in delivered.items() if not isinstance(v, dict) or not holds({**v, "key": k})]:
+        delivered.pop(k)
     for space in dict.fromkeys(x["space"] for x in outbox):
         batch = [x for x in outbox if x["space"] == space]
         if now() - min(x["at"] for x in batch) < NEWS_SETTLE_MS:
             continue
         to = coordinator_in(space)
         k = hc_json("get", to) if to else None
-        if to and news_send(to, "\n".join(x["text"] for x in batch)):
+        got = news_send(to, "\n".join(x["text"] for x in batch)) if to else False
+        if got:
             outbox[:] = [x for x in outbox if x not in batch]
+            base_turn = ((k or {}).get("turn") or 0) + (1 if got == "pending" else 0)
+            for x in batch:
+                if x["event"] != "backup":
+                    delivered[x["key"]] = {"to": to, "turn": base_turn, "at": now(),
+                                           "event": x["event"], "status": x["status"], "stall": x.get("stall")}
             report["news"].append({"to": to, "lines": [x["text"] for x in batch]})
             # Kept for the main machine's home Assistant, which keeps every machine's overview.
             try:
@@ -308,7 +317,7 @@ def deliver(address, text, how="send", from_held=False):
 def news_send(address, text, check=True):
     """Delivers news as the chat delivers the person's words: typed in, sent mid-turn (Claude Ctrl+Enter,
     agy alt+m or at turn end), without <hc from>. False when typing() or refused."""
-    return False if (check and typing(address)) else bool(deliver(address, text, "news"))
+    return False if (check and typing(address)) else deliver(address, text, "news")
 
 
 # ---- the person is writing ------------------------------------------------------------------

@@ -25,7 +25,7 @@ import { h_flex, v_flex } from "gpui-base";
 import { shared, setShared, run, theme, exec, appHome, home, readTextFile, writeTextFile, notify, layout, openOverlay } from "herdr";
 import { terminals, agents } from "./live.js";
 import { taskDot, ownProgress, estimated } from "./dot.js";
-import { busyAgain, onIt } from "./core/tasks.js";
+import { busyAgain, onIt, WAITING_BG } from "./core/tasks.js";
 import { button, segmented, TEXT, RADIUS, toast, plainError } from "./ui.js";
 import { on as addonOn } from "./addons.js";
 import { artifactCli } from "./artview.js";
@@ -236,7 +236,7 @@ export class PanelHost {
       : (r.attention && !fixing) || st === "blocked" || r.retry?.over ? "needs"
       : fixing ? "working"
       : r.state === "ready" && !this.again(st, addr) ? ((r.merge_requested && live) || (r.auto_merge && r.pr && !r.merged) ? "merging" : "ready")
-      : st === "working" || r.retry || starting ? "working" : "needs";
+      : st === "working" || r.retry || starting || (live && r.own_work) ? "working" : "needs";
     return taskDot(s, { pct: ownProgress([addr])?.pct ?? r.progress?.done, halo: true });
   }
 
@@ -308,6 +308,8 @@ export class PanelHost {
     let text = null, end = null, paused = false;
     if (r.retry && r.retry.address === addr && !r.retry.over && st !== "blocked") {
       text = r.retry.due ? `${r.retry.reason} · Retry in ${Math.max(1, Math.ceil((r.retry.due - Date.now()) / 60000))}m` : `${r.retry.reason} · Retrying`;
+    } else if (r.own_work && st !== "working" && st !== "blocked") {
+      text = WAITING_BG;
     } else if (r.progress?.text) {
       const p = r.progress;
       text = p.text;

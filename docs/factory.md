@@ -242,6 +242,47 @@ The gate's code checks bound the damage. The reviewer's word is the weakest link
 - In progress: the factory moving into factory-vm, and the board's phone layout (B6).
 - Next: real sheepdog backlog work, not more factory features.
 
+## 12b. Iteration 2: after the first real project (2026-11-12)
+
+WukongMind (a Forumind fork, iOS) went from an empty folder to a TestFlight build overnight, but the orchestrator stepped in about 40 times. Each case is in [factory-field-notes.md](factory-field-notes.md). Sorted:
+
+| Kind | About | Examples | Goes to |
+|---|---|---|---|
+| Needs the person by design | 14 | Accept and merge; secrets, Apple account, settings | The start checklist and the person's authorization |
+| Shepherdr bugs and gaps | 13 | agy workers prompting; Claude reviewer in plan mode can't record its verdict; sandboxed agy reviewer can't sign in; no message after a passing round; messages queued behind a busy worker | Code (Shepherdr fork) |
+| The Assistant could have done it | 13 | Re-run a flaky CI job, call a CI loop, answer a worker's card, approve a benign prompt, nudge a waiting worker | The Assistant's template and permissions |
+
+**Decision: no second orchestrator around the Assistant.** The orchestrator was a scaffold for the night. It costs a second model re-reading everything (19% of Claude on day one), and it splits ownership: the Assistant saw problems it was not allowed to act on and passed them up. The layers are:
+
+```
+person (phone cards, later sheepdog voice)
+  └── one Assistant per project (decides inside its delegation)
+        └── workers and reviewers (one task each)
+watchdog (no model): the tick restarts a stuck Assistant with a handoff, or alerts the person
+```
+
+**What changes, in order:**
+1. **The Assistant owns more** (template, `Decide yourself`):
+   - answer workers' cards and approve prompts that stay inside the task's worktree and read-only commands; anything outside the worktree, touching credentials or settings, goes to the person;
+   - own CI: re-run a failed job once when the failure is outside the task's change; after 3 failed CI runs or 1 hour on CI, apply the loop-breaker (recap, new approach) instead of another attempt;
+   - nudge workers that wait on nothing.
+2. **The loop-breaker counts CI attempts**, not only review rounds (note 28).
+3. **Shepherdr fixes** (notes 13–16, 20, 22, 24–26):
+   - agy workers start with permissions skipped by default for unattended spaces (done for WukongMind by setting);
+   - the gate tells the worker each verdict ("round 3 passed, 1 more needed") and starts the next round itself; a reviewer that ended with a verdict exits cleanly;
+   - a reviewer that dies without a verdict does not use a round, and falls back to another reviewer;
+   - the sandboxed agy reviewer gets agy's sign-in, or the unsandboxed flag becomes a setting;
+   - queued messages reach a busy worker, and "waiting on a background job" is its own status, not Needs you;
+   - a simulator lease per task from the fixed pool, like the device lock;
+   - resume rebuilds argv from current settings and sends a continue line.
+4. **Start a project** (one command): space, Assistant, repo checks, imported requirements, and a checklist asked before the person leaves: GitHub repo, Apple sign-in, app record, App Store profile, CI secrets, the service account for night runs, which milestone gates the Assistant may pass, design pass yes or no, model routing.
+5. **Size limits in code**: `ready` refuses, or forces a recap, past 2× the brief's size (note 27).
+6. **Watchdog**: the tick notices an Assistant idle with work waiting, or a task stuck past its budget, and restarts the Assistant with a handoff or alerts the person.
+
+**Open, for the person:** who accepts inside the delegated milestones: the Assistant (`herdr-task accept` allowed for it), or Shepherdr itself (merge on two passing rounds and green CI). Either way, releases and anything outside the delegation stay with the person.
+
+**Measure:** the next unattended night on a real project should need the orchestrator for nothing but the open question above.
+
 ## 13. Phases
 
 Merges stay on Accept (orchestrator or person). Decision 2026-11-08: full auto-merge is deferred as over-engineered for now. Review by a reviewer Herdr starts (G2), checks Herdr runs (G3) and the orchestrator's own checks before Accept already catch worker shortcuts. G5–G7 and the gate hardening are cancelled until auto-merge is really wanted. Tasks are sized as one complete change (about 150–300 lines), with no separate plan or doc tasks unless the person must decide.

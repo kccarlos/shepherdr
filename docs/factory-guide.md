@@ -1,6 +1,6 @@
 # Using the factory
 
-How to run, watch, steer and stop the software factory on this Mac. The design and its reasons are in [factory.md](factory.md), what day one cost is in [factory-cost-report-2026-11-08.md](factory-cost-report-2026-11-08.md), and every decision made during the trial is in [factory-trial-log.md](factory-trial-log.md).
+How to run, watch, steer and stop the software factory on this Mac. What broke on the first real project is in [factory-field-notes.md](factory-field-notes.md). The design and its reasons are in [factory.md](factory.md), what day one cost is in [factory-cost-report-2026-11-08.md](factory-cost-report-2026-11-08.md), and every decision made during the trial is in [factory-trial-log.md](factory-trial-log.md).
 
 ## What it is
 

@@ -45,3 +45,10 @@ The first time the factory ran on a real product rather than on itself. WukongMi
 | 17 | The owner expected a design pass (Claude's Design skill) before UI work; the plan had none. agy has no design tool. | A design task on Claude Opus before the UI task, output a design artifact plus `docs/<project>/design-m1.md`. | UI milestones get a design task by default, on Claude. |
 | 18 | Milestone gates ("owner confirms M0") would stop the night at M0. | The owner delegated M0 and M1 acceptance to the orchestrator for the night. | The start checklist asks: "which gates can the orchestrator pass while you're away?" |
 | 19 | Model routing changed three times in one evening (Claude, then agy Gemini because its quota resets soon, then Claude reviewers). | Edited per task with `herdr-task edit --agent/--model/--reviewer`. | The Assistant should pick models from a usage-aware rule (pool that resets first), not a fixed default. |
+
+## Overnight additions
+
+| # | What happened | Fixed tonight by | What the factory should do |
+|---|---|---|---|
+| 20 | Herdr's Claude reviewer ran with `--permission-mode plan`, finished its review, and could not record it: plan mode blocks every command, `herdr-task review` too. The task sat in review with no verdict, and only the reviewer's own terminal may record one, so the orchestrator could not record it for it either (and lost the round by killing that terminal). | Findings handed to the worker by hand for a new round; Claude reviewers now run in auto mode (131a1c56). | Gate reviewers need a test that runs a real verdict end to end per CLI. When a reviewer ends without a verdict, the gate should read its last message and fall back, not wait. |
+| 21 | A worker's own Codex reviewer stopped on Codex's "Trust this folder?" prompt; accepting writes `~/.codex/config.toml`, which tonight's limits forbid. | The worker switched to a Claude reviewer. | Pre-trust task worktrees for every CLI the factory uses (or pass trust per session), so no first-run prompt appears at night. |

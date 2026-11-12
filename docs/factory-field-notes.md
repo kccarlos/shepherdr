@@ -64,3 +64,7 @@ The first time the factory ran on a real product rather than on itself. WukongMi
 ## Outcome
 
 WukongMind 1.0.0 (build 104) reached TestFlight at 08:01 on 2026-11-12, about 8 hours after the owner went to bed, with M0 and M1 (agent loop, four page tools, chat panel, toolbar button) merged through six tasks. The orchestrator stepped in roughly 40 times overnight: about 15 permission prompts and dialogs, 8 CI re-runs or diagnoses, 5 review-gate workarounds, 2 Shepherdr fixes, 1 App Store profile, and the rest status checks. Most of those are the field notes above; fixing them is what makes the next night unattended.
+
+| # | What happened | Fixed by | What the factory should do |
+|---|---|---|---|
+| 30 | Shepherdr already had Autopilot: an Assistant woken on a schedule or task events that unblocks stalled tasks and answers workers' questions itself. Nobody turned it on, and the orchestrator did that job by hand all night. The owner found the switch in the header the next morning. | Turned on for the next run; iteration 2 item 1 now adds only what Autopilot lacks. | The start checklist turns Autopilot on (events first, a long schedule) before the person leaves. Check what the factory already has before adding a layer. |

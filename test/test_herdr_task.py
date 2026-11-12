@@ -1107,25 +1107,19 @@ class OwnBackgroundWork(unittest.TestCase):
 
     def test_agy_footer_tasks_count_shows_waiting_on_a_background_job(self):
         import herdr_task.output as output
-        agy = {"id": 8, "title": "Checks", "state": "running", "started": self.clock - 3600_000,
-               "agents": [{"address": "t1", "at": self.clock - 3600_000}]}
+        agy = {"id": 8, "title": "Checks", "state": "running", "started": self.clock - 3600_000, "agents": [{"address": "t1", "at": self.clock - 3600_000}]}
         k = {"address": "t1", "status": {"state": "done", "app": "antigravity", "msg": "Dispatched CI checks."},
              "status_ms": self.clock - 60_000, "foreground": {"name": "agy"}, "labels": {"herdr.agent": "agy"}}
-        rule = "─" * 100
-        survey = "  How's the CLI experience so far? Help us improve:  \n  [1] Good  [2] Fine  [3] Bad  [0] Skip"
+        rule, survey = "─" * 100, "  How's the CLI experience so far? Help us improve:  \n  [1] Good  [2] Fine  [3] Bad  [0] Skip"
         for body in ("> Auto mode: edits & safe commands auto-approved (shift+tab to cycle)", survey):
-            self.hc["read"] = {"t1": "\n".join([
-                "─" * 60, "> Re-run the checks", "  Checks run in the background.", rule, body, rule,
-                "? for shortcuts                                      auto · Gemini 4 Carbon · high · 1 task(s) · /tasks"])}
+            self.hc["read"] = {"t1": "\n".join(["─" * 60, "> Re-run the checks", "  Checks run in the background.", rule, body, rule,
+                                                "? for shortcuts                                      auto · Gemini 4 Carbon · high · 1 task(s) · /tasks"])}
             self.assertEqual(self.agents.task_status(agy, [k]), ("working", None, "Waiting on a background job"))
         s = type("S", (), {"write": False, "loc": {"folder": "/f"}, "prefix": "X", "key": lambda *_: "X-8", "ref": lambda *_: "X-8"})()
         with self.mock.patch.object(output, "waiting_for", lambda *_: []), self.mock.patch.object(output, "waiting_ext", lambda *_: []):
             self.assertTrue(output.view(s, agy, [k])["own_work"])
-        # Once the background task finishes, "1 task(s)" in earlier prose above the box never keeps it Working.
-        self.hc["read"] = {"t1": "\n".join([
-            "  Finished 1 task(s) cleanly.", "", rule,
-            "> Auto mode: edits & safe commands auto-approved (shift+tab to cycle)", rule,
-            "? for shortcuts                                                       auto · Gemini 4 Carbon · high"])}
+        self.hc["read"] = {"t1": "\n".join(["  Finished 1 task(s) cleanly.", "", rule, "> Auto mode: edits & safe commands auto-approved (shift+tab to cycle)",
+                                            rule, "? for shortcuts                                                       auto · Gemini 4 Carbon · high"])}
         self.assertEqual(self.agents.task_status(agy, [k])[:2], ("needs", "reply"))
 
     def test_news_and_automations_never_tell_needs_you_for_background_job(self):
@@ -5833,6 +5827,7 @@ class BusyWorkerDelivery(unittest.TestCase):
             agy_screen("\x1b[0m\x1b[38;5;12m>\x1b[0m \x1b[0m\x1b[38;5;8mAuto mode: edits & safe commands auto-approved (shift+tab to cycle)\x1b[0m"),
             agy_screen("\x1b[0m\x1b[38;5;12m>\x1b[0m"), agy_screen("\x1b[0m\x1b[38;5;12m>\x1b[0m", survey),
             agy_screen("  How's the CLI experience so far? Help us improve:  \r\n  [1] Good  [2] Fine  [3] Bad  [0] Skip"),
+            "\r\n".join([agy_rule, "\x1b[0m\x1b[1m\x1b[38;5;4m> Earlier in scrollback\x1b[0m", "  Done.", agy_rule, "  Thank you for your feedback!", agy_rule, "? for shortcuts"]),
             cl_screen("❯\xa0\x1b[0m\x1b[2mTry \"how does <filepath> work?\"\x1b[0m"), cl_screen("❯\xa0"),
             "─" * 80 + "\r\n Security guide\r\n ❯ No, exit\r\n   Yes, I trust this folder\r\n Enter to confirm · Esc to cancel",
             cx_screen("\x1b[1m› \x1b[0m\x1b[2mAsk Codex to do anything\x1b[0m"), cx_picker,
@@ -5840,30 +5835,25 @@ class BusyWorkerDelivery(unittest.TestCase):
         self.term.update(status={"state": "done"}, labels={"herdr.agent": "agy"})
         for raw in idle_cases:
             self.raw = raw
-            self.assertEqual(self.news.typed_input(raw), "")
-            self.assertIsNone(self.news.typing("t1"))
-        # Idle agy receives review findings directly instead of holding them in .held.json.
+            self.assertEqual((self.news.typed_input(raw), self.news.typing("t1")), ("", None))
         self.raw = idle_cases[0]
         self.assertEqual(self.news.send_or_hold("t1", "Review round 1 found what must be fixed"), "sent")
-        self.assertEqual(self.calls, [["hc", "send", "t1", "Review round 1 found what must be fixed"]])
-        self.assertEqual(self.held(), {})
+        self.assertEqual((self.calls, self.held()), ([["hc", "send", "t1", "Review round 1 found what must be fixed"]], {}))
         for raw, want in [
             (agy_screen("\x1b[0m\x1b[38;5;12m>\x1b[0m fix the flaky test\r\n  and rerun checks"), "fix the flaky test\n  and rerun checks"),
+            ("\r\n".join([agy_rule, "\x1b[0m\x1b[38;5;12m>\x1b[0m hold on", agy_rule, "  ● [14:28:06] 15m timer running", "  ● [14:29:10] pytest running", agy_rule, "? for shortcuts · 2 task(s) · /tasks"]), "hold on"),
+            ("\r\n".join([agy_rule, "\x1b[0m\x1b[38;5;12m>\x1b[0m", agy_rule, "? for shortcuts\x1b[0m\x1b[>4;2m\x1b[2;3Htyped after cursor move"]), "typed after cursor move"),
             (cl_screen("❯\xa0check edge cases\x1b[0m\x1b[2m in news.py\x1b[0m"), "check edge cases"),
             (cx_screen("\x1b[1m› \x1b[0mrefactor the parser\r\n  keep tests green"), "refactor the parser\n  keep tests green"),
         ]:
             self.raw = raw
-            self.assertEqual(self.news.typed_input(raw), want)
-            self.assertEqual(self.news.typing("t1"), "input")
-        # Real typed input in agy holds automatic messages until cleared back to the idle placeholder.
+            self.assertEqual((self.news.typed_input(raw), self.news.typing("t1")), (want, "input"))
         self.calls.clear()
         self.raw = agy_screen("\x1b[0m\x1b[38;5;12m>\x1b[0m hold on, editing")
-        self.assertEqual(self.news.send_or_hold("t1", "Deferred findings"), "held")
-        self.assertEqual(self.calls, [])
+        self.assertEqual((self.news.send_or_hold("t1", "Deferred findings"), self.calls), ("held", []))
         self.raw = idle_cases[0]
         self.news.held_pass({})
-        self.assertEqual(self.calls, [["hc", "send", "t1", "Deferred findings"]])
-        self.assertEqual(self.held(), {})
+        self.assertEqual((self.calls, self.held()), ([["hc", "send", "t1", "Deferred findings"]], {}))
 
 
 class Watchdog(unittest.TestCase):

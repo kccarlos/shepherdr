@@ -327,7 +327,7 @@ def news_send(address, text, check=True):
 TYPING = "herdr.typing"
 TYPING_KEEP_MS = 5 * 60000     # unsent words untouched this long hold nothing any more
 HELD = os.path.join(STORE, ".held.json")  # {address: [{text, how, at}]}: held_pass sends them
-ESCAPES = re.compile(r"\x1b(?:\[([0-9;:?<=>!]*)[ -/]*([@-~])|\][^\x07\x1b]*(?:\x07|\x1b\\)|P[^\x1b]*\x1b\\|[()*+][0-9A-Za-z]|.)"
+ESCAPES = re.compile(r"\x1b(?:\[([0-9;:?<=>!]*)([ -/]*)([@-~])|\][^\x07\x1b]*(?:\x07|\x1b\\)|P[^\x1b]*\x1b\\|[()*+][0-9A-Za-z]|.)"
                      r"|[\x00-\x08\x0b-\x0c\x0e-\x1f\x7f]|[\r\n]|[^\x1b\x00-\x1f\x7f]+", re.S)
 PROMPT = re.compile(r"^ ?[❯›>](?:\s|$)")  # Claude Code's ❯, Codex's ›, agy's >
 RULE = re.compile(r"^\s*[─━]{8,}\s*$")    # Claude Code's and agy's box edge
@@ -369,24 +369,28 @@ def screen_rows(raw):
     clears, and muted placeholder styles (SGR dim and grey placeholder foregrounds)."""
     rows, row, col, dim, fg = {}, 0, 0, False, None
     for m in ESCAPES.finditer(raw):
-        s, p1, op = m.group(0), m.group(1) or "", m.group(2)
+        s, p1, im, op = m.group(0), m.group(1) or "", m.group(2), m.group(3)
         if s[0] == "\x1b":
+            if not op or im or p1[:1] in "?><=!":
+                continue
             if op == "m":
-                ps, i = (p1 or "0").replace(":", ";").split(";"), 0
+                ps, i = (p1 or "0").split(";"), 0
                 while i < len(ps):
-                    n = int(ps[i]) if ps[i].isdigit() else 0
+                    sub = ps[i].split(":")
+                    n = int(sub[0]) if sub[0].isdigit() else 0
                     if n in (38, 48, 58):
-                        five = ps[i + 1:i + 2] == ["5"]
-                        if n == 38 and five and i + 2 < len(ps) and ps[i + 2].isdigit():
-                            fg = (5, int(ps[i + 2]))
-                        elif n == 38 and not five and i + 4 < len(ps) and all(x.isdigit() for x in ps[i + 2:i + 5]):
-                            fg = (2, int(ps[i + 2]), int(ps[i + 3]), int(ps[i + 4]))
-                        i += 3 if five else 5
+                        q = sub[1:] if len(sub) > 1 else ps[i + 1:]
+                        rgb = q[-3:] if len(sub) > 1 else q[1:4]
+                        if n == 38 and q[:1] == ["5"] and len(q) > 1 and q[1].isdigit():
+                            fg = (5, int(q[1]))
+                        elif n == 38 and q[:1] == ["2"] and len(q) >= 4 and all(x.isdigit() for x in rgb):
+                            fg = (2, int(rgb[0]), int(rgb[1]), int(rgb[2]))
+                        i += 1 if len(sub) > 1 else (3 if q[:1] == ["5"] else 5 if q[:1] == ["2"] else 1)
                         continue
                     dim = False if n in (0, 22) else True if n == 2 else dim
                     fg = None if n in (0, 39) else n if (30 <= n <= 37 or 90 <= n <= 97) else fg
                     i += 1
-            elif not p1.startswith("?"):
+            else:
                 a = p1.split(";")
                 n = int(a[0]) if a[0].isdigit() else 1
                 if op in ("H", "f"):
@@ -431,8 +435,13 @@ def typed_input(raw):
         return ""
     def box_end(r):
         end = next((k for k in range(r + 1, last + 1) if RULE.match(text.get(k, ""))), None) if RULE.match(text.get(r - 1, "")) else None
-        return (end if end is not None and len(text[r - 1].strip()) == len(text[end].strip())
-                and sum(1 for k in range(end + 1, last + 1) if text.get(k, "").strip()) <= 3 else None)
+        if end is None or len(text[r - 1].strip()) != len(text[end].strip()):
+            return None
+        after = [text[k].strip() for k in range(end + 1, last + 1) if text.get(k, "").strip()]
+        d = next((i for i, x in enumerate(after) if RULE.match(x)), None)
+        if d and all(x.startswith(("●", "○")) for x in after[:d]):
+            after = after[d + 1:]
+        return end if len(after) <= 2 and not any(RULE.match(x) for x in after) else None
     framed = [(r, end) for r in marks if (end := box_end(r)) is not None]
     if framed:
         top, end = framed[-1]

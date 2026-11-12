@@ -2541,7 +2541,10 @@ if sys.argv[1] == "kill" and alive:
         import argparse
         from unittest import mock
         import herdr_task.agents as agents
+        import herdr_task.assistant_settings as aset
+        import herdr_task.home as home
         import herdr_task.news as news
+        import herdr_task.reactions as reactions
         import herdr_task.store as store
         import herdr_task.tick as tick
         self.ready()
@@ -2550,7 +2553,8 @@ if sys.argv[1] == "kill" and alive:
         self.assertEqual([r["cli"] for r in self.task["review_runs"]], ["agy", "claude"])
         self.reviewer_term = {"state": "live", "agent": "claude", "status": {"state": "done"}, "turn": 1}
         rep = {}
-        tick.tick_store(self.store, rep)
+        with mock.patch.object(agents, "hc_json", lambda *a: {}), mock.patch.object(tick, "github", lambda s: None):
+            tick.tick_store(self.store, rep)
         self.assertEqual(len(self.runs), 2)  # no third reviewer
         self.assertEqual(self.commands.rounds_used(self.task, True), 0)
         self.assertEqual(self.told, [])  # the worker isn't asked anything (field note 16)
@@ -2567,10 +2571,12 @@ if sys.argv[1] == "kill" and alive:
         # news_pass tells the space's Assistant once via needs-you, even if the task had already gone quiet.
         sdir, sent, clock = tempfile.mkdtemp(dir=self.root), [], [10_000]
         ps = [mock.patch.object(m, n, v) for m, n, v in (
-            (store, "STORE", sdir), (news, "STORE", sdir), (news, "NEWS", os.path.join(sdir, ".news.json")),
-            (news, "HELD", os.path.join(sdir, ".held.json")), (news, "now", lambda: clock[0]),
-            (news, "live_agents", lambda k: worker), (news, "detail", lambda k: k), (news, "coordinator_in", lambda sp: "c1"),
-            (news, "hc_json", lambda *a: {"state": "live", "turn": 1}),
+            (agents, "hc_json", lambda *a: {}), (store, "STORE", sdir), (news, "STORE", sdir),
+            (news, "NEWS", os.path.join(sdir, ".news.json")), (news, "HELD", os.path.join(sdir, ".held.json")),
+            (home, "NEWSLOG", os.path.join(sdir, ".newslog.json")), (aset, "settings_pass", lambda *a: None),
+            (reactions, "reactions_pass", lambda *a: None), (news, "now", lambda: clock[0]),
+            (news, "live_agents", lambda k: worker), (news, "detail", lambda k: k),
+            (news, "coordinator_in", lambda sp: "c1"), (news, "hc_json", lambda *a: {"state": "live", "turn": 1}),
             (news, "news_send", lambda to, m, check=True: sent.append((to, m)) or True))]
         for p in ps:
             p.start()

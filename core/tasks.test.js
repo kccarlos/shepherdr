@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
-import { place, queueReason, reportOf, estimated, order, ago, autoPrefix, refOf, taskKey, matches, busyAgain, secondLine, leftOf, ORDER, STATUS, WORKING_AGAIN, fromLine, autoWhere, inSpace } from "./tasks.js";
+import { place, queueReason, reportOf, estimated, order, ago, autoPrefix, refOf, taskKey, matches, busyAgain, secondLine, leftOf, ORDER, STATUS, WORKING_AGAIN, WAITING_BG, fromLine, autoWhere, inSpace } from "./tasks.js";
 import { REASONS, fit } from "./needs.js";
 
 const NOW = 1_800_000_000_000;
@@ -23,9 +23,11 @@ describe("a task's status (as herdr-task's task_status)", () => {
     expect(at({ id: 1, state: "running", started: NOW - 600_000 }, [{ address: "t1", status: "idle" }])).toMatchObject({ section: "needs", needs: "reply" });
     expect(at({ id: 1, state: "running", started: NOW - 600_000 })).toMatchObject({ section: "needs", needs: "stopped" });
   });
-  test("an idle agent on its own background work is working; asking still needs you (SHEP-53)", () => {
+  test("an idle agent on its own background work is working; asking still needs you (SHEP-53, FAC-60)", () => {
     const idle = [{ address: "t1", status: "idle" }];
-    expect(at({ id: 1, state: "running", started: NOW - 600_000, own_work: true }, idle)).toMatchObject({ section: "working", needs: null });
+    const p = at({ id: 1, state: "running", started: NOW - 600_000, own_work: true }, idle);
+    expect(p).toMatchObject({ section: "working", needs: null, why: WAITING_BG });
+    expect(secondLine(p, { text: "Building", done: 40, left: 10 }, null, NOW)).toBe("Waiting on a background job");
     expect(at({ id: 1, state: "running", started: NOW - 600_000, own_work: true }, [{ address: "t1", status: "blocked" }])).toMatchObject({ section: "needs", needs: "asks" });
     expect(at({ id: 1, state: "running", started: NOW - 600_000, own_work: true })).toMatchObject({ section: "needs", needs: "stopped" });
   });

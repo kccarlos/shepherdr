@@ -70,6 +70,7 @@ export function starting(task, now = Date.now()) {
 // ready in has ended (task.ready_turns); working on that turn or a later one is new work. Not while it merges as
 // asked, nor a reviewer's turn; a ready said before turns were kept: any work once STARTING_MS have passed.
 export const WORKING_AGAIN = "Working again";
+export const WAITING_BG = "Waiting on a background job";
 export function busyAgain(task, live, now = Date.now()) {
   if (task.state !== "ready" || task.merge_requested) return false;
   const seen = task.ready_turns;
@@ -136,10 +137,10 @@ export function place(list, task, { live = [], helpers = [], loaded = true, now 
   // Just started (herdr-task's starting()): its terminal still runs the shell that starts the
   // agent, or the agent is idle before its first message lands.
   else if (starting(task, now)) section = "working";
-  // Quiet, but on its own background work (SHEP-53, herdr-task's own_work()): a background shell or
-  // Monitor still running, or its fresh status line says it waits on CI or a review. Kept on the task
-  // by its scheduler (task.own_work); Working, with its own status line.
-  else if (live.length && task.own_work && st === "running") section = "working";
+  // Quiet, but on its own background work (SHEP-53, FAC-60, herdr-task's own_work()): a background
+  // shell or job still running, or its status says it waits on CI, a build or a review. Kept on the
+  // task by its scheduler (task.own_work); Working, saying Waiting on a background job.
+  else if (live.length && task.own_work && st === "running") { section = "working"; why = WAITING_BG; }
   // Quiet without saying ready (herdr-task ready): alive, it ended its turn (on what: task.waits);
   // its process gone, the agent stopped.
   else if (live.length) need("reply", task.waits ?? REASONS.reply);

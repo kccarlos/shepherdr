@@ -192,11 +192,13 @@ def news_pass(report, folder=None):
         got = news_send(to, "\n".join(x["text"] for x in batch)) if to else False
         if got:
             outbox[:] = [x for x in outbox if x not in batch]
-            base_turn = ((k or {}).get("turn") or 0) + (1 if got == "pending" else 0)
+            base_turn = ((k or {}).get("turn") or 0) + (1 if got in ("pending", "queued") else 0)
+            idle = bool(k) and status_word(k) in ("idle", "done")
             for x in batch:
                 if x["event"] != "backup":
-                    delivered[x["key"]] = {"to": to, "turn": base_turn, "at": now(),
-                                           "event": x["event"], "status": x["status"], "stall": x.get("stall")}
+                    delivered[x["key"]] = {"to": to, "turn": base_turn, "at": now(), "since": x["at"],
+                                           "event": x["event"], "status": x["status"], "stall": x.get("stall"),
+                                           "idle": idle, **({"pending": True} if got == "pending" else {})}
             report["news"].append({"to": to, "lines": [x["text"] for x in batch]})
             # Kept for the main machine's home Assistant, which keeps every machine's overview.
             try:
@@ -221,7 +223,7 @@ def news_pass(report, folder=None):
     except Exception as e:  # never stops the news
         report["reactions_error"] = str(e)
     news_read(quiet)
-    held_pass(report)
+    held_pass(report, delivered)
     tmp = f"{NEWS}.{os.getpid()}.tmp"
     with open(tmp, "w") as f:
         json.dump(state, f)
@@ -300,17 +302,19 @@ def deliver(address, text, how="send", from_held=False):
                     return "sent"
                 break
         if turn_moved(hc_json("get", address) or before, after_turn):
-            return "sent"
+            return "sent" if from_held or how != "news" else "queued"
         if not from_held:
             hold(address, text, how, pending=after_turn)
         return "pending"
     k = hc_json("get", address) or before if how == "news" else before
-    if how == "news" and cli_of(k) == "claude" and status_word(k) == "working":
-        for delay in POLL_DELAYS:
-            time.sleep(delay)
-            if re.search(r"ctrl\+enter to send now", run(["hc", "read", address, "--lines", "40"]).stdout or "", re.I):
-                run(["hc", "keys", address, "ctrl+enter"])
-                break
+    if how == "news" and status_word(before) == "working":
+        if cli_of(k) == "claude":
+            for delay in POLL_DELAYS:
+                time.sleep(delay)
+                if re.search(r"ctrl\+enter to send now", run(["hc", "read", address, "--lines", "40"]).stdout or "", re.I):
+                    run(["hc", "keys", address, "ctrl+enter"])
+                    return "sent"
+        return "sent" if from_held else "queued"
     return "sent"
 
 
@@ -481,12 +485,14 @@ def send_or_hold(address, text, how="send"):
     return "sent" if deliver(address, text, how) else None
 
 
-def held_pass(report):
+def held_pass(report, delivered=None):
     """Sends what was held for agents the person no longer writes to, and re-delivers messages left
     pending behind a busy agy worker once its turn ends. Dropped once its agent has ended, once agy
     already started a turn with it, or after NEWS_KEEP_MS."""
     if not os.path.exists(HELD):
         return
+    pend_docs = lambda addr: [d for d in (delivered or {}).values() if isinstance(d, dict) and d.get("to") == addr and d.get("pending")]
+    unpend = lambda addr, k: [d.update(at=now(), turn=k.get("turn") or 0, idle=True) or d.pop("pending", None) for d in pend_docs(addr)]
     with held_messages() as held:
         for addr, items in list(held.items()):
             items[:] = [x for x in items if now() - (x.get("at") or 0) < NEWS_KEEP_MS]
@@ -494,7 +500,11 @@ def held_pass(report):
             if not k or k.get("state") != "live":
                 held.pop(addr)
                 continue
+            had_news = any("pending" in x and x.get("how") == "news" for x in items)
             items[:] = [x for x in items if "pending" not in x or not turn_moved(k, x["pending"])]
+            if had_news and not any("pending" in x and x.get("how") == "news" for x in items):
+                for d in pend_docs(addr):
+                    d.pop("pending", None)
             if not items:
                 held.pop(addr)
                 continue
@@ -509,6 +519,8 @@ def held_pass(report):
                        and x["text"].strip() and inp.splitlines()[0] == x["text"].strip().splitlines()[0]]
                 if own and run(["hc", "keys", addr, "enter"]).returncode == 0:
                     items[:] = [x for x in items if x not in own]
+                    if any(x.get("how") == "news" for x in own):
+                        unpend(addr, k)
                     report.setdefault("held", []).append({"to": addr, "messages": len(own)})
                 if not items:
                     held.pop(addr)
@@ -524,6 +536,8 @@ def held_pass(report):
                     res = deliver(addr, text, how, from_held=True)
                     if res == "sent":
                         items[:] = [x for x in items if x not in batch]
+                        if pending and how == "news":
+                            unpend(addr, k)
                         report.setdefault("held", []).append({"to": addr, "messages": len(batch)})
                     elif res == "pending":
                         items[:] = [x for x in items if x not in batch] + [{"text": text, "how": how, "at": now(),

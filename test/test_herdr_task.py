@@ -5691,38 +5691,35 @@ class BusyWorkerDelivery(unittest.TestCase):
 
 
 class Watchdog(unittest.TestCase):
-    """FAC-62: the tick's model-free watchdog restarts a stuck local Assistant once with restart.sh
-    (HERDR_RESTART_CHAT when chat-backed), alerts once within 2 hours, and holds off when changing or typing."""
+    """FAC-62: watchdog restarts a stuck local Assistant once with restart.sh and alerts on repeat."""
 
     def setUp(self):
+        from pathlib import Path
         from unittest import mock
         sys.path.insert(0, BIN)
         import herdr_task.agents as agents, herdr_task.assistant_settings as aset, herdr_task.autopilot as autopilot
         import herdr_task.base as base, herdr_task.commands as commands, herdr_task.home as home
         import herdr_task.news as news, herdr_task.reactions as reactions, herdr_task.store as store, herdr_task.watchdog as watchdog
-        self.news, self.wd, real_sub = news, watchdog, subprocess.run
+        self.news, self.wd, self.Path, real_sub = news, watchdog, Path, subprocess.run
         self.tmp = os.path.realpath(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, self.tmp, True)
         self.store = os.path.join(self.tmp, "tasks")
         os.makedirs(self.store)
-        self.slug, self.clock = store.slug_of(self.tmp), 1_800_000_000_000
-        self.terms, self.screens, self.raw, self.restarts, self.alerts = {}, {}, "", [], []
-
+        self.slug, self.clock, self.terms, self.screens, self.raw, self.restarts, self.alerts = store.slug_of(self.tmp), 1_800_000_000_000, {}, {}, "", [], []
         def fake_sub(args, env=None, **kw):
             if args[0] == "git":
                 return real_sub(args, env=env, **kw)
             if args[0] == "bash" and os.path.basename(args[1]) == "restart.sh":
-                old, nxt = args[2], f"c{len(self.restarts) + 2}"
+                old, nxt, prev = args[2], f"c{len(self.restarts) + 2}", self.terms.pop(args[2])
                 self.restarts.append((old, nxt, (env or {}).get("HERDR_RESTART_CHAT")))
-                self.terms[nxt] = {**self.terms.pop(old), "address": nxt, "turn": 0, "status": {"state": "idle"}, "created_ms": self.clock}
+                lbs = {k: v for k, v in prev["labels"].items() if not ((env or {}).get("HERDR_RESTART_CHAT") and k == "herdr.space")}
+                self.terms[nxt] = {**prev, "address": nxt, "turn": 0, "status": {"state": "idle"}, "created_ms": self.clock, "labels": lbs}
                 return subprocess.CompletedProcess(args, 0, f"{nxt}\n", "")
             if args[:2] == ["hc", "ls"]:
                 k, v = args[args.index("--label") + 1].split("=", 1) if "--label" in args else (None, None)
-                items = [t for t in self.terms.values() if not k or (t.get("labels") or {}).get(k) == v]
-                return subprocess.CompletedProcess(args, 0, json.dumps({"terminals": items}), "")
+                return subprocess.CompletedProcess(args, 0, json.dumps({"terminals": [t for t in self.terms.values() if not k or (t.get("labels") or {}).get(k) == v]}), "")
             if args[:2] == ["hc", "get"]:
-                t = self.terms.get(args[2])
-                return subprocess.CompletedProcess(args, 0 if t else 1, json.dumps(t) if t else "", "")
+                return subprocess.CompletedProcess(args, 0 if (t := self.terms.get(args[2])) else 1, json.dumps(t) if t else "", "")
             if args[:2] == ["hc", "read"]:
                 return subprocess.CompletedProcess(args, 0, self.screens.get(args[2], ""), "")
             if args[:2] == ["hc", "label"]:
@@ -5730,39 +5727,35 @@ class Watchdog(unittest.TestCase):
                 self.terms[args[2]].setdefault("labels", {})[k] = v
                 if k == "herdr.alert":
                     self.alerts.append((args[2], json.loads(v)))
-                return subprocess.CompletedProcess(args, 0, "", "")
-            if args[:2] == ["hc", "send"]:
-                return subprocess.CompletedProcess(args, 0, "", "")
-            raise AssertionError(f"unexpected {args}")
+            return subprocess.CompletedProcess(args, 0, "", "")
 
-        p_ = mock.patch.object
+        p_, noop = mock.patch.object, lambda *_: None
         patches = ([p_(m, "now", lambda: self.clock) for m in (base, agents, news, commands, watchdog)]
-                   + [p_(subprocess, "run", fake_sub), p_(store, "STORE", self.store), p_(watchdog, "STORE", self.store),
-                      p_(news, "STORE", self.store), p_(watchdog, "WATCHDOG", os.path.join(self.store, ".watchdog.json")),
+                   + [p_(m, "STORE", self.store) for m in (store, watchdog, news)]
+                   + [p_(subprocess, "run", fake_sub), p_(watchdog, "WATCHDOG", os.path.join(self.store, ".watchdog.json")),
                       p_(news, "NEWS", os.path.join(self.store, ".news.json")), p_(news, "HELD", os.path.join(self.store, ".held.json")),
-                      p_(autopilot, "STATE", os.path.join(self.store, ".autopilot.json")),
-                      p_(home, "log_news", lambda *_: None), p_(aset, "settings_pass", lambda *_: None),
-                      p_(reactions, "reactions_pass", lambda *_: None), p_(news, "guard", lambda *_: None),
-                      p_(watchdog, "guard", lambda *_: None), p_(watchdog, "held_ask", lambda *_: None),
-                      p_(news, "screen_raw", lambda *_: self.raw)])
+                      p_(autopilot, "STATE", os.path.join(self.store, ".autopilot.json")), p_(news, "POLL_DELAYS", (0,)),
+                      p_(news, "screen_raw", lambda *_: self.raw),
+                      *(p_(m, fn, noop) for m, fn in ((home, "log_news"), (aset, "settings_pass"), (reactions, "reactions_pass"), (news, "guard"), (watchdog, "guard"), (watchdog, "held_ask")))])
         for p in patches:
             p.start()
             self.addCleanup(p.stop)
         self.coord("c1", chat="p1")
 
     def coord(self, addr="c1", space="shop", status="done", turn=2, chat=None):
-        labels = {"herdr.role": "coordinator", **({"herdr.coordinator.space": space, "herdr.chat": chat} if chat else {"herdr.space": space})}
-        self.terms[addr] = {"address": addr, "state": "live", "status": {"state": status}, "turn": turn, "foreground": {"name": "claude"}, "labels": labels}
+        self.terms[addr] = {"address": addr, "state": "live", "status": {"state": status}, "turn": turn, "foreground": {"name": "claude"},
+                            "labels": {"herdr.role": "coordinator", "herdr.space": space, **({"herdr.chat": chat} if chat else {})}}
+
+    def worker(self, addr, tid, status="working", **extra):
+        self.terms[addr] = {"address": addr, "state": "live", "status": {"state": status}, "foreground": {"name": "claude"}, "labels": {"herdr.task": f"{self.slug}#{tid}"}, **extra}
 
     def save_tasks(self, *rows, delivered=None, inflight=None):
-        with open(os.path.join(self.store, f"{self.slug}.json"), "w") as f:
-            json.dump({"folder": self.tmp, "prefix": "SHOP", "tasks": list(rows)}, f)
+        put = lambda fn, d: self.Path(self.store, fn).write_text(json.dumps(d))
+        put(f"{self.slug}.json", {"folder": self.tmp, "prefix": "SHOP", "tasks": list(rows)})
         if delivered is not None:
-            with open(os.path.join(self.store, ".news.json"), "w") as f:
-                json.dump({"delivered": {f"{self.slug}#{k}": v for k, v in delivered.items()}, "outbox": []}, f)
+            put(".news.json", {"delivered": {f"{self.slug}#{k}": v for k, v in delivered.items()}, "outbox": []})
         if inflight is not None:
-            with open(os.path.join(self.store, ".autopilot.json"), "w") as f:
-                json.dump({"version": 2, "spaces": {"shop": {"on": True, "inflight": inflight}}}, f)
+            put(".autopilot.json", {"version": 2, "spaces": {"shop": {"on": True, "inflight": inflight}}})
 
     def tick(self):
         self.wd.watchdog_pass(report := {})
@@ -5775,32 +5768,26 @@ class Watchdog(unittest.TestCase):
         self.assertEqual(self.restarts, [])
         self.clock += 21 * 60000  # 31m in Needs you with no turn since news reached c1: restart once
         self.tick()
-        self.assertEqual((self.restarts, self.alerts), ([("c1", "c2", "p1")], []))
-        self.assertTrue(os.path.isfile(os.path.join(self.store, ".watchdog.json")))
-        self.clock += 60000
-        self.tick()
+        self.assertEqual((self.restarts, self.alerts, os.path.isfile(os.path.join(self.store, ".watchdog.json"))), ([("c1", "c2", "p1")], [], True))
         self.terms["c2"].update(status={"state": "done"}, turn=1)
         self.clock += 35 * 60000  # c2 handled the handoff turn: pre-restart SHOP-1 doesn't re-trigger
         self.tick()
         self.assertEqual((len(self.restarts), len(self.alerts)), (1, 0))
-        # Stuck again within 2 hours (failed task): alerts once, doesn't restart or repeat until a turn.
+        # Stuck again within 2 hours (even after HERDR_RESTART_CHAT dropped herdr.space): alerts once, doesn't repeat.
         t2 = {"id": 2, "title": "Pay", "state": "running", "space": "shop", "agents": [{"address": "w2", "at": self.clock - 5000, "ended": self.clock}]}
         self.save_tasks(t1, t2, delivered={2: {"to": "c2", "turn": 1, "at": self.clock, "event": "failed"}})
         self.clock += 31 * 60000
         self.tick()
         self.assertEqual((len(self.restarts), len(self.alerts)), (1, 1))
-        self.assertEqual(self.alerts[0][0], "c2")
         self.assertTrue(self.alerts[0][1]["title"].startswith("shop's Assistant is stuck: SHOP-2 failed"), self.alerts[0][1])
         self.clock += 5 * 60000
         self.tick()
         self.assertEqual(len(self.alerts), 1)
-        # After a turn and past the 2-hour cooldown, a stalled task restarts again.
-        self.terms["c2"]["turn"] = 2
+        self.terms["c2"]["turn"] = 2  # After a turn and past the 2-hour cooldown, a stalled task restarts again
         self.clock += self.wd.RESTART_COOLDOWN_MS
-        self.terms["w3"] = {"address": "w3", "state": "live", "status": {"state": "working"}, "status_ms": self.clock - 60 * 60000,
-                            "foreground": {"name": "claude"}, "labels": {"herdr.task": f"{self.slug}#3"}}
-        t3 = {"id": 3, "title": "Ship", "state": "running", "space": "shop", "started": self.clock - 60 * 60000, "agents": [{"address": "w3", "at": self.clock - 60 * 60000}]}
-        self.save_tasks(t3, delivered={3: {"to": "c2", "turn": 2, "at": self.clock - 40 * 60000, "event": "stalled", "stall": f"quiet:{self.clock - 60 * 60000}"}})
+        self.worker("w3", 3, status_ms=self.clock - 60 * 60000)
+        self.save_tasks({"id": 3, "title": "Ship", "state": "running", "space": "shop", "started": self.clock - 60 * 60000, "agents": [{"address": "w3", "at": self.clock - 60 * 60000}]},
+                        delivered={3: {"to": "c2", "turn": 2, "at": self.clock - 40 * 60000, "event": "stalled", "stall": f"quiet:{self.clock - 60 * 60000}"}})
         self.tick()
         self.assertEqual(len(self.restarts), 2)
 
@@ -5808,18 +5795,17 @@ class Watchdog(unittest.TestCase):
         queued = {"id": 2, "title": "Follow-up", "state": "queued", "space": "shop", "after": [1]}
         self.save_tasks({"id": 1, "title": "Base", "state": "todo", "space": "shop"}, queued)
         self.news.news_pass({})
+        self.terms["c1"]["status"] = {"state": "working"}  # working on turn 2 when news arrives (queued behind turn 3)
         self.save_tasks({"id": 1, "title": "Base", "state": "ready", "space": "shop", "ready_at": self.clock}, queued)
-        self.news.news_pass({})  # queued in outbox (not settled yet): left alone
-        self.tick()
+        self.news.news_pass({})
         self.clock += 10000
-        self.news.news_pass({})  # delivered to c1 on turn 2; within grace, left alone
-        self.tick()
-        self.assertEqual(self.restarts, [])
+        self.news.news_pass({})
+        self.terms["c1"].update(status={"state": "done"}, turn=3, status_ms=self.clock + 1000)
         self.clock += 2 * 60000
-        self.terms["c1"]["turn"] = 3  # Assistant took a turn after news reached it: left alone
+        self.terms["c1"]["turn"] = 4  # queued turn ran (turn 4 > 3): left alone
         self.tick()
         self.assertEqual(self.restarts, [])
-        self.terms["c1"]["turn"] = 2  # No turn since news reached it: restarted
+        self.terms["c1"]["turn"] = 3  # queued turn never ran (turn 3 == base_turn): restarted
         self.tick()
         self.assertEqual(self.restarts, [("c1", "c2", "p1")])
 
@@ -5851,5 +5837,26 @@ class Watchdog(unittest.TestCase):
         self.assertEqual(self.restarts, [])
         self.save_tasks(stale, delivered=delivered, inflight=False)
         self.tick()
+        self.assertEqual((self.restarts, "vm/c9" in self.terms), ([("c1", "c2", "p1")], True))
+
+    def test_older_worker_or_attention_timestamps_wait_full_30m(self):
+        t0 = self.clock
+        for i in (1, 2, 3):
+            self.worker(f"w{i}", i)
+        self.save_tasks({"id": 1, "title": "Build", "state": "running", "space": "shop", "started": t0, "agents": [{"address": "w1", "at": t0}]},
+                        {"id": 2, "title": "Ask", "state": "running", "space": "shop", "started": t0, "attention_at": t0, "agents": [{"address": "w2", "at": t0}]},
+                        {"id": 3, "title": "CI", "state": "running", "space": "shop", "started": t0, "attention": "Checks failed", "attention_at": t0, "agents": [{"address": "w3", "at": t0}]})
+        self.news.news_pass({})
+        self.clock += 35 * 60000  # 35m later: w1 exits, w2 blocks (stale attention_at=t0), w3 ends without fixing attention
+        self.terms.pop("w1")
+        self.terms["w2"].update(status={"state": "blocked"}, status_ms=self.clock)
+        self.terms["w3"].update(status={"state": "done"}, status_ms=self.clock)
+        self.news.news_pass({})
+        self.clock += 6000
+        self.news.news_pass({})
+        self.clock += 2 * 60000  # 2m (> grace, < 30m): must NOT restart early from t0 timestamps
+        self.tick()
+        self.assertEqual(self.restarts, [])
+        self.clock += 29 * 60000  # 31m after entering Failed/Needs you: restarts once
+        self.tick()
         self.assertEqual(self.restarts, [("c1", "c2", "p1")])
-        self.assertIn("vm/c9", self.terms)

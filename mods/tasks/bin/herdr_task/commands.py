@@ -469,7 +469,7 @@ def sign_in_screen(screen):
     return bool(SIGN_IN_SCREEN.search("\n".join((screen or "").splitlines()[-60:])))
 
 
-QUOTA_SCREEN = re.compile(r"(?i)individual quota reached|usage limit reached|limit will reset|hit your usage limit|usage limit")
+QUOTA_SCREEN = re.compile(r"(?i)individual quota reached|usage limit reached|limit will reset|hit your usage limit")
 QUOTA_RESET = re.compile(r"(?i)(?:resets?|try again)\s+((?:in|at)\s+[^\n.│┃]*?)\s*(?:[.│┃]|$)", re.M)
 
 

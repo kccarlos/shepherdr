@@ -3765,6 +3765,14 @@ if sys.argv[1] == "kill" and alive:
         f = self.fail_on("Reviewing the diff... usage limit handling looks fine\n", {"state": "working"})
         self.assertEqual(f, [])
 
+    def test_a_passing_mention_of_usage_limit_is_no_quota_failure(self):
+        for status in ({"state": "idle"}, {"state": "blocked", "kind": "permission"}):
+            with self.subTest(status=status):
+                for k in ("review_runs", "review_failures", "reviews"):
+                    self.task.pop(k, None)
+                f = self.fail_on("Allow the command grep -n usage limit commands.py?\n", status)
+                self.assertNotIn("quota", " ".join(x["why"] for x in f))
+
     def test_sign_in_required_and_claude_fallback_to_agy(self):
         from herdr_task import settings
         self.sandbox()

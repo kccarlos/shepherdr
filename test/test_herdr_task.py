@@ -8156,8 +8156,12 @@ class DesignAndDocReview(unittest.TestCase):
         self.verdict("term-1", passed=True)
         self.assertEqual((self.task["state"], len(self.runs)), ("ready", 1))
 
-        # Doc task whose 1 round asks for changes: stops after round 1, review-more refuses, and
-        # handing to Ready / Accept card (--set review=off) waits for the person instead of auto-merging.
+        # Doc task whose 1 round asks for changes: stops after round 1, persists review_out on disk across
+        # cmd_ready's two open_store blocks, review-more refuses, and handing to Ready / Accept card
+        # (--set review=off) waits for the person instead of auto-merging.
+        import argparse
+        from unittest import mock
+        from herdr_task import store as task_store
         self.task.update(state="running", set={"review_kind": "doc"})
         for k in ("reviews", "review_runs", "verdict_told", "ready_at", "auto_merge"):
             self.task.pop(k, None)
@@ -8166,7 +8170,18 @@ class DesignAndDocReview(unittest.TestCase):
         self.ready()
         self.verdict("term-1", passed=False, changes="tighten intro", must_fix=1)
         self.change("doc tightened")
-        self.ready()
+        sdir = os.path.join(self.root, "store")
+        with mock.patch.object(task_store, "STORE", sdir), \
+                mock.patch.object(self.commands, "open_store", task_store.open_store):
+            with task_store.open_store(argparse.Namespace(folder=self.main)) as s:
+                s.data.update(prefix="SHEP", tasks=[json.loads(json.dumps(self.task))])
+                s.dirty = True
+            self.commands.cmd_ready(argparse.Namespace(id="SHEP-13", json=True, folder=self.main, summary="The gate.",
+                                                       details=None, proof=None, agents_md=None))
+            with task_store.open_store(argparse.Namespace(folder=self.main), write=False) as s:
+                on_disk = s.find("SHEP-13")
+        self.assertTrue(on_disk.get("review_out"))
+        self.task.update(on_disk)
         self.assertEqual((self.task["state"], len(self.runs), bool(self.task.get("review_out"))), ("running", 1, True))
         with self.assertRaises(self.commands.Fail) as err2:
             self.review_more()

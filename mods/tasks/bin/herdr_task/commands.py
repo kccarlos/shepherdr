@@ -547,7 +547,8 @@ def gate_step(s, t):
     if not head or not os.path.isdir(t.get("worktree") or ""):
         raise Fail(f"{s.ref(t)} has no worktree to review: start it first.")
     back_to_work(s, t, "a new commit to review")  # a Ready task's unreviewed commit never stays mergeable
-    t.pop("auto_merge", None)
+    if t.pop("auto_merge", None) is not None:
+        s.dirty = True
     inspect_runs(s, t)
     if gate_passes(t, head) >= need:
         return f"{s.ref(t)} is ready." if t.get("state") in ("ready", "done") else None
@@ -574,6 +575,7 @@ def gate_step(s, t):
         return f"{s.ref(t)}: {why}."
     if used >= rounds:
         t["review_out"] = now()
+        s.dirty = True
         if kind := review_kind(t):
             return (f"{s.ref(t)} is a {kind} task (1 review round) and its round is used. "
                     "Say what changed in your chat and end your turn: your Assistant hands it to the person.")

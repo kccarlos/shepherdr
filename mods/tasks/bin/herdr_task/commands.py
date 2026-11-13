@@ -1157,7 +1157,8 @@ def still_waiting(s, t, rn, screen):
     """FAC-79: an idle reviewer with no verdict is not failed while its own background job still runs (Claude Code
     starts a turn by itself when the job ends). The job shown for BG_WAIT_MS, or gone with the reviewer still
     idle for QUIET_MS (agy starts no turn by itself): one nudge to record the verdict, then NUDGE_GRACE_MS more.
-    Its clocks are the task's `review_wait` (never on the run: that record is the gate's contract)."""
+    Its clocks and the nudge sent (at most one per run, even if the reviewer worked on after it) are the task's
+    `review_wait` for that run's address (never on the run record itself: that is the gate's contract)."""
     if (t.get("review_wait") or {}).get("address") != rn["address"]:
         t.pop("review_wait", None)
     w, t0 = t.get("review_wait") or {}, now()
@@ -1194,7 +1195,8 @@ def inspect_runs(s, t):
             continue
         st, alive = status_word(k), agent_running(k)
         if alive and st == "working":  # never read mid-turn
-            if t.pop("review_wait", None):
+            w = t.get("review_wait") or {}  # the job clocks restart, the nudge sent stays remembered: at most one a run
+            if w.pop("bg_at", None) or w.pop("idle_at", None):
                 s.dirty = True
             continue
         screen = None

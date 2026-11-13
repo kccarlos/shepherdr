@@ -3930,7 +3930,29 @@ if sys.argv[1] == "kill" and alive:
         self.assertIn("review_wait", self.task)
         self.reviewer_term["status"] = {"state": "working"}
         self.gate_at(t0 + c.BG_WAIT_MS * 3, nudges)
-        self.assertEqual((len(nudges), self.task.get("review_wait"), self.task.get("review_failures")), (1, None, None))
+        self.assertEqual((len(nudges), self.task.get("review_failures")), (1, None))
+        self.assertNotIn("bg_at", self.task["review_wait"])
+
+    def test_a_reviewer_stuck_on_a_shell_for_over_an_hour_gets_exactly_one_nudge_then_fails(self):
+        c = self.commands
+        self.task.update(reviewer="claude", reviewer_model="opus")
+        self.ready()
+        self.screen(self.fixture("claude"))
+        done = {"state": "live", "agent": "claude", "status": {"state": "done"}, "turn": 3}
+        self.reviewer_term, nudges, t0 = dict(done), [], self.task["review_runs"][0]["at"] + 600_000
+        failed_at = None
+        for minute in range(0, 80):
+            # A nudged reviewer works for a minute (as the real one did), then ends its turn on the same shell again.
+            worked = nudges and minute == (c.BG_WAIT_MS // 60_000) + 1
+            self.reviewer_term = {**done, "status": {"state": "working" if worked else "done"}}
+            self.gate_at(t0 + minute * 60_000, nudges)
+            if self.task.get("review_failures") and failed_at is None:
+                failed_at = minute
+        self.assertEqual(len(nudges), 1)  # never a second one, however long it goes on
+        self.assertEqual(failed_at, c.BG_WAIT_MS // 60_000 + c.NUDGE_GRACE_MS // 60_000)  # 3 min after the nudge
+        self.assertEqual(self.task["review_failures"][0]["why"], "ended without a verdict")
+        self.assertEqual([r["cli"] for r in self.task["review_runs"]], ["claude", "agy"])  # the fallback went on
+        self.valid()
 
     def test_an_agy_reviewer_whose_job_is_gone_gets_one_nudge_then_fails(self):
         from unittest import mock

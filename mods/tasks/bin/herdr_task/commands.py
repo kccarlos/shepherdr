@@ -469,6 +469,20 @@ def sign_in_screen(screen):
     return bool(SIGN_IN_SCREEN.search("\n".join((screen or "").splitlines()[-60:])))
 
 
+QUOTA_SCREEN = re.compile(r"(?i)individual quota reached|usage limit reached|limit will reset|hit your usage limit|usage limit")
+QUOTA_RESET = re.compile(r"(?i)(?:resets?|try again)\s+((?:in|at)\s+[^\n.│┃]*?)\s*(?:[.│┃]|$)", re.M)
+
+
+def quota_why(screen):
+    """FAC-81: "quota reached (resets in 10h55m)" when the last lines of a reviewer's screen show a quota or
+    usage-limit message (agy, Claude Code, Codex), carrying the reset time when shown; else None."""
+    tail = "\n".join((screen or "").splitlines()[-30:])
+    if not QUOTA_SCREEN.search(tail):
+        return None
+    m = QUOTA_RESET.search(tail)
+    return f"quota reached (resets {m.group(1).strip()})" if m else "quota reached"
+
+
 def failed_addresses(t):
     return {f["address"] for f in t.get("review_failures") or [] if f.get("address")}
 
@@ -1224,7 +1238,9 @@ def inspect_runs(s, t):
                 continue
         if screen is None:
             screen = screen_of(rn["address"], 400)
-        why = (sign_in_why(s, t, rn) if sign_in_screen(screen) else "exited without a verdict" if not alive else
+        stuck = quota_why(screen) or ("reviewer error" if st == "error" else None)  # failed at once, no wait (FAC-81)
+        why = (sign_in_why(s, t, rn) if sign_in_screen(screen) else stuck if alive and stuck else
+               "exited without a verdict" if not alive else
                "ended without a verdict" if st in ("idle", "done") and (k.get("turn") != 0 or now() - (rn.get("at") or 0) >= STARTING_MS)
                and not still_waiting(s, t, rn, screen) else None)
         if why:

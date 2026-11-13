@@ -3733,6 +3733,38 @@ if sys.argv[1] == "kill" and alive:
         self.assertEqual(self.commands.rounds_used(self.task, True), 2)
         self.valid()
 
+    def fail_on(self, screen, status):
+        self.sandbox()
+        self.ready()
+        self.screen(screen)
+        self.reviewer_term = {"state": "live", "agent": "agy", "status": status, "turn": 1}
+        self.commands.gate_reads(self.store, self.task)
+        return self.task.get("review_failures") or []
+
+    def test_a_quota_reviewer_fails_at_once_with_its_reset_time(self):
+        for text, why in [
+            ("⚠ Individual quota reached. Please upgrade your subscription. Resets in 10h55m44s.\n", "quota reached (resets in 10h55m44s)"),
+            ("Claude usage limit reached. Your limit will reset at 3pm (Europe/Berlin).\n", "quota reached (resets at 3pm (Europe/Berlin))"),
+            ("■ You've hit your usage limit. Try again at 3:04 PM.\n", "quota reached (resets at 3:04 PM)"),
+            ("■ You've hit your usage limit.\n", "quota reached"),
+        ]:
+            with self.subTest(text=text):
+                for k in ("review_runs", "review_failures", "reviews"):
+                    self.task.pop(k, None)
+                f = self.fail_on(text, {"state": "idle"})
+                self.assertEqual([(x["cli"], x["why"]) for x in f], [("agy", why)])
+                self.assertIn("usage limit" if "usage" in text else "quota", f[0]["tail"])
+                self.assertEqual(self.task["review_runs"][-1]["cli"], "claude")  # the next reviewer, no round used
+                self.assertEqual(self.commands.rounds_used(self.task, True), 1)  # the fallback run counts, the failed one not
+
+    def test_a_reviewer_in_error_status_fails_at_once(self):
+        f = self.fail_on("something broke\n", {"state": "error"})
+        self.assertEqual([x["why"] for x in f], ["reviewer error"])
+
+    def test_a_working_reviewer_is_not_failed(self):
+        f = self.fail_on("Reviewing the diff... usage limit handling looks fine\n", {"state": "working"})
+        self.assertEqual(f, [])
+
     def test_sign_in_required_and_claude_fallback_to_agy(self):
         from herdr_task import settings
         self.sandbox()

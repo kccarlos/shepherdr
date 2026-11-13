@@ -278,6 +278,7 @@ watchdog (no model): the tick restarts a stuck Assistant with a handoff, or aler
 4. **Start a project** (one command): space, Assistant, repo checks, imported requirements, and a checklist asked before the person leaves: GitHub repo, Apple sign-in, app record, App Store profile, CI secrets, the service account for night runs, which milestone gates the Assistant may pass, design pass yes or no, model routing.
 5. **Size limits in code**: `ready` refuses, or forces a recap, past 2× the brief's size (note 27).
 6. **Watchdog**: the tick notices an Assistant idle with work waiting, or a task stuck past its budget, and restarts the Assistant with a handoff or alerts the person.
+7. **Repo copies of claude.ai artifacts** (note 35): only Claude agents can read claude.ai, so before a non-Claude worker starts a task that depends on an artifact or doc, the Assistant exports what it needs under `docs/<project>/…` with the source URL linked at the top; design tasks deliver repo files under `docs/<project>/design/…` as part of Done, and `project start` marks claude.ai requirements to export before planning tasks.
 
 **Open, for the person:** who accepts inside the delegated milestones: the Assistant (`herdr-task accept` allowed for it), or Shepherdr itself (merge on two passing rounds and green CI). Either way, releases and anything outside the delegation stay with the person.
 

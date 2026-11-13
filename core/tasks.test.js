@@ -31,6 +31,17 @@ describe("a task's status (as herdr-task's task_status)", () => {
     expect(at({ id: 1, state: "running", started: NOW - 600_000, own_work: true }, [{ address: "t1", status: "blocked" }])).toMatchObject({ section: "needs", needs: "asks" });
     expect(at({ id: 1, state: "running", started: NOW - 600_000, own_work: true })).toMatchObject({ section: "needs", needs: "stopped" });
   });
+  test("while a herdr-task review round runs for its head, a resting worker is Working, not Needs you (FAC-66)", () => {
+    const idle = [{ address: "t1", status: "done" }];
+    const base = { id: 1, state: "running", started: NOW - 600_000, head: "abc1234", progress: { text: "Herdr's reviewer is on it", at: NOW - 300_000, set: NOW - 300_000, by: "herdr" },
+      review_runs: [{ round: 1, head: "abc1234", address: "t2", at: NOW - 300_000 }] };
+    const p = at(base, idle);
+    expect(p).toMatchObject({ section: "working", needs: null });
+    expect(secondLine(p, reportOf(base, p.section, null, NOW), null, NOW)).toBe("Herdr's reviewer is on it");
+    expect(at({ ...base, reviews: [{ round: 1, head: "abc1234", started_by: "herdr-task", verdict: "changes" }] }, idle)).toMatchObject({ section: "needs", needs: "reply" });
+    expect(at({ ...base, review_failures: [{ address: "t2" }] }, idle)).toMatchObject({ section: "needs", needs: "reply" });
+    expect(at({ ...base, head: "def5678" }, idle)).toMatchObject({ section: "needs", needs: "reply" });
+  });
   test("a machine still loading gives no verdict", () => {
     expect(at({ id: 1, state: "running", started: NOW - 600_000 }, [], false).section).toBe("working");
   });

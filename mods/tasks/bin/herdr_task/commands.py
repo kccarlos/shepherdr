@@ -469,14 +469,14 @@ def sign_in_screen(screen):
     return bool(SIGN_IN_SCREEN.search("\n".join((screen or "").splitlines()[-60:])))
 
 
-QUOTA_SCREEN = re.compile(r"(?i)individual quota reached|usage limit reached|limit will reset|hit your usage limit")
+QUOTA_SCREEN = re.compile(r"(?im)^[\s│┃╭╮╰╯─⚠!✗✖•*■]*(?:claude\s+)?(?:individual quota reached|usage limit reached|you.ve hit your usage limit)")  # at a line's start: quoting it isn't it
 QUOTA_RESET = re.compile(r"(?i)(?:resets?|try again)\s+((?:in|at)\s+[^\n.│┃]*?)\s*(?:[.│┃]|$)", re.M)
 
 
 def quota_why(screen):
     """FAC-81: "quota reached (resets in 10h55m)" when the last lines of a reviewer's screen show a quota or
     usage-limit message (agy, Claude Code, Codex), carrying the reset time when shown; else None."""
-    tail = "\n".join((screen or "").splitlines()[-30:])
+    tail = screen or ""
     if not QUOTA_SCREEN.search(tail):
         return None
     m = QUOTA_RESET.search(tail)
@@ -1238,7 +1238,9 @@ def inspect_runs(s, t):
                 continue
         if screen is None:
             screen = screen_of(rn["address"], 400)
-        stuck = quota_why(screen) or ("reviewer error" if st == "error" else None)  # failed at once, no wait (FAC-81)
+        msg = (k.get("status") or {}).get("msg") if isinstance(k.get("status"), dict) else None
+        # FAC-81: only an agent in the error state, its own status message or last lines carrying a quota line
+        stuck = (quota_why("\n".join([str(msg or "")] + screen.splitlines()[-5:])) or "reviewer error") if st == "error" else None
         why = (sign_in_why(s, t, rn) if sign_in_screen(screen) else stuck if alive and stuck else
                "exited without a verdict" if not alive else
                "ended without a verdict" if st in ("idle", "done") and (k.get("turn") != 0 or now() - (rn.get("at") or 0) >= STARTING_MS)

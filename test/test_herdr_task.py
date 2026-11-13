@@ -8459,6 +8459,15 @@ class ProjectStart(unittest.TestCase):
         self.start(ios, "--json")
         self.start(ios, "--json")
         self.assertEqual(self.notes(ios), (f"bun install\n{self.project.IOS_START_NOTE}", f"tell the person\n{self.project.IOS_FINISH_NOTE}"))
+        # Notes set at Everywhere are kept too: the folder's value would replace them.
+        ios2 = os.path.join(self.tmp, "ios-two")
+        self.put(os.path.join(ios2, "App.xcodeproj", "project.pbxproj"), "IPHONEOS_DEPLOYMENT_TARGET = 17.0;\n")
+        cfg = self.store.read_list(self.settings_file)
+        cfg["everywhere"] = {"tasks": {"start_notes": "every start"}}
+        self.put(self.settings_file, cfg)
+        self.start(ios2, "--json")
+        self.start(ios2, "--json")
+        self.assertEqual(self.notes(ios2), (f"every start\n{self.project.IOS_START_NOTE}", self.project.IOS_FINISH_NOTE))
 
     def test_ios_only_for_ios_projects_and_lists_person_steps(self):
         mac_pkg, ios_pkg, mac_xc, ios_xc = (os.path.join(self.tmp, x) for x in ("mac-pkg", "ios-pkg", "mac-xc", "ios-xc"))

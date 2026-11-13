@@ -252,9 +252,12 @@ def ensure_settings(repo, space_id, name, given_check, d, dry):
     for k, v in (*FACTORY_TASKS.items(), *((("check", chk),) if chk else ())):
         if tasks.get(k) is None or (k == "check" and not tasks.get("check")):
             tasks[k], changed = v, True
+    mach = (d.get("machines") or {}).get(d.get("here") or st.LOCAL_MACHINE) or {}
     for k, key, line in (("start_notes", "simulator lease", IOS_START_NOTE), ("finish_notes", "simulator release", IOS_FINISH_NOTE)) if detect_ios(repo) else ():
-        if key not in str(tasks.get(k) or ""):  # appended to the person's notes, once
-            tasks[k], changed = "\n".join(x for x in (str(tasks.get(k) or "").strip(), line) if x), True
+        # What the folder runs with now: its own notes, else the machine's, else Everywhere's (a folder value replaces them).
+        cur = next((str(v) for v in (tasks.get(k), (mach.get("tasks") or {}).get(k), (d.get("everywhere") or {}).get("tasks", {}).get(k)) if str(v or "").strip()), "")
+        if key not in cur:  # appended to the person's notes, once
+            tasks[k], changed = "\n".join(x for x in (cur.strip(), line) if x), True
     if tasks != (layer.get("tasks") or {}):
         layer["tasks"] = tasks
     chk_words = f"check: {tasks['check']}" if tasks.get("check") else "check: none"

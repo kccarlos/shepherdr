@@ -1741,6 +1741,7 @@ class GateReview(unittest.TestCase):
         import shutil
         sys.path.insert(0, BIN)
         sys.path.insert(0, os.path.join(ROOT, "test"))
+        import herdr_task.agents as agents
         import herdr_task.commands as commands
         import herdr_task.launch as launch
         import herdr_task.templates as templates
@@ -1781,8 +1782,9 @@ class GateReview(unittest.TestCase):
                                  (launch, "low_priority", lambda argv, name: argv), (templates, "TEMPLATES", tdir),
                                  (settings, "SETTINGS", os.path.join(tdir, "none.json")),
                                  (launch, "UNSANDBOXED_FLAG", os.path.join(tdir, "none")),
-                                 (commands, "hc_json", lambda *a: self.reviewer_term),
+                                 (commands, "hc_json", lambda *a: self.reviewer_term), (agents, "hc_json", lambda *a: None),
                                  (commands, "run", lambda argv, **k: subprocess.CompletedProcess(argv, 0, "", "")),
+                                 (agents, "run", lambda argv, **k: subprocess.CompletedProcess(argv, 0, "", "")),
                                  (commands, "sandboxes", lambda argv: False), (launch, "sandboxes", lambda argv: False),
                                  (commands, "subprocess", mock.Mock())):  # no real `hc kill` of a reviewer
             p = mock.patch.object(mod, name, value)

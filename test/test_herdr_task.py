@@ -3246,6 +3246,12 @@ class GateReview(unittest.TestCase):
         cmd = self.runs[0][self.runs[0].index("--") + 1:]
         self.assertEqual(cmd[cmd.index("--permission-mode") + 1], "auto")  # plan mode blocks `herdr-task review`
 
+    def test_a_claude_reviewer_never_auto_updates_but_a_codex_one_has_no_switch(self):
+        """FAC-87: Claude has DISABLE_AUTOUPDATER; Codex has none to set."""
+        self.task["reviewer"], self.task["reviewer_model"] = "claude", None
+        self.ready()
+        self.assertIn("DISABLE_AUTOUPDATER=1", self.runs[0])
+
     def test_out_of_rounds_starts_none(self):
         self.task["set"]["review_rounds"] = 1
         self.ready()
@@ -7813,7 +7819,19 @@ class Resume(unittest.TestCase):
     def launched_cmd(self, idx=-1):
         hc = self.runs[idx]
         env_idx = hc.index("env")
-        return hc[env_idx + 2:]  # after ["env", "HERDR_BROWSER_TASK=..."]
+        i = env_idx + 1
+        while "=" in hc[i].split("/")[0]:  # after ["env", "HERDR_BROWSER_TASK=...", "DISABLE_AUTOUPDATER=1"]
+            i += 1
+        return hc[i:]
+
+    def env_words(self, idx=-1):
+        hc = self.runs[idx]
+        i = hc.index("env") + 1
+        out = []
+        while "=" in hc[i].split("/")[0]:
+            out.append(hc[i])
+            i += 1
+        return out
 
     def started_task(self, worker, session="0199-sid", **add_kw):
         self.write_worker(worker)
@@ -7851,6 +7869,19 @@ class Resume(unittest.TestCase):
             last = s.find(ref)["agents"][-1]
             self.assertEqual(last["argv"], ["agy", "--model", "gemini-4-argon-high", "--dangerously-skip-permissions"])
             self.assertEqual(last["session"], "0199-sid")
+
+    def test_claude_launch_and_resume_never_auto_update(self):
+        """FAC-87: a self-updated Claude binary makes macOS ask about a removable volume and every new agent hangs."""
+        ref = self.started_task({"agent": "claude"})
+        self.assertIn("DISABLE_AUTOUPDATER=1", self.env_words())
+        self.call(self.commands.cmd_resume, id=ref, space=None, agent=None, argv=None, parent=None)
+        self.assertIn("DISABLE_AUTOUPDATER=1", self.env_words())
+        self.assertEqual(self.launched_cmd()[0], "claude")
+
+    def test_an_agent_without_an_update_switch_gets_nothing_extra(self):
+        self.started_task({"agent": "agy", "perm": "auto"})
+        self.assertEqual([w.split("=")[0] for w in self.env_words()], ["HERDR_BROWSER_TASK"])
+        self.assertEqual(self.launch.no_update_env(["codex", "exec"]), [])
 
     def test_fresh_handoff_when_session_missing_or_cli_changed_without_duplicate_continue(self):
         # Same CLI, no recorded session: fresh start with new argv and handoff, continue line not sent twice.

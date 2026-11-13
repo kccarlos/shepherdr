@@ -80,3 +80,10 @@ Never point `--root` at the real home for a try, and never start Herdr or herdr-
 - Repo topics: add `herdr-layout` (the listing), keep `herdr` and `shepherdr`, and drop `herdr-plugin` (the
   terminal-plugin card; `herdr-plugin.toml` is gone from main, 2.1 stays installable from `v2.1`).
 - Tag `v3.0.0` and the GitHub release only after the person says yes; patch bumps after that.
+
+## Agents don't auto-update (FAC-87)
+
+herdr-task starts Claude Code with `DISABLE_AUTOUPDATER=1` (Codex and agy list no such switch, so they get nothing): a
+binary that updates itself mid-night makes macOS ask on the desktop whether it may use a removable volume, and every new
+agent there hangs until someone clicks Allow. Update by hand when it suits you: `claude update` (and `codex update`,
+`agy update`).

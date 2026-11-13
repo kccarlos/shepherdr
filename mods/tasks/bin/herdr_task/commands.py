@@ -27,7 +27,7 @@ from .github import (already_merged, drop_branch, finish, gh, github, merged_her
 from .github import CHECKS_RUNNING as PR_CHECKS_RUNNING
 from .launch import (
     base_ref, brief, caller_labels, caller_space, current_base, default_space, folder_for, handoff, launch, name_tabs,
-    own_path, parent_for, resume_argv, REVIEW_READS, review_reads, retag_tabs, sandboxes, set_branch, tab_title, task_tabs,
+    own_path, parent_for, resume_argv, REVIEW_READS, review_reads, retag_tabs, reviewer_sandbox, sandboxes, set_branch, tab_title, task_tabs,
 )
 from .store import is_task_list, locate, open_store, prefixes_in_use, read_list, Store, store_files
 from .queues import after_refs, parse_after, queue_reason, set_after
@@ -1092,6 +1092,13 @@ def read_verdict(screen, code):
     return not must, must, "\n".join(x.strip() for x in lines[begin + 1:end]).strip()
 
 
+def sign_in_why(s, t, rn):
+    """Why a reviewer stopped at the sign-in screen; a sandboxed agy one names the setting that fixes it (FAC-76)."""
+    if sandboxes([rn["cli"]]) and reviewer_sandbox(s, t.get("space"))[0]:
+        return "Sign in required: turn Reviewer sandbox off"
+    return "Sign in required"
+
+
 def inspect_runs(s, t):
     """Reads verdicts of finished sandboxed reviewers, and marks open runs whose terminal is gone or
     whose agent ended without a verdict (or stopped on 'Sign in required') as failed (FAC-49, FAC-59)."""
@@ -1099,7 +1106,7 @@ def inspect_runs(s, t):
         k = hc_json("get", rn["address"]) or {}
         if k.get("state") != "live":
             code = k.get("exit_code")
-            why = ("Sign in required" if k.get("state") == "finished" and sign_in_screen(
+            why = (sign_in_why(s, t, rn) if k.get("state") == "finished" and sign_in_screen(
                        run(["hc", "read", rn["address"], "--lines", "80"]).stdout) else
                    f"exited ({code})" if k.get("state") == "finished" and type(code) is int else
                    "exited" if k.get("state") == "finished" else "terminal gone")
@@ -1129,7 +1136,7 @@ def inspect_runs(s, t):
                 continue
         if screen is None:
             screen = run(["hc", "read", rn["address"], "--lines", "400"]).stdout or ""
-        why = ("Sign in required" if sign_in_screen(screen) else "exited without a verdict" if not alive else
+        why = (sign_in_why(s, t, rn) if sign_in_screen(screen) else "exited without a verdict" if not alive else
                "ended without a verdict" if st in ("idle", "done") and (k.get("turn") != 0 or now() - (rn.get("at") or 0) >= STARTING_MS) else None)
         if why:
             fail_run(s, t, rn, why)

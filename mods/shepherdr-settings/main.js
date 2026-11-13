@@ -584,6 +584,10 @@ export default class ShepherdrSettings extends View {
       .child(this.row(t, rowTitle("tasks.worktrees"), ABOUT["tasks.worktrees"],
         toggleSwitch("worktrees", k.worktrees !== false, (next, _e, cx) => this.set("tasks", "worktrees", next, cx)),
         this.scoped("tasks", "worktrees")))
+      // agy reviewers in a sandbox (herdr-task's tasks.reviewer_sandbox): a sandboxed agy can't use its keychain sign-in.
+      .child(this.row(t, rowTitle("tasks.reviewer_sandbox"), ABOUT["tasks.reviewer_sandbox"],
+        toggleSwitch("revbox", k.reviewer_sandbox !== false, (next, _e, cx) => this.set("tasks", "reviewer_sandbox", next, cx)),
+        this.scoped("tasks", "reviewer_sandbox")))
       .when(Boolean(base), (el) => el.child(base))
       .when(Boolean(branch), (el) => el.child(branch))
       .child(this.row(t, rowTitle("automations.enabled"), ABOUT["automations.enabled"],

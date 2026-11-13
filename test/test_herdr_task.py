@@ -4027,6 +4027,8 @@ if sys.argv[1] == "kill" and alive:
         from herdr_task.agents import claude_bg_shells
         for text, want in (("a\n✻ Cooked for 2m · 1 shell still running\n❯\n", True), ("x\n⏵⏵ auto mode on · 2 shells · ↓ to manage\n", True),
                            ("⏵⏵ auto mode on · 0 shells · ↓\n", False),
+                           ("✻ Crunched for 2m 55s · done 9:38 AM · 2 shells, 1 monitor still running\n", True), ("⏵⏵ auto mode on · 2 shells, 1 monitor · ↓ to manage\n", True),
+                           ("✻ Cooked for 1m · 1 monitor still running\n", True), ("⏵⏵ auto mode on · 1 monitor · ↓ to manage\n", True), ("⏵⏵ auto mode on · 0 shells, 0 monitors · ↓\n", False),
                            ("⏺ The test reports 1 shell still running, which I reproduced as a false alarm.\n❯\n⏵⏵ auto mode on · ↓ to manage\n", False), ("2 shells still running\n" + "\n".join("l" for _ in range(6)), False), ("", False)):
             self.assertEqual(claude_bg_shells(text), want, text)
 

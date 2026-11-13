@@ -47,6 +47,8 @@ def api_error(addr, lines=15):
     """The API-error line an Assistant's last turn ended on (the tail of its screen), else None."""
     r = run(["hc", "read", addr, "--lines", "80"])
     tail = [x.strip() for x in (r.stdout or "").splitlines() if x.strip()][-lines:] if r.returncode == 0 else []
+    # Only an error after our nudge counts: one above it was handled by the turn the nudge started.
+    tail = tail[max((i + 1 for i, x in enumerate(tail) if NUDGE[:13] in x), default=0):]
     return next((x for x in reversed(tail) if API_ERROR.search(x)), None)
 
 

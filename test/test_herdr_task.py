@@ -8397,6 +8397,19 @@ class Watchdog(unittest.TestCase):
         self.tick()
         self.assertEqual((len(self.restarts), len(self.alerts), len(self.sent)), (1, 1, 1))
 
+    def test_a_nudge_that_worked_is_not_followed_by_a_restart(self):
+        err = "  ⎿  API Error: 403 (Cloudflare) · Please run /login\n"
+        self.save_tasks({"id": 1, "title": "Auth", "state": "running", "space": "shop"})
+        self.screens["c1"] = err + "\n❯ \n"
+        self.tick()
+        self.assertEqual(len(self.sent), 1)
+        self.screens["c1"] = f"{err}\n❯ {self.wd.NUDGE}\n\n● Back on it, SHOP-1 is running.\n\n❯ \n"  # recovered: the old error is still in the tail
+        self.clock += 3 * 60000
+        self.assertEqual((self.tick(), self.restarts, self.alerts), ({}, [], []))
+        self.screens["c1"] += err  # a fresh error after that: a new spell, a new nudge, not a restart
+        self.tick()
+        self.assertEqual((len(self.sent), self.restarts), (2, []))
+
     def test_api_error_is_not_acted_on_without_work_waiting_or_when_signed_out(self):
         self.screens["c1"] = "  ⎿  API Error: 529 overloaded_error\n❯ \n"
         self.save_tasks({"id": 1, "title": "Auth", "state": "done", "space": "shop"})

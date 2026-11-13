@@ -67,8 +67,8 @@ def run_view(files, bin_dir, out_dir):
 class ViewSizeWithoutImageMagick(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        if MATCH is None or shutil.which("node") is None:
-            raise unittest.SkipTest("attach.js VIEW not found or no node")
+        if MATCH is None or home_guard.NODE is None:
+            raise unittest.SkipTest("attach.js VIEW not found or no working node (home_guard.NODE)")
 
     def setUp(self):
         self.tmp = tempfile.mkdtemp()

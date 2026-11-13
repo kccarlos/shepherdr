@@ -49,8 +49,8 @@ def run(self_state, paneFocused=True, showsBox=True):
 class RefocusKeepsSelection(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        if MATCH is None or shutil.which("node") is None:
-            raise unittest.SkipTest("main.js refocus() not found or no node")
+        if MATCH is None or home_guard.NODE is None:
+            raise unittest.SkipTest("main.js refocus() not found or no working node (home_guard.NODE)")
 
     def test_pane_focused_by_a_click_takes_the_box_when_nothing_is_dragged(self):
         # Opening or clicking the pane puts the keyboard in the box (the behaviour kept).

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, realpathSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { LOG, Conversation, records } from "./chat-log.js";
@@ -96,7 +96,7 @@ test("Codex: a shell of its own that outlives two looks is a job; its hooks and 
 });
 
 test("JOBS sees the output file a job's process holds open, stops it, and reads its last lines", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "bg-jobs-"));
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), "bg-jobs-")));
   mkdirSync(join(dir, "tasks"));
   const out = join(dir, "tasks", "b999.output");
   // the agent: a shell whose child runs a job writing to its task's output file

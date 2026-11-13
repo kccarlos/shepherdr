@@ -206,6 +206,8 @@ GROUP_GRACE_S = 3  # SIGTERM to an agent's process group, then SIGKILL this long
 
 def agent_pid(address):
     """The pid of the agent in terminal `address` (hc get's foreground), None if unknown."""
+    if "/" in address:  # another machine's agent: its pid means nothing here
+        return None
     try:
         pid = ((hc_json("get", address) or {}).get("foreground") or {}).get("pid")
     except Fail:

@@ -8651,6 +8651,14 @@ class Watchdog(unittest.TestCase):
         self.tick()
         self.assertNotIn("_outage", json.loads(self.Path(self.store, ".watchdog.json").read_text()))
 
+    def test_a_good_start_between_two_blank_ones_is_no_outage(self):
+        self.save_tasks(*[{"id": i, "title": "T", "state": "running", "space": "shop"} for i in (1, 2, 3)])
+        self.blank("w1", 1, age_ms=5 * 60000)
+        self.worker("w2", 2, status="working", turn=1, created_ms=self.clock - 3 * 60000)
+        self.blank("w3", 3, age_ms=2 * 60000 + 30000)
+        self.assertEqual((self.tick(), self.alerts), ({}, []))
+        self.assertNotIn("_outage", json.loads(self.Path(self.store, ".watchdog.json").read_text()) if os.path.exists(os.path.join(self.store, ".watchdog.json")) else {})
+
     def test_a_restart_ends_the_old_agents_group(self):
         from unittest import mock
         self.terms["c1"]["foreground"]["pid"] = 4242
@@ -9341,6 +9349,10 @@ class EndGroup(unittest.TestCase):
             self.base.end_group(4242)
         sigs = [c.args for c in kp.call_args_list]
         self.assertEqual((sigs[0], sigs[-1]), ((4242, self.base.signal.SIGTERM), (4242, self.base.signal.SIGKILL)))
+
+    def test_another_machines_agent_has_no_local_pid(self):
+        with self.mock.patch.object(self.base, "hc_json", return_value={"foreground": {"pid": 4242}}) as hj:
+            self.assertEqual((self.base.agent_pid("vm/t5"), hj.call_count, self.base.agent_pid("t5")), (None, 0, 4242))
 
     def test_our_own_group_and_a_follower_are_left_alone(self):
         with self.mock.patch.object(self.base.os, "getpgid", return_value=4242), self.mock.patch.object(self.base.os, "getpgrp", return_value=4242), \

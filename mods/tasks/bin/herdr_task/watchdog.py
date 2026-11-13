@@ -64,6 +64,8 @@ def outage_pass(report, lists, coords, prev):
     if len(blank) < 2 or not coords:
         return None
     since = min(k["created_ms"] for k in blank)
+    if any(c > since for c in good):  # a start went fine after the first blank one: not all blank
+        return None
     title = f"New agents start blank: {len(blank)} since {time.strftime('%H:%M', time.localtime(since / 1000))}; likely herdr-core or an agent CLI update"
     try:
         send_alert(coords[0]["address"], title, about=True)

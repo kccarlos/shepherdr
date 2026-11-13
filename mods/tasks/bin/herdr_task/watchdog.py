@@ -231,6 +231,9 @@ def watchdog_pass(report):
                         pass
         state[slot] = rec
 
+    for s, r in prev_all.items():  # a stall spell stays until a probe answers, even while its Assistant is away
+        if isinstance(r, dict) and r.get("stall") and s not in state:
+            state[s] = dict(r)
     if state != prev_all:
         os.makedirs(os.path.dirname(WATCHDOG), exist_ok=True)
         tmp = f"{WATCHDOG}.{os.getpid()}.tmp"

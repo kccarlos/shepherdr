@@ -570,7 +570,16 @@ def cmd_project(args):
     dry, raw = bool(getattr(args, "dry_run", False)), args.folder if args.folder is not None else getattr(args, "folder_opt", None)
     if raw is not None and (not raw.strip() or "\0" in raw):
         raise Fail("Pick a folder.")
-    path = os.path.realpath(os.path.expanduser((raw or os.getcwd()).strip()))
+    path = os.path.abspath(os.path.expanduser((raw or os.getcwd()).strip()))
+    stall = base.probe_volume(path)
+    path = os.path.realpath(path) if not stall else path
+    if stall:  # before any read of the repo: those would hang on a stalled disk (FAC-83)
+        if args.project == "start":
+            raise Fail(f"Can't start: {stall}")
+        step = f"Wake or fix the disk holding {path}: {stall}"
+        return say(args, {"folder": path, "ok": False, "ready": [], "missing": ["disk"], "steps": [step],
+                          "items": [{"key": "disk", "label": "Repo disk", "ready": False, "detail": stall}]},
+                   f"Checklist for {os.path.basename(path)}: 0 ready, 1 missing\nMissing:\n- Repo disk: {stall}\nSteps for you:\n- {step}")
     if path in ("/", os.path.realpath(base.HOME)) or (os.path.exists(path) and not os.path.isdir(path)):
         raise Fail("Pick a project folder, not ~ or /." if os.path.isdir(path) else f"Not a folder: {path}")
     if args.project == "checklist":

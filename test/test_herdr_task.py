@@ -8095,6 +8095,17 @@ class ProjectStart(unittest.TestCase):
         self.assertIn("disk", ok["ready"])
         self.assertIn("Note: factory repo is on an external volume (/Volumes/Ext): a stall or a permission prompt stops the night; the internal disk is safer", ext["lines"])
 
+    def test_a_stalled_disk_stops_checklist_and_start_before_any_repo_read(self):
+        repo = os.path.join(self.tmp, "web-app")
+        os.makedirs(repo)
+        with self.mock.patch.object(self.base, "probe_volume", return_value="the disk is stalling"), \
+                self.mock.patch.object(self.project, "locate", side_effect=AssertionError("read the repo")):
+            out = json.loads(self.checklist(repo, "--json"))
+            self.assertEqual((out["ok"], out["missing"]), (False, ["disk"]))
+            self.assertIn("the disk is stalling", self.checklist(repo))
+            with self.mock.patch.object(sys, "argv", ["herdr-task", "project", "start", repo]):
+                self.assertNotEqual(self.cli.main(), 0)
+
     def answer_card(self, ask_id, choice, terminal):
         buf = self.io.StringIO()
         with self.mock.patch.object(sys, "argv", ["herdr-task", "_ask-pane", ask_id]), \
@@ -8408,6 +8419,18 @@ class Watchdog(unittest.TestCase):
             self.tick()
             self.assertEqual(len(self.alerts), 2)
         self.assertEqual(pv.call_count, 4)
+
+    def test_a_stall_spell_survives_the_assistant_being_away(self):
+        from unittest import mock
+        self.save_tasks({"id": 1, "title": "Auth", "state": "running", "space": "shop"})
+        with mock.patch.object(self.wd, "probe_volume", return_value="stalling"):
+            self.tick()
+            del self.terms["c1"]
+            self.tick()
+            self.assertIn("stall", json.loads(self.Path(self.store, ".watchdog.json").read_text())["shop"])
+            self.coord("c1", chat="p1")
+            self.tick()
+        self.assertEqual(len(self.alerts), 1)
 
     def test_ready_behind_and_turn_since_news(self):
         queued = {"id": 2, "title": "Follow-up", "state": "queued", "space": "shop", "after": [1]}

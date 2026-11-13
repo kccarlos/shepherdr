@@ -5828,6 +5828,8 @@ class BusyWorkerDelivery(unittest.TestCase):
             agy_screen("\x1b[0m\x1b[38;5;12m>\x1b[0m"), agy_screen("\x1b[0m\x1b[38;5;12m>\x1b[0m", survey),
             agy_screen("  How's the CLI experience so far? Help us improve:  \r\n  [1] Good  [2] Fine  [3] Bad  [0] Skip"),
             "\r\n".join([agy_rule, "\x1b[0m\x1b[1m\x1b[38;5;4m> Earlier in scrollback\x1b[0m", "  Done.", agy_rule, "  Thank you for your feedback!", agy_rule, "? for shortcuts"]),
+            "\r\n".join([agy_rule, "> stale draft\r> \x1b[K", agy_rule, "? for shortcuts"]),
+            "› stale draft\r\n  second line\x1b[1;3H\x1b[J",
             cl_screen("❯\xa0\x1b[0m\x1b[2mTry \"how does <filepath> work?\"\x1b[0m"), cl_screen("❯\xa0"),
             "─" * 80 + "\r\n Security guide\r\n ❯ No, exit\r\n   Yes, I trust this folder\r\n Enter to confirm · Esc to cancel",
             cx_screen("\x1b[1m› \x1b[0m\x1b[2mAsk Codex to do anything\x1b[0m"), cx_picker,
@@ -5843,6 +5845,8 @@ class BusyWorkerDelivery(unittest.TestCase):
             (agy_screen("\x1b[0m\x1b[38;5;12m>\x1b[0m fix the flaky test\r\n  and rerun checks"), "fix the flaky test\n  and rerun checks"),
             ("\r\n".join([agy_rule, "\x1b[0m\x1b[38;5;12m>\x1b[0m hold on", agy_rule, "  ● [14:28:06] 15m timer running", "  ● [14:29:10] pytest running", agy_rule, "? for shortcuts · 2 task(s) · /tasks"]), "hold on"),
             ("\r\n".join([agy_rule, "\x1b[0m\x1b[38;5;12m>\x1b[0m", agy_rule, "? for shortcuts\x1b[0m\x1b[>4;2m\x1b[2;3Htyped after cursor move"]), "typed after cursor move"),
+            ("\r\n".join([agy_rule, "\x1b[38;5;8m> \x1b[m\x1b[2m\x1b[mreset with bare m", agy_rule, "? for shortcuts"]), "reset with bare m"),
+            ("\r\n".join([agy_rule, ">", agy_rule, "? for shortcuts"]) + "\x1b[H\x1b[B\x1b[C\x1b[Chome and moves\x1b[D!", "home and move!"),
             (cl_screen("❯\xa0check edge cases\x1b[0m\x1b[2m in news.py\x1b[0m"), "check edge cases"),
             (cx_screen("\x1b[1m› \x1b[0mrefactor the parser\r\n  keep tests green"), "refactor the parser\n  keep tests green"),
         ]:

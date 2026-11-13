@@ -371,7 +371,7 @@ def screen_rows(raw):
     for m in ESCAPES.finditer(raw):
         s, p1, im, op = m.group(0), m.group(1) or "", m.group(2), m.group(3)
         if s[0] == "\x1b":
-            if not op or im or p1[:1] in "?><=!":
+            if not op or im or (p1 and p1[0] in "?><=!"):
                 continue
             if op == "m":
                 ps, i = (p1 or "0").split(";"), 0
@@ -392,9 +392,9 @@ def screen_rows(raw):
                     i += 1
             else:
                 a = p1.split(";")
-                n = int(a[0]) if a[0].isdigit() else 1
+                n = (int(a[0]) or 1) if a[0].isdigit() else 1
                 if op in ("H", "f"):
-                    row, col = n - 1, (int(a[1]) if len(a) > 1 and a[1].isdigit() else 1) - 1
+                    row, col = n - 1, ((int(a[1]) or 1) if len(a) > 1 and a[1].isdigit() else 1) - 1
                 elif op in ("G", "d"):
                     row, col = (n - 1, col) if op == "d" else (row, n - 1)
                 elif op in ("A", "B", "E", "F"):
@@ -405,7 +405,7 @@ def screen_rows(raw):
                 elif op == "J" and p1 in ("", "0", "2", "3"):
                     rows = {} if p1 in ("2", "3") else {r: {c: v for c, v in l.items() if r < row or c < col}
                                                         for r, l in rows.items() if r <= row}
-                elif op == "K":
+                elif op == "K" and p1 in ("", "0", "1", "2"):
                     rows[row] = {} if p1 == "2" else {c: v for c, v in rows.get(row, {}).items()
                                                       if (c > col if p1 == "1" else c < col)}
         elif s == "\r":

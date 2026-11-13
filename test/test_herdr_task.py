@@ -3192,7 +3192,9 @@ class GateReview(unittest.TestCase):
         self.assertEqual(cmd[cmd.index("-s") + 1], "workspace-write")
         self.assertEqual(cmd[cmd.index("--disable") + 1], "hooks")
         trust = next(a for a in cmd if a.startswith("projects="))
-        for root in (self.wt, os.path.realpath(self.main)):  # the repo's root as git resolves it
+        scratch = cmd[cmd.index("-C") + 1]  # not the worktree: that stays read-only to it
+        self.assertNotEqual(scratch, self.wt)
+        for root in (self.wt, os.path.realpath(self.main), scratch):  # the repo's root as git resolves it
             self.assertIn(json.dumps(root) + '={trust_level="trusted"}', trust)
         self.assertEqual(cmd[cmd.index("-m") + 1], "gpt-5.5")
         self.assertIn(self.head, sent[0])
@@ -3213,7 +3215,8 @@ class GateReview(unittest.TestCase):
     def test_the_prompt_waits_for_codex_trust_screen(self):
         from unittest import mock
         import herdr_task.launch as launch
-        screens = iter(["", "Trust this folder? 1. Yes, continue", "Trust this folder? 1. Yes, continue", "› Ask Codex"])
+        screens = iter(["", "Starting Codex...", "Trust this folder? 1. Yes, continue", "Trust this folder? 1. Yes, continue",
+                        "› Ask Codex"])
         calls = []
 
         def hc(argv, **k):
@@ -3221,7 +3224,21 @@ class GateReview(unittest.TestCase):
             return subprocess.CompletedProcess(argv, 0, next(screens) if argv[1] == "read" else "", "")
         with mock.patch.object(launch, "run", hc), mock.patch.object(launch.time, "sleep", lambda n: None):
             launch.send_when_clear("t1", "THE PROMPT")
-        self.assertEqual(calls, ["read", "read", "keys", "read", "read", "send"])  # answered once, sent last
+        self.assertEqual(calls, ["read", "read", "read", "keys", "read", "read", "send"])  # answered once, sent last
+
+    def test_the_prompt_is_never_sent_while_the_trust_screen_stays(self):
+        from unittest import mock
+        import herdr_task.launch as launch
+        calls = []
+
+        def hc(argv, **k):
+            calls.append(argv[1])
+            return subprocess.CompletedProcess(argv, 0, "Trust this folder?" if argv[1] == "read" else "", "")
+        with mock.patch.object(launch, "run", hc), mock.patch.object(launch.time, "sleep", lambda n: None):
+            with self.assertRaises(launch.Fail):
+                launch.send_when_clear("t1", "THE PROMPT", tries=3)
+        self.assertNotIn("send", calls)
+        self.assertEqual(calls[-1], "kill")
 
     def test_a_claude_reviewer_runs_in_auto_mode_so_its_verdict_can_run(self):
         self.task["reviewer"], self.task["reviewer_model"] = "claude", None

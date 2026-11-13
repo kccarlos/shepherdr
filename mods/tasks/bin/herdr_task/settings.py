@@ -5,6 +5,7 @@ import json
 import os
 import re
 import shlex
+import tempfile
 import shutil
 
 from .base import Fail, git, HOME, MAX_RUNNING, WHERE
@@ -164,16 +165,17 @@ FOREIGN_MODEL = re.compile(r"(?:claude|gemini)-", re.I)
 
 def codex_review_argv(pick, folder):
     """A Codex gate reviewer's argv (FAC-80), unattended on a task worktree: nothing may wait for a person.
-    - Trust: its worktree and its repository's root (a worktree's .git file points there, and Codex asks to trust
-      that root) as a `projects` table, for this run only; hooks off (a new hook stops it on "Hooks need review").
+    - Trust: its worktree, its repository's root (a worktree's .git file points there, and Codex asks to trust
+      that root) and its scratch folder as a `projects` table, for this run only; hooks off (a new hook stops
+      it on "Hooks need review").
     - Approvals: --ask-for-approval never, so it never asks. Read-only would then fail the check (temp dirs, git
-      caches) and `herdr-task review` (reaches hc), and a request to escalate would wait for a person, so it runs
-      workspace-write, no network: its commands just run. It can write in the worktree, but its brief says read only
-      and the gate takes a verdict only while the worktree is clean at the reviewed commit, so an edit voids it."""
-    a = ["codex", "--no-daemon", "--disable", "hooks"]
-    roots = trust_roots(folder)
-    if roots:
-        a += ["-c", "projects={" + ",".join(f'{json.dumps(r)}={{trust_level="trusted"}}' for r in roots) + "}"]
+      caches) and `herdr-task review` (reaches hc), and an escalation would wait for a person. So it runs
+      workspace-write with -C an empty scratch folder: the only writable places are that folder and the temp
+      dirs, and the worktree (read everywhere) stays read-only to it."""
+    scratch = tempfile.mkdtemp(prefix="herdr-review-")
+    a = ["codex", "--no-daemon", "--disable", "hooks", "-C", scratch]
+    roots = list(dict.fromkeys(trust_roots(folder) + trust_roots(scratch)))
+    a += ["-c", "projects={" + ",".join(f'{json.dumps(r)}={{trust_level="trusted"}}' for r in roots) + "}"]
     if pick.get("model") and not FOREIGN_MODEL.match(pick["model"]):
         a += ["-m", pick["model"]]
     if pick.get("effort"):

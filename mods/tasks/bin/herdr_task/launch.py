@@ -831,22 +831,25 @@ def folder_for(s, task):
 # Codex's "Trust this folder?" screen: whatever opens the reviewer's prompt first must wait it out, or the prompt
 # typed while it shows is lost (FAC-80). Only a reviewer's own task repository ever shows it.
 CODEX_TRUST = re.compile(r"Trust this folder|Do you trust the contents|Yes, continue", re.I)
+CODEX_READY = re.compile(r"^\s*[›>]\s|\bcontext left\b|\? for shortcuts", re.I | re.M)  # its input box, once startup is over
 
 
-def send_when_clear(address, message, tries=30):
-    """Sends a Codex reviewer its prompt once its screen shows no trust dialog (answering a dialog
-    that still comes up with enter, once); after `tries` seconds of a blank screen it sends anyway."""
+def send_when_clear(address, message, tries=60):
+    """Sends a Codex reviewer its prompt once its screen shows the input box and no trust dialog (answering a
+    dialog with enter, once). Never sent blind: if that doesn't come within `tries` seconds the reviewer is
+    ended and the launch fails (the gate tries its second CLI)."""
     answered = False
     for _ in range(tries):
-        screen = (run(["hc", "read", address, "--lines", "40"]).stdout or "").strip()
-        if screen and CODEX_TRUST.search(screen):
+        screen = run(["hc", "read", address, "--lines", "40"]).stdout or ""
+        if CODEX_TRUST.search(screen):
             if not answered:
                 run(["hc", "keys", address, "enter"])
                 answered = True
-        elif screen:
-            break
+        elif CODEX_READY.search(screen):
+            return run(["hc", "send", address, message])
         time.sleep(1)
-    return run(["hc", "send", address, message])
+    run(["hc", "kill", address])
+    raise Fail("the Codex reviewer never showed its prompt box (trust screen or startup stuck)")
 
 
 def launch(s, task, argv, space, message=None, parent=None, resume=None, role=None, reads=None):

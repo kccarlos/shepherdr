@@ -9428,8 +9428,10 @@ class ReviewTheCommitGitHubHas(unittest.TestCase):
     def test_a_pass_the_pr_doesnt_contain_is_pushed_then_merged(self):
         local = self.change("reviewed but unpushed")
         old = self.pushed()
-        self.assertIsNone(self.merging(old))
-        self.assertEqual((self.pushed(), self.merges[0][-2:]), (local, ("--match-head-commit", local)))
+        self.assertEqual(self.merging(old), self.commands.CHECKS_RUNNING)  # pushed; its checks haven't run yet
+        self.assertEqual((self.pushed(), self.merges, self.task["pr"]["checked"]), (local, [], 0))
+        self.assertIsNone(self.merging(local))  # the next tick's fresh view
+        self.assertEqual(self.merges[0][-2:], ("--match-head-commit", local))
 
     def test_a_pass_the_pr_doesnt_contain_and_cant_be_pushed_is_flagged(self):
         other = os.path.join(self.root, "other")

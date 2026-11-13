@@ -197,6 +197,7 @@ export const ABOUT = {
   "tasks.max_running": "Per folder. More wait their turn and start by themselves.",
   "tasks.archive_after": "Done tasks move to Archived, with their chat and summary.",
   "tasks.worktrees": "In a git repo, each task gets its own worktree and branch.",
+  "tasks.reviewer_sandbox": "agy reviewers run in a sandbox. Off if one stops at \"Sign in required\".",
   "automations.enabled": "Tasks an agent set to start on a schedule or an event.",
 };
 // What a task's agent is told to do first and last (tasks.start_notes / finish_notes), each a box under its words.
@@ -356,7 +357,7 @@ export const ROUNDS = [[0, "Off"], [1, "1 round"], [2, "2 rounds"], [3, "3 round
 export const ARCHIVE = [[0, "Off"], [1, "1 day"], [3, "3 days"], [7, "1 week"], [30, "1 month"]];
 export const ONOFF = [[true, "On"], [false, "Off"]];
 
-export const DEFAULTS = { tasks: { merge: "ask", review_rounds: 0, must_fix: "major", max_running: 10, worktrees: true, archive_after: 7, proof: true }, automations: { enabled: true },
+export const DEFAULTS = { tasks: { merge: "ask", review_rounds: 0, must_fix: "major", max_running: 10, worktrees: true, archive_after: 7, proof: true, reviewer_sandbox: true }, automations: { enabled: true },
   agents: { reactions: true, suggestions: true, feedback: true, feedback_repo: "" } };
 
 // [section, field, label, choices | { min, max }]
@@ -368,6 +369,7 @@ export const TASK_ROWS = [
   ["tasks", "max_running", "Tasks at once", { min: 1, max: 10 }],
   ["tasks", "archive_after", "Archive Done after", ARCHIVE],
   ["tasks", "worktrees", "Worktrees", ONOFF],
+  ["tasks", "reviewer_sandbox", "Reviewer sandbox", ONOFF],
   ["automations", "enabled", "Run automations", ONOFF],
 ];
 

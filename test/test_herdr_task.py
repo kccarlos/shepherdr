@@ -3889,6 +3889,89 @@ if sys.argv[1] == "kill" and alive:
         self.valid()
 
 
+    # ---- FAC-79: a reviewer whose own background job still runs isn't failed ----
+
+    def fixture(self, name):
+        with open(os.path.join(ROOT, "test", "fixtures", f"fac78_{name}_reviewer_tail.txt")) as f:  # FAC-78's real last screens
+            return f.read()
+
+    def gate_at(self, clock, nudges):
+        from unittest import mock
+        import herdr_task.news as news
+        with mock.patch.object(self.commands, "now", lambda: clock), \
+                mock.patch.object(news, "send_or_hold", lambda a, m, how="send": nudges.append((a, m)) or "sent"):
+            self.commands.gate_reads(self.store, self.task)
+
+    def test_a_reviewer_done_with_a_shell_still_running_is_not_failed_and_nudged_once_past_the_limit(self):
+        c = self.commands
+        self.task.update(reviewer="claude", reviewer_model="opus")
+        self.ready()
+        self.screen(self.fixture("claude"))  # "Cooked for 2m 0s · done 3:17 AM · 1 shell still running" and "· 1 shell ·"
+        self.reviewer_term = {"state": "live", "agent": "claude", "status": {"state": "done"}, "turn": 3}
+        t0, nudges = self.task["review_runs"][0]["at"] + 600_000, []
+        self.gate_at(t0, nudges)
+        self.gate_at(t0 + c.BG_WAIT_MS - 1, nudges)
+        self.assertEqual((nudges, self.task.get("review_failures"), len(self.runs)), ([], None, 1))
+        self.gate_at(t0 + c.BG_WAIT_MS, nudges)  # shown too long: one nudge, still no failure
+        self.gate_at(t0 + c.BG_WAIT_MS + c.NUDGE_GRACE_MS - 1, nudges)
+        self.assertEqual(nudges, [("term-1", c.NUDGE_TEXT)])
+        self.assertNotIn("review_failures", self.task)
+        self.gate_at(t0 + c.BG_WAIT_MS + c.NUDGE_GRACE_MS, nudges)  # no verdict after the grace: failed as before
+        self.assertEqual(len(nudges), 1)
+        fail = self.task["review_failures"][0]
+        self.assertEqual(fail["why"], "ended without a verdict")
+        self.assertIn("1 shell still running", fail["tail"])  # the screen kept for FAC-75
+        self.assertEqual(self.task["review_runs"][-1]["cli"], "agy")  # the fallback goes on
+        self.valid()
+        # Claude starts a turn by itself when the job ends: working again clears the clocks, nothing was sent.
+        self.task.pop("review_failures"), self.task.pop("review_runs"), self.runs.clear()
+        self.ready()
+        self.gate_at(t0, nudges)
+        self.assertIn("review_wait", self.task)
+        self.reviewer_term["status"] = {"state": "working"}
+        self.gate_at(t0 + c.BG_WAIT_MS * 3, nudges)
+        self.assertEqual((len(nudges), self.task.get("review_wait"), self.task.get("review_failures")), (1, None, None))
+
+    def test_an_agy_reviewer_whose_job_is_gone_gets_one_nudge_then_fails(self):
+        from unittest import mock
+        c, job = self.commands, [True]
+        self.sandbox()
+        self.ready()
+        self.screen(self.fixture("agy"))  # real agy last screen: no task count in its footer
+        self.reviewer_term = {"state": "live", "agent": "agy", "status": {"state": "idle"}, "turn": 2}
+        t0, nudges = self.task["review_runs"][0]["at"] + 600_000, []
+        with mock.patch.object(c, "agy_bg_tasks", lambda address: job[0]):
+            self.gate_at(t0, nudges)  # "1 task(s)" in its footer: waits
+            job[0] = False  # the indicator is gone, the reviewer idle without a verdict
+            self.gate_at(t0 + 1, nudges)
+            self.gate_at(t0 + c.QUIET_MS, nudges)
+            self.assertEqual((nudges, self.task.get("review_failures")), ([], None))
+            self.gate_at(t0 + 1 + c.QUIET_MS, nudges)
+            self.gate_at(t0 + 1 + c.QUIET_MS + c.NUDGE_GRACE_MS - 1, nudges)
+            self.assertEqual((nudges, self.task.get("review_failures")), ([("term-1", c.NUDGE_TEXT)], None))
+            self.gate_at(t0 + 1 + c.QUIET_MS + c.NUDGE_GRACE_MS, nudges)
+        self.assertEqual((len(nudges), self.task["review_failures"][0]["why"]), (1, "ended without a verdict"))
+        self.valid()
+
+    def test_an_idle_reviewer_with_no_job_and_no_verdict_fails_at_once_without_a_nudge(self):
+        for cli, tail in (("claude", self.fixture("claude").replace("1 shell still running", "done").replace("1 shell", "no shells")), ("agy", self.fixture("agy"))):
+            self.task.pop("review_failures", None), self.task.pop("review_runs", None), self.runs.clear()
+            self.task.update(reviewer=cli, reviewer_model=None)
+            self.screen(tail)
+            self.ready()
+            self.reviewer_term = {"state": "live", "agent": cli, "status": {"state": "idle"}, "turn": 2}
+            nudges = []
+            self.gate_at(self.task["review_runs"][0]["at"] + 600_000, nudges)
+            self.assertEqual((nudges, self.task["review_failures"][0]["why"]), ([], "ended without a verdict"), cli)
+            self.assertNotIn("review_wait", self.task)
+
+    def test_the_claude_footer_counts_only_at_the_bottom_of_the_screen(self):
+        from herdr_task.agents import claude_bg_shells
+        for text, want in (("a\n✻ Cooked for 2m · 1 shell still running\n❯\n", True), ("x\n⏵⏵ auto mode on · 2 shells · ↓ to manage\n", True),
+                           ("⏵⏵ auto mode on · 0 shells · ↓\n", False), ("2 shells still running\n" + "\n".join("l" for _ in range(6)), False), ("", False)):
+            self.assertEqual(claude_bg_shells(text), want, text)
+
+
 class LoopBreaker(GateReview):
     """FAC-54: a task whose herdr-task rounds don't converge, or that is far over its estimate, stops
     as Needs you "Recap required"; ready refuses until the Assistant decides (continue once)."""

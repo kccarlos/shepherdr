@@ -1030,6 +1030,16 @@ def agy_bg_tasks(address):
     return bool(AGY_BG_TASKS.search("\n".join(lines[max(len(lines) - 3, rules[-1] + 1 if rules else 0):])))
 
 
+CLAUDE_BG_SHELLS = re.compile(r"\b[1-9]\d*\s+shells?\s+still\s+running\b|·\s*[1-9]\d*\s+shells?\s*(?:·|$)")
+
+
+def claude_bg_shells(screen):
+    """Claude Code's footer shows its background shells: "· 1 shell still running" after a finished turn, "· 1 shell ·"
+    in its mode line (FAC-79). Only the last lines of the screen count, never what the reviewer printed above."""
+    lines = [ln.rstrip() for ln in (screen or "").splitlines() if ln.strip()]
+    return bool(CLAUDE_BG_SHELLS.search("\n".join(lines[-5:])))
+
+
 def codex_working(k):
     """Whether a Codex agent has a process of its own running under it: a background terminal or a
     command of its code mode, but not its code-mode host (SHEP-207). Its pid unknown: True, so its

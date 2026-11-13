@@ -1144,13 +1144,19 @@ def reviewer_job(rn, screen):
 
 
 def nudge_reviewer(s, w, rn):
+    """The one nudge. Remembered only once hc took it (a refused send is tried again at the next tick, until the
+    grace has passed since the first try: then the reviewer fails as if nudged); the grace after it starts there."""
     from .news import send_or_hold
-    w["nudged_at"] = now()  # once, whether or not hc took it: the grace after it runs out into a failure
     s.dirty = True
     try:
-        send_or_hold(rn["address"], NUDGE_TEXT)
+        sent = send_or_hold(rn["address"], NUDGE_TEXT)
     except (OSError, Fail):
-        pass
+        sent = None
+    t0 = now()
+    if sent:
+        w["nudged_at"] = t0
+    elif t0 - w.setdefault("try_at", t0) >= NUDGE_GRACE_MS:
+        w["nudged_at"] = w["try_at"]
 
 
 def still_waiting(s, t, rn, screen):
@@ -1175,7 +1181,7 @@ def still_waiting(s, t, rn, screen):
             nudge_reviewer(s, w, rn)
     elif t0 - w.setdefault("idle_at", t0) >= QUIET_MS:
         nudge_reviewer(s, w, rn)
-    return True
+    return not (w.get("nudged_at") and now() - w["nudged_at"] >= NUDGE_GRACE_MS)  # a nudge given up on: no wait left
 
 
 def inspect_runs(s, t):
@@ -1196,7 +1202,7 @@ def inspect_runs(s, t):
         st, alive = status_word(k), agent_running(k)
         if alive and st == "working":  # never read mid-turn
             w = t.get("review_wait") or {}  # the job clocks restart, the nudge sent stays remembered: at most one a run
-            if w.pop("bg_at", None) or w.pop("idle_at", None):
+            if any([w.pop("bg_at", None), w.pop("idle_at", None), w.pop("try_at", None)]):
                 s.dirty = True
             continue
         screen = None

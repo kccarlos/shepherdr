@@ -3954,6 +3954,42 @@ if sys.argv[1] == "kill" and alive:
         self.assertEqual([r["cli"] for r in self.task["review_runs"]], ["claude", "agy"])  # the fallback went on
         self.valid()
 
+    def test_a_refused_nudge_is_tried_again_and_the_grace_starts_when_it_is_delivered(self):
+        from unittest import mock
+        import herdr_task.news as news
+        c, sends, ok = self.commands, [], [False]
+        self.task.update(reviewer="claude", reviewer_model="opus")
+        self.ready()
+        self.screen(self.fixture("claude"))
+        self.reviewer_term = {"state": "live", "agent": "claude", "status": {"state": "done"}, "turn": 3}
+        t0 = self.task["review_runs"][0]["at"] + 600_000
+
+        def at(off, send=None):
+            with mock.patch.object(c, "now", lambda: t0 + off), mock.patch.object(news, "send_or_hold", send or (lambda a, m, how="send": sends.append(m) or ("sent" if ok[0] else None))):
+                c.gate_reads(self.store, self.task)
+        at(0)
+        at(c.BG_WAIT_MS)  # due, hc refuses it
+        at(c.BG_WAIT_MS + 60_000)  # tried again, refused again
+        at(c.BG_WAIT_MS + 2 * 60_000, mock.Mock(side_effect=OSError("hc is gone")))  # raising is a refusal too
+        self.assertEqual((len(sends), self.task.get("review_failures"), self.task["review_wait"].get("nudged_at")), (2, None, None))
+        ok[0] = True
+        late = c.BG_WAIT_MS + 2 * 60_000 + 30_000
+        at(late)  # delivered: the grace starts now, not at the first try
+        at(late + c.NUDGE_GRACE_MS - 1)
+        self.assertEqual((len(sends), self.task.get("review_failures")), (3, None))
+        at(late + c.NUDGE_GRACE_MS)
+        self.assertEqual((len(sends), self.task["review_failures"][0]["why"]), (3, "ended without a verdict"))
+        # hc refusing for good: it fails once the grace passed since the first try, never waits for ever.
+        self.task.pop("review_failures"), self.task.pop("review_runs"), self.task.pop("review_wait"), self.runs.clear()
+        self.ready()
+        t0 = self.task["review_runs"][0]["at"] + 600_000
+        ok[0] = False
+        for off in (0, c.BG_WAIT_MS, c.BG_WAIT_MS + c.NUDGE_GRACE_MS - 1):
+            at(off)
+        self.assertNotIn("review_failures", self.task)
+        at(c.BG_WAIT_MS + c.NUDGE_GRACE_MS)
+        self.assertIn("review_failures", self.task)
+
     def test_an_agy_reviewer_whose_job_is_gone_gets_one_nudge_then_fails(self):
         from unittest import mock
         c, job = self.commands, [True]
@@ -3990,7 +4026,8 @@ if sys.argv[1] == "kill" and alive:
     def test_the_claude_footer_counts_only_at_the_bottom_of_the_screen(self):
         from herdr_task.agents import claude_bg_shells
         for text, want in (("a\n✻ Cooked for 2m · 1 shell still running\n❯\n", True), ("x\n⏵⏵ auto mode on · 2 shells · ↓ to manage\n", True),
-                           ("⏵⏵ auto mode on · 0 shells · ↓\n", False), ("2 shells still running\n" + "\n".join("l" for _ in range(6)), False), ("", False)):
+                           ("⏵⏵ auto mode on · 0 shells · ↓\n", False),
+                           ("⏺ The test reports 1 shell still running, which I reproduced as a false alarm.\n❯\n⏵⏵ auto mode on · ↓ to manage\n", False), ("2 shells still running\n" + "\n".join("l" for _ in range(6)), False), ("", False)):
             self.assertEqual(claude_bg_shells(text), want, text)
 
 

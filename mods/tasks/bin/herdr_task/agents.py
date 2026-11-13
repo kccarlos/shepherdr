@@ -1030,14 +1030,15 @@ def agy_bg_tasks(address):
     return bool(AGY_BG_TASKS.search("\n".join(lines[max(len(lines) - 3, rules[-1] + 1 if rules else 0):])))
 
 
-CLAUDE_BG_SHELLS = re.compile(r"\b[1-9]\d*\s+shells?\s+still\s+running\b|·\s*[1-9]\d*\s+shells?\s*(?:·|$)")
+CLAUDE_BG_SHELLS = (re.compile(r"^\s*[^\w\s]\s+\w+ for \S.*·\s*[1-9]\d*\s+shells?\s+still\s+running\s*$"),  # "✻ Cooked for 2m 0s · done 3:17 AM · 1 shell still running"
+                    re.compile(r"^\s*⏵⏵.*·\s*[1-9]\d*\s+shells?\s*(?:·|$)"))  # "⏵⏵ auto mode on · 1 shell · ↓ to manage"
 
 
 def claude_bg_shells(screen):
-    """Claude Code's footer shows its background shells: "· 1 shell still running" after a finished turn, "· 1 shell ·"
-    in its mode line (FAC-79). Only the last lines of the screen count, never what the reviewer printed above."""
+    """Claude Code's footer shows its background shells (FAC-79): its status line after a finished turn and its mode
+    line. Only those two kinds of line in the last lines of the screen count, never prose the reviewer printed."""
     lines = [ln.rstrip() for ln in (screen or "").splitlines() if ln.strip()]
-    return bool(CLAUDE_BG_SHELLS.search("\n".join(lines[-5:])))
+    return any(rx.match(ln) for ln in lines[-5:] for rx in CLAUDE_BG_SHELLS)
 
 
 def codex_working(k):

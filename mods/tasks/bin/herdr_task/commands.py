@@ -1570,6 +1570,8 @@ def merge_now(s, t):
     if v.get("state") != "MERGED" and (why := pr_head_problem(s, t, repo, head, v.get("headRefOid"))):
         t["attention"], t["attention_at"] = why[0].upper() + why[1:], now()
         return t["attention"]
+    if v.get("state") != "MERGED" and head and v.get("headRefOid") not in (None, "", head):
+        return CHECKS_RUNNING  # just pushed: this view is of the old head; the next tick reads the new one and merges
     note_checks(s, t, v)
     queue = False
     if v.get("state") != "MERGED":

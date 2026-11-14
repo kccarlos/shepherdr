@@ -51,5 +51,9 @@ else:  # agy
         wait()
         sys.exit(1)
     say("Antigravity CLI", "╭──────────────────────────────╮", "│ > reviewing                  │")
+    if mode == "block":  # sandboxed: no herdr-task reachable, the verdict is the last lines of its message
+        code = re.search(r"round's code is (R\w+)", prompt).group(1)
+        say(f"{code} begin", "No findings at or above Must fix.", f"{code} pass", "Verdict ended the message.")
+        sys.exit(0)
     verdict()
     say("Verdict recorded: pass.")

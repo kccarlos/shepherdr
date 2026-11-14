@@ -5479,6 +5479,24 @@ class GateEndToEnd(GateReview):
         self.assertEqual([(r["verdict"], r["by"]) for r in self.task["reviews"]], [("pass", "term-2")])
         self.valid()
 
+    def test_agy_ends_with_the_sandboxed_verdict_block_and_the_gate_reads_it(self):
+        from unittest import mock
+        import herdr_task.launch as launch
+        self.sandbox()  # agy on a Mac: sandboxed, so no herdr-task; the launch's wrap itself (sandbox-exec) is left out
+        flag = os.path.join(self.dir, "unsandboxed")
+        open(flag, "w").close()
+        self.mode = "block"
+        with mock.patch.object(launch, "UNSANDBOXED_FLAG", flag):
+            self.ready()
+        argv = self.argv_of(1)
+        self.assertIn("trustedWorkspaces", argv[argv.index("--settings") + 1])
+        self.until(lambda: self.screen_has(1, " pass\n"))
+        self.reviewer_term = {"state": "live", "agent": "agy", "status": {"state": "idle"}, "turn": 1}
+        self.commands.gate_reads(self.store, self.task)  # reads the begin and pass lines off its terminal
+        self.assertEqual([(r["verdict"], r["by"], r["must_fix"]) for r in self.task["reviews"]], [("pass", "term-1", 0)])
+        self.assertNotIn("review_failures", self.task)
+        self.valid()
+
 
 for _name in [n for n in vars(GateReview) if n.startswith("test_")]:
     setattr(GateEndToEnd, _name, None)  # its setUp and helpers only

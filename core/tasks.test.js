@@ -208,6 +208,16 @@ test("place: a worker's helper keeps it Working, never Needs you", () => {
   expect(place(list, task, { live: [], helpers: [{ address: "t2", status: "working" }] }).section).toBe("needs");
 });
 
+// FAC-95: out of review rounds, Needs you while its agent is busy too, with herdr-task's why (task.waits)
+test("place: a task out of review rounds needs you, even with its agent at work", () => {
+  const list = { slug: "x", folder: "/x", prefix: "X", tasks: [] };
+  const task = { id: 1, state: "running", started: 1, agents: [{ address: "t1", at: 1 }], review_out: 5 };
+  const p = place(list, task, { live: [{ address: "t1", status: "working", role: "worker" }] });
+  expect([p.section, p.needs, p.why]).toEqual(["needs", "reply", "Out of review rounds: wants one more"]);
+  expect(place(list, { ...task, own_work: true }, { live: [{ address: "t1", status: "idle" }] }).section).toBe("needs");
+  expect(place(list, { ...task, review_out: undefined }, { live: [{ address: "t1", status: "working" }] }).section).toBe("working");
+});
+
 describe("This space (inSpace)", () => {
   const sp = { id: "sp3", machine: null, folder: "/work/shop" };
   test("its list's folder, on its machine", () => {

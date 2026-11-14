@@ -82,6 +82,7 @@ export function starting(task, now = Date.now()) {
 export const WORKING_AGAIN = "Working again";
 export const WAITING_BG = "Waiting on a background job";
 export const REVIEWER_ON_IT = "Herdr's reviewer is on it";
+export const OUT_OF_ROUNDS = "Out of review rounds: wants one more";
 export function reviewRunning(task) {
   if (!task.head || !task.review_runs?.length) return false;
   const done = new Set((task.reviews ?? []).filter((r) => r.started_by === "herdr-task").map((r) => r.round));
@@ -173,6 +174,8 @@ export function place(list, task, { live = [], helpers = [], loaded = true, now 
   // Claude Code's folder-trust dialog (#755): its agent reports no status while it shows; herdr-task's scheduler read
   // it off the screen (task.trust_ask: that agent's address).
   else if (task.trust_ask && live.some((a) => a.address === task.trust_ask && !a.status)) need("asks", task.waits ?? REASONS.trust);
+  // Out of review rounds (FAC-95, herdr-task's task_status()): it waits on its Assistant whatever its agent does.
+  else if (st === "running" && task.review_out) need("reply", task.waits ?? OUT_OF_ROUNDS);
   // Back at work after it said ready: no Accept until it says ready again.
   else if (busyAgain(task, live, now)) { section = "working"; why = WORKING_AGAIN; }
   else if (fixing) { section = "working"; why = st === "ready" ? WORKING_AGAIN : null; }

@@ -1084,12 +1084,14 @@ def codex_working(k):
     return False
 
 
-def own_work(task, live, ready=False):
+def own_work(task, live, ready=False, since=0):
     """Its quiet agent is on its own work (above). What really runs (a background job, a command
     open in the foreground, an agy background task, a helper of its own at work: SHEP-54) counts
     whatever its last message says: a plain question with work still running is no ask yet
     (SHEP-148; asking for real is its question tool or a permission: blocked). Its status line or
-    status msg alone counts only when its last message asks nothing, and never for a Ready task."""
+    status msg alone counts only when its last message asks nothing, and never for a Ready task.
+    since: background jobs its log says started before then don't count (FAC-96: one already listed
+    when it said ready, like an expired Monitor, never held a Ready task's merge)."""
     if not ready and review_running(task):
         return False
     for k in live:
@@ -1101,6 +1103,7 @@ def own_work(task, live, ready=False):
             return True
         log = agent_log(task, address) or agent_log(task)
         jobs, ended = background_jobs(log) if log else ({}, 0)
+        jobs = {i: at for i, at in jobs.items() if at >= since}
         # Codex's jobs are only what its process tree shows (SHEP-207): a session the log says is
         # still open, with no process of the agent running, is over.
         if any(i.startswith("codex:") for i in jobs) and not codex_working(k):

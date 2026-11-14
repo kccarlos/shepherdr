@@ -855,6 +855,62 @@ class BackToWork(unittest.TestCase):
         self.tick.tick_store(self.store, {"started": []})
         self.assertEqual(t["state"], "running")
 
+    def woken_after_ready(self, head="abc"):
+        """FAC-96 (note 50): a Ready task set to merge once its checks pass, its pull request open on
+        head abc, and a Monitor of its agent's still listed from before it said ready. Returns the
+        task, its repo ({head, dirty}) and the merges the tick made."""
+        t = self.ready(mode="worktree", worktree=tempfile.mkdtemp(), branch="b", head=head, auto_merge="checks",
+                       pr={"number": 9, "repo": "o/r", "url": "u", "checked": 0})
+        repo, merged = {"head": head, "dirty": ""}, []
+        for mod, name, value in ((self.tick, "git", lambda cwd, *a: (True, repo["head"] if a[0] == "rev-parse" else repo["dirty"], "")),
+                                 (self.tick, "facts", lambda s, t, report: t.update(_pr_fresh=True)),  # checks passed
+                                 (self.tick, "merge_now", lambda s, t: merged.append(t["head"])),
+                                 (self.agents, "agent_log", lambda task, address=None: "/log"),
+                                 (self.agents, "background_jobs", lambda log: ({"monitor1": 0}, 0))):
+            p = self.mock.patch.object(mod, name, value)
+            p.start()
+            self.addCleanup(p.stop)
+        return t, repo, merged
+
+    def worker(self, st, turn):
+        return [dict(self.agent({"address": "t1", "status": st, "turn": turn, "role": "worker"}), agent="claude",
+                     status={"state": st, "msg": "Waiting on a background job"})]
+
+    def test_a_wake_up_after_ready_with_nothing_new_still_merges(self):
+        """FAC-96: its own expired Monitor's notice wakes the agent (seen by the tick, or by a show first);
+        the turn ends with the same head: Ready again, and the pending merge goes once checks pass."""
+        for take_back in ("tick", "show"):
+            t, repo, merged = self.woken_after_ready()
+            self.live = self.worker("working", 5)
+            if take_back == "show":
+                with self.mock.patch.object(self.commands, "view", lambda s, t, live=None: dict(t, status="working", folder="/main", ref="SHEP-7", live=[])):
+                    self.commands.cmd_show(self.args())
+            else:
+                self.tick.tick_store(self.store, {"started": [], "done": []})
+            self.assertEqual((t["state"], t["back"].get("auto"), t["auto_merge"], merged), ("running", True, "checks", []), take_back)
+            self.live = self.worker("idle", 6)
+            report = {"started": [], "done": []}
+            self.tick.tick_store(self.store, report)
+            self.assertEqual((t["state"], report.get("ready_again"), merged), ("ready", ["SHEP-7"], ["abc"]), take_back)
+
+    def test_a_new_commit_after_ready_drops_the_pending_merge(self):
+        t, repo, merged = self.woken_after_ready()
+        self.live = self.worker("working", 5)
+        self.tick.tick_store(self.store, {"started": [], "done": []})
+        repo["head"] = "def"
+        self.live = self.worker("idle", 6)
+        self.tick.tick_store(self.store, {"started": [], "done": []})
+        self.assertEqual((t["state"], t.get("auto_merge"), merged), ("running", None, []))
+
+    def test_a_fix_the_assistant_asked_for_still_takes_it_back(self):
+        t, repo, merged = self.woken_after_ready()
+        self.store.loc["folder"] = "/main"
+        with self.mock.patch.object(self.commands, "tell", lambda s, t, msg, args: ("t1", False)):
+            self.commands.cmd_fix(self.args(reason="Checks failing: test."))
+        self.live = self.worker("idle", 6)
+        self.tick.tick_store(self.store, {"started": [], "done": []})
+        self.assertEqual((t["state"], merged), ("running", []))
+
     def test_ready_keeps_each_agents_next_turn(self):
         turns = self.agents.ready_turns([{"address": "t1", "status": {"state": "working"}, "turn": 4},
                                          {"address": "t2", "status": "idle", "turn": 2}])

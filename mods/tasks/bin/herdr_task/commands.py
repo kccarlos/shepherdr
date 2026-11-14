@@ -219,8 +219,8 @@ def cmd_show(args):
         refresh_sessions(s, t, live)
         # Back at work since it said ready: saved at once, so the Accept card (which reads this)
         # says it's Working, not Ready.
-        if busy_again(t, live):
-            back_to_work(s, t, "its agent is at work again")
+        if busy_again(t, live):  # its agent's own turn, as the tick's back_pass() (FAC-96)
+            back_to_work(s, t, "its agent is at work again", auto=True)
         if t.get("auto_merge") and not t.get("accepted_by") and merge_wait_why(s, t):
             t.pop("auto_merge", None)
             s.dirty = True

@@ -1746,6 +1746,9 @@ def cmd_accept(args):
             # The owner's word, kept on the task; the merge below still needs green checks and no conflict.
             t["owner_approved"] = {"by": "Assistant", "at": now(), "note": owner}
             t.pop("review_out", None)
+            # Ready now (the owner's accept stands for the reviews): a merge waiting on checks or approval
+            # is picked up by the tick, which only merges Ready tasks, and a retry is a plain accept.
+            t["state"], t["ready_at"] = "ready", now()
         t.pop("attention", None)
         wt = t.get("worktree") if t.get("mode") == "worktree" else None
         t["accepted_at"] = now()

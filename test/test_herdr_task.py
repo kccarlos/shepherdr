@@ -922,6 +922,15 @@ class BackToWork(unittest.TestCase):
         self.assertEqual((t["state"], t.get("merged")), ("done", True))
         self.assertEqual((t["owner_approved"]["note"], bool(t["owner_approved"]["at"])), ("owner in chat, 2026-11-13", True))
 
+    def test_accept_owner_approved_waiting_on_checks_is_ready_for_the_tick(self):
+        t = self.out_task()
+        pending = {"state": "OPEN", "mergeable": "MERGEABLE", "headRefOid": "abc",
+                   "statusCheckRollup": [{"name": "check", "status": "IN_PROGRESS"}]}
+        self.merging([pending], [])
+        self.commands.cmd_accept(self.args(owner_approved="owner said so"))
+        self.assertEqual((t["state"], t.get("auto_merge")), ("ready", "checks"))
+        self.assertEqual(t["owner_approved"]["note"], "owner said so")
+
     def test_accept_owner_approved_still_refuses_a_red_check(self):
         t = self.out_task()
         red = {"state": "OPEN", "mergeable": "MERGEABLE", "headRefOid": "abc",
@@ -929,7 +938,7 @@ class BackToWork(unittest.TestCase):
         done = self.merging([red, red], [])
         with self.assertRaises(SystemExit):
             self.commands.cmd_accept(self.args(owner_approved="owner said so"))
-        self.assertEqual((t["state"], done), ("running", []))
+        self.assertEqual((t["state"], done), ("ready", []))  # a retry is a plain accept
         self.assertIn("Checks failing", t["attention"])
 
     def test_the_tick_takes_it_back_and_the_news_says_so(self):

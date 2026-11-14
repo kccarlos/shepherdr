@@ -281,6 +281,8 @@ export interface TaskAgent {
   chat: string
   role: string
   cli: string
+  /** model name, or "default" when the CLI's default ran */
+  model?: string
   /** Task status, or off when core cannot confirm the agent's machine; workflow remains separate. */
   status: Status
   /** its process is up: a To do task may still have an agent to stop */
@@ -355,6 +357,16 @@ export interface Task {
   browser?: { ready: boolean; hint?: string }
   /** what its row says it is in (3.0's Tasks): the space working in its list's folder, else the list's name */
   listName?: string
+  /** worker and reviewer CLI and model ("default" when the CLI's own default ran) */
+  worker?: { cli: string; model: string }
+  reviewer?: { cli: string; model: string }
+  /** compact review rounds from reviews / review_runs, and the task's round limit */
+  rounds?: { round: number; verdict: string; head7: string; cli: string; at: number }[]
+  roundLimit?: number
+  /** diff line counts (counted vs generated, from ready) and size estimate, when known */
+  lines?: { changed?: number; generated?: number; estimate?: number }
+  /** who accepted it: the person, an Assistant, or "auto" for merge-after-checks / auto-merge */
+  acceptedBy?: 'person' | 'assistant' | 'auto'
 }
 
 /** An automation as a project's Tasks lists it: its name, when it runs, the task it adds */

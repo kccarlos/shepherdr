@@ -5,6 +5,17 @@ import { join } from "node:path";
 
 const CLIS = ["claude", "codex", "agy"];
 const LIVE = ["working", "blocked", "idle", "done"];
+const SIZE_LINE = /^[\s>*+-]*\**size(?:\s+limit)?\**\s*:\s*(.+)/gim;
+const BRIEF_LINES = /(?<![\w.-])~?\s*(\d+(?:,\d{3})*)(?:\s*(?:[-–—]|to)\s*~?\s*(\d+(?:,\d{3})*))?\s+lines\b/gi;
+
+function briefLines(text: string): number | undefined {
+  const scan = (s: string) => {
+    const ns = [...s.matchAll(BRIEF_LINES)].flatMap((m) => [m[1], m[2]]).filter(Boolean).map((x) => Number(x!.replace(/,/g, ""))).filter((n) => n > 0);
+    return ns.length ? Math.max(...ns) : undefined;
+  };
+  for (const m of text.matchAll(SIZE_LINE)) { const n = scan(m[1].split(". ")[0]) ?? scan(m[1]); if (n !== undefined) return n; }
+  return scan(text);
+}
 
 /** The model an argv names (--model x, --model=x, -m x), null: the CLI's default. */
 export function modelIn(argv: unknown): string | null {
@@ -28,10 +39,46 @@ export function boardOf(task: any, on: string | null, status: (addr: string) => 
     .filter((a) => a.address && CLIS.includes(a.cli));
   const c = task.check_run;
   if (c?.address) agents.push({ role: "checks", cli: null, model: null, address: at(c.address), parent: null, state: status(at(c.address)!) === undefined ? "ended" : "working" });
+  const lastW = Array.isArray(task.agents) ? task.agents.at(-1) : null;
+  const wCli = task.agent || lastW?.agent || (task.model ? "claude" : null);
+  const worker = typeof wCli === "string" && wCli
+    ? { cli: wCli, model: String(task.model || (lastW?.agent === wCli ? modelIn(lastW?.argv) : null) || "default") } : undefined;
+  const lastRun = runs.at(-1), lastR = Array.isArray(task.reviewers) ? task.reviewers.at(-1) : null;
+  const rCli = task.reviewer || lastRun?.cli || lastR?.agent || (task.reviewer_model ? "claude" : null);
+  const reviewer = typeof rCli === "string" && rCli
+    ? { cli: rCli, model: String(task.reviewer_model || (lastRun?.cli === rCli ? lastRun?.model : null) || (lastR?.agent === rCli ? modelIn(lastR?.argv) : null) || "default") } : undefined;
   // a worker's own `reviewed` rounds never count for the gate: only herdr-task's
   const reviews = Array.isArray(task.reviews) ? task.reviews.filter((r: any) => r.started_by === "herdr-task") : [];
-  return { agents, ...(reviews.length ? { reviews } : {}), ...(task.checks?.length ? { checks: task.checks } : {}),
-    ...(task.verdicts?.length ? { verdicts: task.verdicts } : {}), size: { ...size, limit: null } };
+  const rounds = (Array.isArray(task.reviews) ? task.reviews : []).flatMap((rv: any, i: number) => {
+    const verdict = rv?.verdict ?? rv?.result;
+    if (typeof verdict !== "string" || !verdict || typeof rv?.at !== "number") return [];
+    const cli = runs.find((r: any) => (rv.by && r.address === rv.by) || (r.round === rv.round && r.head === rv.head))?.cli
+      ?? (rv.by && Array.isArray(task.reviewers) ? task.reviewers.find((r: any) => r.address === rv.by)?.agent : null)
+      ?? rCli ?? (rv.by && Array.isArray(task.agents) ? task.agents.find((a: any) => a.address === rv.by)?.agent : null) ?? wCli ?? "default";
+    return [{ round: Number(rv.round) || i + 1, verdict, head7: String(rv.head ?? "").slice(0, 7), cli: String(cli), at: rv.at }];
+  });
+  const sets = task.set && typeof task.set === "object" ? task.set : {};
+  const revOff = sets.review === "off" || sets.review_rounds === 0
+    || (!("review" in sets) && !("review_rounds" in sets) && !sets.review_kind && !("review_min" in sets) && task.brief_review?.on === false);
+  const baseRounds = revOff ? 0 : typeof sets.review_rounds === "number" ? sets.review_rounds
+    : sets.review_kind ? Math.max(1, Number(sets.review_min) || 0)
+    : typeof task.brief_review?.rounds === "number" ? task.brief_review.rounds
+    : typeof sets.review_min === "number" && sets.review_min > 0 ? Math.max(3, sets.review_min) : 0;
+  const roundLimit = baseRounds > 0 ? baseRounds + (Number(task.review_rounds_added) || 0) : undefined;
+  const est = typeof task.size?.estimate === "number" ? task.size.estimate
+    : typeof task.estimate_lines === "number" && task.estimate_lines > 0 ? Math.trunc(task.estimate_lines)
+    : briefLines(typeof task.prompt === "string" ? task.prompt : "");
+  const stored = typeof task.size?.changed === "number" && typeof task.size?.generated === "number";
+  const lines = stored || est !== undefined
+    ? { ...(stored ? { changed: task.size.changed, generated: task.size.generated } : {}), ...(est !== undefined ? { estimate: est } : {}) } : undefined;
+  const acceptedBy = ["person", "assistant", "auto"].includes(task.accepted_by) ? task.accepted_by : undefined;
+  return {
+    agents, ...(reviews.length ? { reviews } : {}), ...(task.checks?.length ? { checks: task.checks } : {}),
+    ...(task.verdicts?.length ? { verdicts: task.verdicts } : {}), size: { ...size, limit: est ?? null },
+    ...(worker ? { worker } : {}), ...(reviewer ? { reviewer } : {}),
+    ...(rounds.length ? { rounds } : {}), ...(roundLimit !== undefined ? { roundLimit } : {}),
+    ...(lines ? { lines } : {}), ...(acceptedBy ? { acceptedBy } : {}),
+  };
 }
 
 /** The asks still waiting for an answer, oldest first, from FAC-9's records in <dir>. */

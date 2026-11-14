@@ -32,6 +32,22 @@ The real divergence is `git diff upstream/main kc-factory`: 145 files, +15.4k. T
 
 **Stop maintaining:** the fork's board work in `service/` (frozen); Shepherdr's push and voice for factory spaces after phase 2; the copied `NEGATIVE` word list in `ask.py` once sheepdog answers asks. **Make the next upstream sync a real merge commit.**
 
+### Positioning: one layer above all factory spaces
+
+Yes: sheepdog's value for factory work is that the owner never opens a factory space. But the value is the shared inbox and routing, which are mostly code. It is not a chief coordinator.
+
+| Cross-project job | Who | Why not a coordinator |
+|---|---|---|
+| One inbox of asks and gates, labelled by project | Code (sheepdog, the phone) | A coordinator sees only its own space |
+| One digest across projects | Code | Same |
+| Quota and priority between projects | Engine: typed rules in the Everywhere layer, read by `usage.pick` and the start limits | The pools are per account; no coordinator sees the others' demand |
+| Sending the owner's words to the right coordinator | Brain | This is what it does today for agents: one or two steps |
+| Rules that apply everywhere | Engine's Everywhere layer; sheepdog reads them back | — |
+
+The brain's part is small: work out which project the owner means, pass the words on unchanged, answer "what needs me?" from the code-built inbox, and read a new rule and its scope back. The 6-step cap and the model are no problem for that, because none of it is judgement. It must not rank projects, accept, judge gates, rewrite goals or poll. A trade-off between projects is the owner's: it is said once as a rule, or it arrives as an ask. An Opus layer above the coordinators would be the babysitter again.
+
+One limit: with a daemon per machine, the single layer is the phone, not one brain. Each brain routes only to its own machine's coordinators (the app's "Talk to" picks the computer). *Unverified: whether Everywhere settings sync across machines.*
+
 ## 2. Where the babysitter's duties go
 
 | Duty | Notes | Goes to | State |
@@ -91,13 +107,13 @@ One Mac is the smallest setup. Machines are added by role.
 
 | # | What | Size | Exit test |
 |---|---|---|---|
-| 1 | Quota in code: call `usage.pick` at task start, handle the rolling pool, switch a running task only at 0% | S, Python ~150 | A night with no routing messages |
-| 2 | Quiet factory panes by label; asks and `herdr.alert` reach the phone; then Shepherdr push off | S, Go ~300 | An ask and an alert each reach the locked phone once; a tap answers; workers make no sound |
+| 1 | Quota in code: call `usage.pick` at task start, handle the rolling pool, switch a running task only at 0%; one typed priority rule between projects | S, Python ~200 | A night with two projects and no routing messages |
+| 2 | Quiet factory panes by label; asks and `herdr.alert` reach the phone, named by project; then Shepherdr push off | S, Go ~300 | With two projects running, an ask from each and an alert reach the locked phone once, each naming its project; a tap answers; workers make no sound; "tell <project> …" reaches the right coordinator |
 | 3 | Owner-proof approvals and typed rules: ask kinds, sheepdog's confirmation, engine-run actions, delegations with expiry | M, Python ~500, Go ~200 | Away from the Mac, a release, an out-of-rounds accept and a key grant complete by phone. In tests, a typed "the owner approved" and an agent's `hc keys` into an ask are both refused |
-| 4 | Digest | S | A morning digest replaces opening the board |
+| 4 | Digest, one for all projects | S | A morning digest replaces opening any factory space |
 | 5 | A second machine: a Linux VM with its own engine and daemon | M, mostly setup | A project runs there; its ask reaches the same phone |
 
-**Voice in is not a phase.** The owner gives a goal once. sheepdog can already send words to an agent pane, and the coordinator is one (*unverified for coordinators*). Build nothing more until the owner asks.
+**Voice in is not its own phase.** The owner gives a goal once. sheepdog can already send words to an agent pane, and the coordinator is one (*unverified for coordinators*; phase 2 tests it). Build nothing more until the owner asks.
 
 **Do not build:** a Go port; a factory role for the brain; per-worker narration; an iOS task board; secret entry on the phone; tasks of one project on several machines; VM provisioning.
 
@@ -112,7 +128,7 @@ One Mac is the smallest setup. Machines are added by role.
 | # | Decision | Recommendation | Why |
 |---|---|---|---|
 | 1 | Port the engine to Go? (was e) | No. Drop phase 4 | Moving target, 15k lines of tests, upstream maintains most of it |
-| 2 | sheepdog's role for factory work, and the name (was a, b) | Asks, gates, rules and digests only; workers silent. "Coordinator"; "orchestrator" stays the brain | The owner steers direction and does not want narration |
+| 2 | sheepdog's role for factory work, and the name (was a, b) | The one layer above all factory spaces: inbox, digest, rules, routing; workers silent; the brain routes and never judges. "Coordinator"; "orchestrator" stays the brain | The owner steers direction, does not want narration, and should not open each space |
 | 3 | Merge on checks with unsandboxed workers? (was c) | Yes for PR repos with CI; never releases, designs or installs | FAC-94 holds; Linux VMs become the sandbox |
 | 4 | Phone task board? (was d) | No. Digest first | Unproven need |
 | 5 | Confirmed asks and typed rules in the engine? | Yes, phase 3 | Approvals leave the Mac without weakening; rules are said once |

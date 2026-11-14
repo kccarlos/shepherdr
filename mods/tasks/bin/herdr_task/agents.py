@@ -1092,7 +1092,8 @@ def own_work(task, live, ready=False, since=0):
     (SHEP-148; asking for real is its question tool or a permission: blocked). Its status line or
     status msg alone counts only when its last message asks nothing, and never for a Ready task.
     since: background jobs its log says started before then don't count (FAC-96: one already listed
-    while it sat Ready, like an expired Monitor, never held its merge)."""
+    while it sat Ready, like an expired Monitor, never held its merge); a Ready task its own turn
+    took back and settle_back() made Ready again keeps that cut (settled_at)."""
     if not ready and review_running(task):
         return False
     for k in live:
@@ -1104,7 +1105,8 @@ def own_work(task, live, ready=False, since=0):
             return True
         log = agent_log(task, address) or agent_log(task)
         jobs, ended = background_jobs(log) if log else ({}, 0)
-        jobs = {i: at for i, at in jobs.items() if at >= since}
+        cut = since or (task.get("settled_at") or 0 if ready else 0)
+        jobs = {i: at for i, at in jobs.items() if at >= cut}
         # Codex's jobs are only what its process tree shows (SHEP-207): a session the log says is
         # still open, with no process of the agent running, is over.
         if any(i.startswith("codex:") for i in jobs) and not codex_working(k):

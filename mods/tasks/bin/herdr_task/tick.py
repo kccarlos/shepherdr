@@ -210,6 +210,11 @@ def settle_back(s, t, report):
     else:
         t.pop("progress", None)
     t.pop("back", None)
+    # Jobs listed before the wake-up stay no work of its own while it's Ready (own_work()), and its
+    # pull request is read again in this tick, so a pending merge can go now (FAC-96).
+    t["settled_at"] = b.get("at") or 0
+    if t.get("pr"):
+        t["pr"]["checked"] = 0
     s.dirty = True
     report.setdefault("ready_again", []).append(s.ref(t))
     return True

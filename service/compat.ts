@@ -411,9 +411,9 @@ export class Compat {
         ...(r.said ? { report: { msg: r.section === "working" && r.why ? r.why : r.said.text, ...(r.said.done != null ? { progress: r.said.done } : {}),
           ...(r.said.left != null && !r.said.paused ? { eta: r.said.left } : {}), ...(r.said.paused ? { paused: true } : {}) } }
           : r.section === "working" && r.why ? { report: { msg: r.why, ...(r.pct != null ? { progress: r.pct } : {}) } } : {}),
-        ...(r.worker ? { agent: { chat: `${id}/worker`, role: "worker", cli: r.board?.agents.find((a: any) => a.address === r.worker)?.cli ?? "claude", status: r.section === "needs" ? "need" : "work", running: true, age: "", note: "" } } : {}),
-        ...(!r.worker && r.lastLog ? { agent: { chat: `${id}/worker`, role: "worker", cli: r.lastLog.kind, status: "idle", running: false, age: "", note: "" } } : {}),
-        // the board's agents, gate evidence and size (contracts/board-data.md; the web types them in B2/B3)
+        ...(r.worker ? { agent: { chat: `${id}/worker`, role: "worker", cli: r.board?.agents.find((a: any) => a.address === r.worker)?.cli ?? r.board?.worker?.cli ?? "claude", ...(r.board?.worker ? { model: r.board.worker.model } : {}), status: r.section === "needs" ? "need" : "work", running: true, age: "", note: "" } } : {}),
+        ...(!r.worker && r.lastLog ? { agent: { chat: `${id}/worker`, role: "worker", cli: r.lastLog.kind, ...(r.board?.worker ? { model: r.board.worker.model } : {}), status: "idle", running: false, age: "", note: "" } } : {}),
+        // the board's agents, gate evidence and size (contracts/board-data.md), plus worker/reviewer, rounds, lines and acceptedBy
         ...(r.board ?? {}),
       };
       return t;

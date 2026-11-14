@@ -14,7 +14,8 @@ import time
 from .checks import checks_line
 from .base import Fail, git, guard, hc_json, kill_agent, now, run, STORE, stop_note, VERSION
 from .settings import (
-    agent_argv, agent_key, argv_for, bare, codex_review_argv, gate_min, merge_policy, merge_wait_why, MUST_WORDS, review_kind, review_limits, set_opts, settings_block, settings_for, space_base,
+    agent_argv, agent_key, argv_for, bare, build_dir_of, codex_review_argv, ensure_build_dir, gate_min, merge_policy,
+    merge_wait_why, MUST_WORDS, remove_build_dir, review_kind, review_limits, set_opts, settings_block, settings_for, space_base,
     task_settings, worker_argv, worktrees_on,
 )
 from .agents import (
@@ -296,6 +297,7 @@ def begin(s, t, argv, space, parent=None):
     if t.get("mode") == "worktree" and not t.get("worktree") and not worktrees_on(s, space):
         t["mode"] = "here"
     folder_for(s, t)
+    ensure_build_dir(s, t)
     if t.get("mode") != "worktree" and s.loc["kind"] == "repo":
         # The folder's commit as it starts: still there, and nothing tracked changed, at ready means
         # it changed nothing, so there is nothing to review (review_refusal, #744).
@@ -1311,6 +1313,8 @@ def cmd_state(args, state):
             t.pop(k, None)
         if state != "running":
             release_task(s, t)
+        if state == "done":
+            remove_build_dir(s, t)
         s.dirty = True
         v = view(s, t)
     say(args, v, f"{s.ref(t)} is done." if state == "done" else f"{s.ref(t)} is {state}.")
@@ -1392,12 +1396,24 @@ def cmd_config(args):
             if new != s.prefix:
                 s.data["prefix"] = new
                 s.dirty = tabs = True
+        if getattr(args, "build_dir", None) is not None:
+            raw = args.build_dir.strip()
+            p = os.path.expanduser(raw) if raw else ""
+            p = os.path.normpath(p if os.path.isabs(p) else os.path.join(s.loc["folder"], p)) if p else ""
+            if p and (p == os.sep or os.path.realpath(p) == os.sep):
+                raise Fail("Build output path can't be /.")
+            if (cfg.get("build_dir") or "") != p:
+                cfg.update(build_dir=p) if p else cfg.pop("build_dir", None)
+                s.dirty = True
+        if not cfg:
+            s.data.pop("config", None)
         out = {"folder": s.loc["folder"], "prefix": s.prefix, "max_running": s.max_running(), "settings": settings_for(s),
-               "worktrees": worktrees_on(s)}
+               "worktrees": worktrees_on(s), "build_dir": build_dir_of(s)}
     out["rename"] = retag_tabs(s) if tabs else []
     n = out["max_running"]
     where = "a worktree each" if out["worktrees"] else "in the folder itself"
-    say(args, out, f"{out['folder']}: tasks {out['prefix']}-n, at most {n} at once, {where}.")
+    extra = f", build output {out['build_dir']}" if out["build_dir"] else ""
+    say(args, out, f"{out['folder']}: tasks {out['prefix']}-n, at most {n} at once, {where}{extra}.")
 
 
 def cmd_rm(args):
@@ -1431,6 +1447,7 @@ def start_again(s, t, space, key=None, argv_json=None, message=None, parent=None
     is a resumed session's first message when no `message` is given; `resuming` (`herdr-task resume`)
     rebuilds argv from the current settings and wakes a resumed session."""
     unarchive(s, t)
+    ensure_build_dir(s, t)
     prev = last_agent(t)
     parent = parent_for(parent or (prev or {}).get("parent"), space)
     # The last agent's argv again (switch, tell), unless `resuming` or edit changed its pick.
@@ -1714,19 +1731,32 @@ def ff_merge(s, t):
     return git(main, "fetch", ".", f"{br}:{base}")[0]
 
 
+def out_of_rounds(t):
+    return bool(t.get("review_out")) and t["state"] not in ("ready", "done")
+
+
+def not_ready(s, t):
+    hint = (' out of review rounds: accept --owner-approved "<who/where>" once the owner approved it.'
+            if out_of_rounds(t) else "")
+    return Fail(f"{s.ref(t)} isn't ready ({t['state']}); only a Ready task can be accepted." + hint)
+
+
 def cmd_accept(args):
     """The person's Accept on a Ready task (the one thing they do in the Tasks panel): Done at
     once when there is nothing to merge, else merged first, as the merge settings say how: a pull
     request is squash-merged on GitHub (or merges once its checks pass); a local branch is
     fast-forwarded when it can be, else its agent merges it (rebase, checks) and marks it done."""
     error, how, sent, started, back = None, "done", None, False, False
+    owner = (getattr(args, "owner_approved", None) or "").strip()
     with open_store(args) as s:
         t = s.find(args.id)
-        if t["state"] != "ready":
-            raise Fail(f"{s.ref(t)} isn't ready ({t['state']}); only a Ready task can be accepted.")
+        if t["state"] != "ready" and not (owner and out_of_rounds(t)):
+            raise not_ready(s, t)
         # Its agent at work again since it said ready: never accepted half done. Working again
         # (saved), and refused after the store is.
-        if busy_again(t, [detail(k) for k in live_agents(s.key(t))]):
+        if t["state"] != "ready":
+            pass  # out of rounds and the owner approved: its agent has nothing more to say (checks below stay)
+        elif busy_again(t, [detail(k) for k in live_agents(s.key(t))]):
             back = back_to_work(s, t, "its agent is at work again", auto=True)
         # One its agent opened itself, which ready couldn't open again ("already exists"): adopted.
         elif (not t.get("pr") and "already exists" in (t.get("attention") or "")
@@ -1743,8 +1773,15 @@ def cmd_accept(args):
     by = "assistant" if os.environ.get("HERDR_TASK_BY") == "assistant" or (me and is_coordinator(hc_json("get", me) or {})) else "person"
     with open_store(args) as s:
         t = s.find(args.id)
+        if t["state"] != "ready" and not (owner and out_of_rounds(t)):
+            raise not_ready(s, t)
         if t["state"] != "ready":
-            raise Fail(f"{s.ref(t)} isn't ready ({t['state']}); only a Ready task can be accepted.")
+            # The owner's word, kept on the task; the merge below still needs green checks and no conflict.
+            t["owner_approved"] = {"by": "Assistant", "at": now(), "note": owner}
+            t.pop("review_out", None)
+            # Ready now (the owner's accept stands for the reviews): a merge waiting on checks or approval
+            # is picked up by the tick, which only merges Ready tasks, and a retry is a plain accept.
+            t["state"], t["ready_at"] = "ready", now()
         t.pop("attention", None)
         wt = t.get("worktree") if t.get("mode") == "worktree" else None
         t["accepted_at"] = now()

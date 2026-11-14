@@ -201,8 +201,8 @@ def settle_back(s, t, report):
             s.dirty = True
         return False
     # Its hard signs only: Herdr's own line stands in for its status line, and a job already
-    # listed when it said ready (an expired Monitor whose notice woke it) is no new work (FAC-96).
-    if own_work(t, live, ready=True, since=t.get("ready_at") or 0):
+    # listed while it sat Ready (an expired Monitor whose notice woke it) is no new work (FAC-96).
+    if own_work(t, live, ready=True, since=b.get("at") or 0):
         return False
     t["state"], t["ready_turns"] = "ready", ready_turns(live)
     if b.get("progress"):

@@ -861,12 +861,12 @@ class BackToWork(unittest.TestCase):
         task, its repo ({head, dirty}) and the merges the tick made."""
         t = self.ready(mode="worktree", worktree=tempfile.mkdtemp(), branch="b", head=head, auto_merge="checks",
                        pr={"number": 9, "repo": "o/r", "url": "u", "checked": 0})
-        repo, merged = {"head": head, "dirty": ""}, []
+        repo, merged, self.jobs = {"head": head, "dirty": ""}, [], {"monitor1": 0}
         for mod, name, value in ((self.tick, "git", lambda cwd, *a: (True, repo["head"] if a[0] == "rev-parse" else repo["dirty"], "")),
                                  (self.tick, "facts", lambda s, t, report: t.update(_pr_fresh=True)),  # checks passed
                                  (self.tick, "merge_now", lambda s, t: merged.append(t["head"])),
                                  (self.agents, "agent_log", lambda task, address=None: "/log"),
-                                 (self.agents, "background_jobs", lambda log: ({"monitor1": 0}, 0))):
+                                 (self.agents, "background_jobs", lambda log: (dict(self.jobs), 0))):
             p = self.mock.patch.object(mod, name, value)
             p.start()
             self.addCleanup(p.stop)
@@ -892,6 +892,20 @@ class BackToWork(unittest.TestCase):
             report = {"started": [], "done": []}
             self.tick.tick_store(self.store, report)
             self.assertEqual((t["state"], report.get("ready_again"), merged), ("ready", ["SHEP-7"], ["abc"]), take_back)
+
+    def test_only_a_job_started_in_the_woken_turn_holds_it(self):
+        """A Monitor started after ready but before the wake-up was listed while it sat Ready: no new work.
+        One started in the woken turn still runs: Working, its merge still pending, until it ends."""
+        for started, state, done in (("between", "ready", ["abc"]), ("after", "running", [])):
+            t, repo, merged = self.woken_after_ready()
+            self.jobs = {"monitor2": 2}  # after ready_at (1)
+            self.live = self.worker("working", 5)
+            self.tick.tick_store(self.store, {"started": [], "done": []})
+            if started == "after":
+                self.jobs = {"monitor2": t["back"]["at"] + 1}
+            self.live = self.worker("idle", 6)
+            self.tick.tick_store(self.store, {"started": [], "done": []})
+            self.assertEqual((t["state"], t.get("auto_merge"), merged), (state, "checks", done), started)
 
     def test_a_new_commit_after_ready_drops_the_pending_merge(self):
         t, repo, merged = self.woken_after_ready()
@@ -1367,6 +1381,12 @@ class OwnBackgroundWork(unittest.TestCase):
                               "message": {"role": "user", "content": [{"tool_use_id": "toolu_2", "type": "tool_result",
                                                                        "content": "Monitor started (task m1, expires in 15m)"}]}})
         self.assertEqual(self.status(), ("working", None, "Waiting on a background job"))
+        # FAC-96: it expired (Claude Code's notice has no <status>, as WUKO-67's log): over
+        self.stamp(-100_000, {"type": "queue-operation", "operation": "enqueue", "content":
+                              "<task-notification>\n<task-id>m1</task-id>\n<summary>Monitor event: \"unit test failures\"</summary>\n"
+                              "<event>[Monitor expired after 15m with 1 event delivered. Re-arm it if you still need the watch.]</event>\n"
+                              "</task-notification>"})
+        self.assertEqual(self.agents.background_jobs(self.log)[0], {})
 
     def test_a_plain_question_needs_you_once_nothing_runs(self):
         """SHEP-148: a plain question with its own work still running is no ask yet (asking for real

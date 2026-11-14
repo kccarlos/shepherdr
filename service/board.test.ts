@@ -163,3 +163,55 @@ test("odd records still fit: the last --model, an ask with an empty task, a wind
   expect(validatePool(p)).toEqual([]);
   expect(p).toMatchObject({ five_hour_left: 0, state: "floor" });
 });
+
+test("FAC-92: snapshot rows carry worker, reviewer, compact rounds, roundLimit, lines and acceptedBy", async () => {
+  const h1 = "a".repeat(40), h2 = "b".repeat(40);
+  const full = {
+    id: 92, title: "Board data in the snapshot", state: "done", done_at: Date.now(), mode: "worktree",
+    agent: "agy", model: "gemini-4-carbon-high", reviewer: "codex",
+    agents: [{ address: "tw1", agent: "agy", argv: ["agy", "--model", "gemini-4-carbon-high"], at: 1000, parent: "t0", ended: 2000 }],
+    reviewers: [{ address: "tr1", agent: "codex", argv: ["codex"], at: 1100, parent: "tw1" }, { address: "tr2", agent: "codex", argv: ["codex"], at: 1500, parent: "tw1" }],
+    review_runs: [{ round: 1, head: h1, address: "tr1", cli: "codex", model: null, at: 1100 }, { round: 2, head: h2, address: "tr2", cli: "codex", model: null, at: 1500 }],
+    reviews: [
+      { round: 1, head: h1, by: "tr1", started_by: "herdr-task", verdict: "changes", must_fix: 1, report: "fix x", at: 1200 },
+      { round: 2, head: h2, by: "tr2", started_by: "herdr-task", verdict: "pass", must_fix: 0, report: "", at: 1600 },
+    ],
+    brief_review: { on: true, rounds: 5 }, review_rounds_added: 1,
+    size: { changed: 168, generated: 34, estimate: 250 }, accepted_by: "assistant",
+  };
+  const m: any = new Model(hub({}) as any, { put() {} } as any);
+  m.lists.set(null, [{ slug: "factory", name: "factory-run", prefix: "FAC", folder: tmp, machine: null, tasks: [full] }]);
+  let b: any = null;
+  m.onBuild = (x: any) => { b = x; };
+  m.build();
+  const [t] = (new Compat().snapshot({ host: "mini", user: "me", machines: [], spaces: [], sections: [], rows: b.rows }) as any).tasks;
+  expect(validateTask(t)).toEqual([]);
+  expect(t.worker).toEqual({ cli: "agy", model: "gemini-4-carbon-high" });
+  expect(t.reviewer).toEqual({ cli: "codex", model: "default" });
+  expect(t.rounds).toEqual([
+    { round: 1, verdict: "changes", head7: "aaaaaaa", cli: "codex", at: 1200 },
+    { round: 2, verdict: "pass", head7: "bbbbbbb", cli: "codex", at: 1600 },
+  ]);
+  expect(t.roundLimit).toBe(6);
+  expect(t.lines).toEqual({ changed: 168, generated: 34, estimate: 250 });
+  expect(t.size.limit).toBe(250);
+  expect(t.acceptedBy).toBe("assistant");
+});
+
+test("FAC-92: an old task without the new fields still builds cleanly", async () => {
+  const bare = { id: 99, title: "Old task from before board fields", state: "todo" };
+  const m: any = new Model(hub({}) as any, { put() {} } as any);
+  m.lists.set(null, [{ slug: "factory", name: "factory-run", prefix: "FAC", folder: tmp, machine: null, tasks: [bare] }]);
+  let b: any = null;
+  m.onBuild = (x: any) => { b = x; };
+  m.build();
+  const snap = new Compat().snapshot({
+    host: "mini", user: "me", machines: [], spaces: [], sections: [],
+    rows: [...b.rows, { id: 100, ref: "FAC-100", title: "Row from old caller", section: "done", done_at: Date.now() }],
+  }) as any;
+  expect(snap.tasks.map((x: any) => x.id)).toEqual(["FAC-99", "FAC-100"]);
+  expect(validateTask(snap.tasks[0])).toEqual([]);
+  for (const t of snap.tasks) {
+    for (const k of ["worker", "reviewer", "rounds", "roundLimit", "lines", "acceptedBy"]) expect(t[k]).toBeUndefined();
+  }
+});

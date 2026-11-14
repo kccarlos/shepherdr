@@ -627,6 +627,8 @@ def finish(s, task, even_if_busy=False):
     from Herdr) none running at all. Else tidy_done() removes them once its agents ended."""
     from .simulators import release_task
     from .settings import remove_build_dir
+    if task.get("auto_merge") and not task.get("accepted_by"):
+        task["accepted_by"] = "auto"
     task["state"], task["done_at"] = "done", now()
     for k in ("attention", "merge_requested", "queue", "queued_at", "merge_queued", "kept_open"):
         task.pop(k, None)

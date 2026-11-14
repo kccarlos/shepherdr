@@ -205,7 +205,7 @@ def local_report(candidates=None, since=None, news_only=False):
     """This machine's facts: {machine, home, space, assistant, health, top, stuck, worktrees,
     news}. candidates: [[space id, folder]] of this machine's spaces; the first at the home folder
     is the home space. since: news log lines after this time (ms); None: none."""
-    from .machine import sample
+    from .machine import ALERT, sample
     out = {"home": HOME, "at": now()}
     real = os.path.realpath(HOME)
     space = next((sid for sid, folder in candidates or [] if folder and os.path.realpath(folder) == real), None)
@@ -219,8 +219,9 @@ def local_report(candidates=None, since=None, news_only=False):
             log = []
         out["news"] = [x for x in log if x.get("at", 0) > since]
     if not news_only:
-        rows = processes()
-        out.update({"health": sample(), "top": top(rows), "stuck": stuck(rows), "worktrees": leftover_worktrees(), "builds": task_builds()})
+        rows, h = processes(), sample()
+        out.update({"health": h, "top": top(rows), "stuck": stuck(rows), "worktrees": leftover_worktrees(),
+                    "builds": task_builds() if h["disk"] > ALERT["disk"] else []})
     return out
 
 
@@ -315,8 +316,7 @@ def health_lines(name, rep, st):
         t = rep.get("top") or {}
         uses = "; ".join(x for x in (f"most memory: {', '.join(t['memory'])}" if t.get("memory") else "",
                                      f"most CPU: {', '.join(t['cpu'])}" if t.get("cpu") else "") if x)
-        builds = rep["builds"] if "builds" in rep else (
-            task_builds() if not name and any(k == "disk" and w == "over" for k, w in events) else [])
+        builds = rep.get("builds") or []
         for kind, what in events:
             words = f"{names[kind]} {'crossed its alert limit' if what == 'over' else 'is back under its alert limit'}"
             text = f"{words}. Now: {meters_words(h)}." + (f" {uses[0].upper()}{uses[1:]}." if uses and what == "over" else "")

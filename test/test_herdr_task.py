@@ -9895,12 +9895,10 @@ class BuildOutput(unittest.TestCase):
             self.briefs.append(text)
             t.setdefault("agents", []).append(a := {"address": f"t{t['id']}", "agent": "claude", "argv": argv, "at": 1})
             return a
-        for mod, name, val in ((store, "STORE", store_dir), (base, "STORE", store_dir), (settings, "SETTINGS", cfg_path),
-                               (home, "SETTINGS", cfg_path), (commands, "launch", fake_launch),
-                               (commands, "ensure_scheduler", lambda **k: {}), (commands, "retag_tabs", lambda s: []),
-                               (commands, "live_agents", lambda k: []), (commands, "queue_reason", lambda *a: None),
-                               (commands, "parent_for", lambda p, sp: p), (launch, "caller_labels", lambda: {}),
-                               (github, "live_agents", lambda k: []), (github, "live_helpers", lambda k: [])):
+        for mod, name, val in ((store, "STORE", store_dir), (base, "STORE", store_dir), (settings, "SETTINGS", cfg_path), (home, "SETTINGS", cfg_path),
+                               (commands, "launch", fake_launch), (commands, "ensure_scheduler", lambda **k: {}), (commands, "retag_tabs", lambda s: []),
+                               (commands, "live_agents", lambda k: []), (commands, "queue_reason", lambda *a: None), (commands, "parent_for", lambda p, sp: p),
+                               (launch, "caller_labels", lambda: {}), (github, "live_agents", lambda k: []), (github, "live_helpers", lambda k: [])):
             self.enterContext(mock.patch.object(mod, name, val))
 
     def put(self, path, data="x"):
@@ -9958,11 +9956,12 @@ class BuildOutput(unittest.TestCase):
             self.put(os.path.join(self.bdir, key, "bin"), b"x" * (kb * 1024))
         os.symlink(os.path.dirname(self.put(os.path.join(self.root, "ext", "huge"), b"x" * 50000)), os.path.join(self.bdir, "APP-9"))
         h = {"cpu": 10, "load": 0.4, "cores": 8, "memory": 40, "disk": 95, "disks": [{"path": "home", "pct": 95, "free_gb": 5}]}
-        with self.mock.patch("herdr_task.machine.sample", return_value=h), \
-                self.mock.patch.object(self.home, "processes", return_value=[]), \
-                self.mock.patch.object(self.home, "leftover_worktrees", return_value=[]):
-            line = next(l for l, _ in self.home.health_lines("", self.home.local_report(), {}) if 'event="disk-over"' in l)
-            shutil.rmtree(self.bdir)
-            empty = next(l for l, _ in self.home.health_lines("", self.home.local_report(), {}) if 'event="disk-over"' in l)
+        with self.mock.patch.object(self.home, "processes", return_value=[]), self.mock.patch.object(self.home, "leftover_worktrees", return_value=[]):
+            with self.mock.patch("herdr_task.machine.sample", return_value={**h, "disk": 50}), self.mock.patch.object(self.home, "task_builds", side_effect=AssertionError):
+                self.assertEqual(self.home.local_report()["builds"], [])
+            with self.mock.patch("herdr_task.machine.sample", return_value=h):
+                line = next(l for l, _ in self.home.health_lines("", self.home.local_report(), {}) if 'event="disk-over"' in l)
+                shutil.rmtree(self.bdir)
+                empty = next(l for l, _ in self.home.health_lines("", self.home.local_report(), {}) if 'event="disk-over"' in l)
         self.assertTrue(line.index(f"{self.bdir}/APP-2") < line.index(f"{self.bdir}/APP-3") < line.index(f"{self.bdir}/APP-1"))
         self.assertTrue("APP-9" not in line and "Biggest task build folders" not in empty)

@@ -9781,10 +9781,17 @@ class BoardSnapshotStore(unittest.TestCase):
             self.task.pop("pr", None)
             self.commands.cmd_accept(ns)
             self.assertEqual(self.task.get("accepted_by"), "person")
-            # 2. Assistant accept sets "assistant".
+            # 2. Assistant accept sets "assistant" (locally and across --on via HERDR_TASK_BY).
             self.task.update(state="ready")
             self.task.pop("accepted_by", None)
             with mock.patch.dict(os.environ, {"HC_TERMINAL_ID": "t-coord"}), mock.patch.object(self.commands, "hc_json", lambda *a: {"labels": {"herdr.role": "coordinator"}}):
+                self.commands.cmd_accept(ns)
+            self.assertEqual(self.task.get("accepted_by"), "assistant")
+            self.task.update(state="ready")
+            self.commands.back_to_work(self.store, self.task, "fix")
+            self.assertNotIn("accepted_by", self.task)
+            self.task.update(state="ready")
+            with mock.patch.dict(os.environ, {"HERDR_TASK_BY": "assistant"}, clear=False):
                 self.commands.cmd_accept(ns)
             self.assertEqual(self.task.get("accepted_by"), "assistant")
             # 3. Person accept waiting on PR checks keeps "person" when merge_now finishes later.

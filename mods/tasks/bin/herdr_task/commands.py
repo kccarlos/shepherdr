@@ -942,7 +942,7 @@ def back_to_work(s, t, why, said=WORKING_AGAIN, auto=False):
     if t["state"] != "ready":
         return False
     t["state"] = "running"
-    for k in ("ready_turns", "merge_requested"):
+    for k in ("ready_turns", "merge_requested", *(() if auto else ("accepted_by",))):
         t.pop(k, None)
     t["back"] = {"at": now(), "why": why, **({"auto": True, "progress": t.get("progress")} if auto else {})}
     # by: Herdr's words, not its agent's (on_it() counts only an agent's own line).
@@ -1735,7 +1735,7 @@ def cmd_accept(args):
     if back:
         raise Fail(f"{s.ref(t)} is working again: its agent took up more work after it said ready. Accept it once it says ready again.")
     me = os.environ.get("HC_TERMINAL_ID")
-    by = "assistant" if me and is_coordinator(hc_json("get", me) or {}) else "person"
+    by = "assistant" if os.environ.get("HERDR_TASK_BY") == "assistant" or (me and is_coordinator(hc_json("get", me) or {})) else "person"
     with open_store(args) as s:
         t = s.find(args.id)
         if t["state"] != "ready":

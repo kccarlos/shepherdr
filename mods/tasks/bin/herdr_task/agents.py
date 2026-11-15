@@ -602,8 +602,9 @@ def pending_call(task, address):
 
 
 # A worker blocked in its CLI's own question dialog (field note 51): every question it holds goes in
-# its Needs-you why and news, so the Assistant can relay them all; this many characters at most.
-DIALOG_MAX = 300
+# its Needs-you why and news, so the Assistant can relay them all; this many characters at most,
+# shared out so a long first question never hides the rest (WUKO-77's ran 300+ characters each).
+DIALOG_MAX = 480
 
 
 def dialog_why(tool, value):
@@ -615,7 +616,8 @@ def dialog_why(tool, value):
     if not qs:
         return None
     head = f"Asked in a blocking dialog ({len(qs)} questions): " if len(qs) > 1 else "Asked in a blocking dialog: "
-    return fit(head + " | ".join(qs), DIALOG_MAX)
+    share = max(LINE_MAX, (DIALOG_MAX - len(head) - 3 * (len(qs) - 1)) // len(qs))
+    return fit(head + " | ".join(fit(q, share) for q in qs), DIALOG_MAX)
 
 
 def blocking_dialog(task, address, req=None):

@@ -2542,6 +2542,13 @@ class WorkersAskThroughHerdrTask(unittest.TestCase):
             self.assertIn(q, v["why"])
             self.assertIn(q, line)
         self.assertNotIn("needs owner choices", v["why"])
+        # long questions (WUKO-77's ran 300+ characters each) share the room: every one still shows
+        long = [f"Question {i}: " + "a long design choice " * 20 for i in range(1, 5)]
+        v, line = self.view({"name": "AskUserQuestion", "input": {"questions": [{"question": q} for q in long]}})
+        self.assertLessEqual(len(v["why"]), self.agents.DIALOG_MAX)
+        for i in range(1, 5):
+            self.assertIn(f"Question {i}:", v["why"])
+            self.assertIn(f"Question {i}:", line)
         # the ask Herdr's hook holds says the same, with nothing in the log
         open(self.log, "w").close()
         self.held[0] = {"tool_name": "AskUserQuestion", "tool_input": {"questions": [{"question": q} for q in self.QS[:2]]}}

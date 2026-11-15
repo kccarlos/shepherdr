@@ -10043,7 +10043,7 @@ class UpToDateBeforeMerge(unittest.TestCase):
     whose head lacks its base's tip, GitHub's update-branch brings it up to date and the merge waits for the checks
     on the new head. Only gh and hc are faked: a small GitHub here."""
 
-    def github(self, behind=3, update=(True, "", ""), queue=False):
+    def github(self, behind=3, update=(True, "", ""), queue=False, parents=(True, "abc base1", "")):
         """A Ready task (auto-merge after checks) whose pull request's head abc is green and `behind` commits behind
         its base. Returns the task and GitHub's state, with every gh call it got."""
         import herdr_task.github as github
@@ -10060,7 +10060,9 @@ class UpToDateBeforeMerge(unittest.TestCase):
                     gh.update(head="m1", behind=0, checks="IN_PROGRESS")
                 return update
             if "/commits/m1" in path:
-                return True, "abc base1", ""
+                return parents
+            if a[:2] == ("pr", "view"):
+                return True, gh["head"], ""
             if a[:2] == ("pr", "merge"):
                 gh["merged"] = a[a.index("--match-head-commit") + 1]
                 return True, "", ""
@@ -10070,18 +10072,23 @@ class UpToDateBeforeMerge(unittest.TestCase):
 
         def tell(*a, **k):
             raise AssertionError("its agent was woken")
+        import herdr_task.ghnews as ghnews
+        self.sent = []
         finish = lambda s, t, even_if_busy=False: t.update(state="done")
+        # GitHub news goes to its resting agent (hc faked); its own budget checks run for real
         for mod, name, value in ((github, "gh", fake_gh), (self.commands, "gh", fake_gh), (self.tick, "pr_view", view),
-                                 (self.commands, "pr_view", view), (self.tick, "pr_news", lambda *a: None),
+                                 (self.commands, "pr_view", view), (ghnews, "resting", lambda s, t: {"address": "t1"}),
+                                 (ghnews, "pr_comments", lambda repo, n: []),
+                                 (ghnews, "news_send", lambda address, text: self.sent.append(text) or True),
                                  (self.commands, "tell", tell), (self.commands, "branch_tip", lambda s, t: t["head"]),
-                                 (self.commands, "budget_pass", lambda s, t: False), (self.tick, "budget_pass", lambda s, t: False),
                                  (self.tick, "merge_wait_why", lambda s, t: None), (self.commands, "finish", finish),
                                  (self.tick, "finish", finish), (self.commands, "watch_main", lambda *a: None),
                                  (self.commands, "update_main", lambda *a: None), (self.tick, "watch_main", lambda *a: None)):
             p = self.mock.patch.object(mod, name, value)
             p.start()
             self.addCleanup(p.stop)
-        for mod in (github, self.commands, self.tick):
+        import herdr_task.budget as budget
+        for mod in (github, self.commands, self.tick, budget, ghnews):
             p = self.mock.patch.object(mod, "now", lambda: gh["clock"])
             p.start()
             self.addCleanup(p.stop)
@@ -10116,7 +10123,8 @@ class UpToDateBeforeMerge(unittest.TestCase):
         gh["checks"] = "SUCCESS"
         self.go(gh)
         self.assertEqual((t["state"], gh["merged"], len(self.updates(gh)), t["reviews"]), ("done", "m1", 1, [{"head": "abc"}]))
-        self.assertNotIn("back", t)
+        self.assertEqual((t.get("back"), t.get("recap"), self.sent), (None, None, []))
+        self.assertFalse(any(r["failed"] for r in t["ci_runs"]))
 
     def test_a_failing_check_after_the_update_says_the_base_moved(self):
         t, gh = self.github()
@@ -10126,6 +10134,30 @@ class UpToDateBeforeMerge(unittest.TestCase):
         self.assertEqual((t["state"], gh["merged"], report["attention"]), ("ready", None, [7]))
         self.assertTrue(t["attention"].startswith("Checks failing: check."), t["attention"])
         self.assertIn("up to date with its base", t["attention"])
+        # told the base moved on and to pull first
+        self.assertEqual(len(self.sent), 1)
+        self.assertIn('Check "check" failed', self.sent[0])
+        self.assertIn("up to date with its base (the base moved on since): pull the branch first", self.sent[0])
+
+    def test_a_head_github_cant_place_yet_waits(self):
+        t, gh = self.github(parents=(False, "", "HTTP 502"))
+        self.go(gh)
+        gh["checks"] = "SUCCESS"
+        self.go(gh, minutes=10)
+        self.assertEqual((t["state"], gh["merged"], t.get("attention")), ("ready", None, None))
+
+    def test_ready_again_on_the_same_head_keeps_the_update(self):
+        """Its agent says ready again without new work: nothing to push over GitHub's merge, its head stands for it."""
+        import herdr_task.github as github
+        t, gh = self.github()
+        self.go(gh)
+        pushed = []
+        fake_git = lambda cwd, *a: (pushed.append(a), (True, "", ""))[1] if a[0] == "push" else \
+            (True, "abc" if a[0] == "rev-parse" else "m1\trefs/heads/b", "")
+        with self.mock.patch.object(github, "git", fake_git), self.mock.patch.object(github, "remote_of", lambda *a: "origin"):
+            github.push_branch(self.store, t)
+            self.assertIsNone(github.pr_head_problem(self.store, t, "o/r", "abc"))
+        self.assertEqual(pushed, [])
 
     def test_a_conflict_on_update_doesnt_merge(self):
         t, gh = self.github(update=(False, "", "merge conflict between base and head (HTTP 422)"))

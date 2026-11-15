@@ -1642,6 +1642,8 @@ def merge_now(s, t):
         return f"{t.get('branch')} has moved on since it said ready: its agent says ready again first."
     # FAC-98: a head GitHub's update-branch made from the ready head stands for it.
     synced = synced_head(t, repo, v.get("headRefOid")) if v.get("state") != "MERGED" else None
+    if synced == "":
+        return CHECKS_RUNNING  # GitHub couldn't say whether its head is Herdr's update: asked again next tick
     if v.get("state") != "MERGED" and not synced and (why := pr_head_problem(s, t, repo, head, v.get("headRefOid"))):
         t["attention"], t["attention_at"] = why[0].upper() + why[1:], now()
         return t["attention"]

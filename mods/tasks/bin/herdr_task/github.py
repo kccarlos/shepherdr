@@ -158,7 +158,9 @@ def push_branch(s, task):
     # Already there at its exact tip (pushed by hand): no second push through its hooks (#795).
     has, tip, _ = git(wt, "rev-parse", "--verify", "--quiet", f"refs/heads/{br}")
     seen, there, _ = git(wt, "ls-remote", remote, f"refs/heads/{to}")
-    if not (has and tip and seen and there.split()[:1] == [tip]):
+    # FAC-98: GitHub's update-branch merged its base into it there: nothing of its own to push (a push would
+    # drop that merge).
+    if not (has and tip and seen and (there.split()[:1] == [tip] or tip == task.get("head") and synced_head(task, pr_repo(task), there.split()[0] if there.split() else ""))):
         ok, _, err = git(wt, "push", "--force-with-lease", "-u", remote, br) if to == br else \
             git(wt, "push", remote, f"{br}:refs/heads/{to}")
         if not ok:
@@ -176,7 +178,7 @@ def pr_head_problem(s, task, repo, head, theirs=None):
         ok, theirs, _ = ask()
         if not ok:
             return None
-    if not theirs or theirs == head:
+    if not theirs or theirs == head or synced_head(task, repo, theirs):  # FAC-98: brought up to date with its base
         return None
     wt = task.get("worktree") or ""
     ahead = os.path.isdir(wt) and git(wt, "rev-parse", f"refs/heads/{task.get('branch')}")[1] == head \
@@ -509,7 +511,7 @@ def pr_update_branch(task, repo, head):
 
 def synced_head(task, repo, theirs):
     """FAC-98: `theirs` when it is the merge commit the last update-branch made (its first parent the head that was
-    asked: the ready head, or an earlier update's), else None."""
+    asked: the ready head, or an earlier update's), "" when GitHub couldn't say, else None."""
     pr, head = task.get("pr") or {}, task.get("head")
     sy = pr.get("synced") or {}
     if not (head and theirs and repo) or theirs == head or sy.get("from") != head:
@@ -517,7 +519,9 @@ def synced_head(task, repo, theirs):
     if sy.get("to") == theirs:
         return theirs
     ok, out, _ = gh("api", f"repos/{repo}/commits/{theirs}", "--jq", "[.parents[].sha] | join(\" \")")
-    if ok and out.split()[:1] == [sy.get("asked")]:
+    if not ok:
+        return ""
+    if out.split()[:1] == [sy.get("asked")]:
         sy["to"] = theirs
         return theirs
     return None

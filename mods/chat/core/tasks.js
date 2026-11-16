@@ -195,6 +195,8 @@ export function place(list, task, { live = [], helpers = [], loaded = true, now 
   // agent, or the agent is idle before its first message lands.
   else if (starting(task, now)) section = "working";
   else if (st === "running" && reviewRunning(task)) { section = "working"; if (!task.progress?.text) why = REVIEWER_ON_IT; }
+  // All reviewers out of quota (FAC-101, herdr-task's review_quota_wait): Working, the tick retries after the reset.
+  else if (task.head && task.review_quota_wait?.head === task.head) { section = "working"; why = task.review_quota_wait.text; }
   // Quiet, but on its own background work (SHEP-53, FAC-60, herdr-task's own_work()): a background
   // shell or job still running, or its status says it waits on CI, a build or a review. Kept on the
   // task by its scheduler (task.own_work); Working, saying Waiting on a background job.

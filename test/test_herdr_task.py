@@ -3997,10 +3997,22 @@ if sys.argv[1] == "kill" and alive:
         self.assertEqual([(f["cli"], f["model"], f["why"]) for f in self.task["review_failures"]],
                          [("agy", "gemini-4-argon-high", "terminal gone"), ("codex", None, "terminal gone"), ("claude", "opus", "terminal gone")])
 
+    def test_two_tool_failures_and_the_last_cli_out_of_quota_waits_for_its_reset(self):
+        self.pools = [self.pool("claude", five=0.0)]
+        self.ready()
+        self.reviewer_term = {"state": "gone"}
+        self.commands.gate_reads(self.store, self.task)
+        self.commands.gate_reads(self.store, self.task)  # the third try's CLI has no quota: a wait, not REVIEWER_FAILED
+        self.assertEqual([r["cli"] for r in self.task["review_runs"]], ["agy", "codex"])
+        self.assertTrue(self.task["review_quota_wait"]["text"].startswith("All reviewers are out of quota; retries at "))
+        self.assertNotIn("attention", self.task)
+
     def test_all_pools_empty_waits_for_the_soonest_reset_then_retries(self):
         from datetime import datetime
         from unittest import mock
         import herdr_task.agents as agents
+        import herdr_task.tick as tick
+        from herdr_task.when import clock_words
         reset = "2026-11-16T18:00:00Z"
         at = int(datetime.fromisoformat(reset.replace("Z", "+00:00")).timestamp() * 1000)
         clock = [at - 3_600_000]
@@ -4012,17 +4024,21 @@ if sys.argv[1] == "kill" and alive:
                       self.pool("codex", week=0.5, week_reset="2026-11-18T00:00:00Z"),
                       self.pool("antigravity-gemini", five=3.0, five_reset=reset)]
         self.ready()
-        want = "All reviewers are out of quota; retries at " + time.strftime("%H:%M", time.localtime(at / 1000))
+        want = "All reviewers are out of quota; retries at " + clock_words(at, clock[0])
         self.assertEqual(self.runs, [])  # no try spent on an empty pool
         self.assertEqual(self.task["review_quota_wait"]["text"], want)
         self.assertEqual(agents.task_status(self.task, []), ("working", None, want))
+        self.assertEqual(self.task["progress"]["text"], "Reviewers out of quota till " + clock_words(at, clock[0]))
         self.assertNotIn("attention", self.task)
-        clock[0] = at - 60_000
-        self.commands.gate_reads(self.store, self.task)  # before the reset: still waits
+
+        def tick_at(ms):
+            clock[0] = ms
+            with mock.patch.object(agents, "hc_json", lambda *a: {}), mock.patch.object(tick, "github", lambda s: None):
+                tick.tick_store(self.store, {})
+        tick_at(at - 60_000)  # before the reset: still waits
         self.assertEqual(self.runs, [])
-        clock[0] = at + 1
         self.pools[2]["five"] = 100.0
-        self.commands.gate_reads(self.store, self.task)  # the tick after the reset starts the reviewer
+        tick_at(at + 1)  # the tick after the reset starts the reviewer
         self.assertEqual([(r["cli"], r["model"]) for r in self.task["review_runs"]], [("agy", "gemini-4-argon-high")])
         self.assertNotIn("review_quota_wait", self.task)
         self.valid()

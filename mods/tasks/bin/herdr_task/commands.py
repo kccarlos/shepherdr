@@ -561,7 +561,7 @@ def reviewer_pools():
     """codexbar's usage pools, cached a minute (usage.read); [] (every pool unknown) when it can't be read."""
     from . import usage
     try:
-        return usage.read(STORE)
+        return usage.read(os.path.join(STORE, ".usage"))  # its own folder: no non-list file beside the task lists
     except Exception:
         return []
 
@@ -725,10 +725,12 @@ def gate_step(s, t):
                 f"rounds. Say why in your chat and end your turn: only your Assistant can add a round (herdr-task review-more).")
     if not fable and not pick:  # FAC-101: no try spent on a reviewer with no quota; the tick retries
         when = max(reset, now() + 60_000)
-        text = f"{QUOTA_WAIT}; retries at {time.strftime('%H:%M', time.localtime(when / 1000))}"
+        from .when import clock_words
+        at = clock_words(when, now())
+        text = f"{QUOTA_WAIT}; retries at {at}"
         if (t.get("review_quota_wait") or {}).get("text") != text:
             t["review_quota_wait"] = {"head": head, "until": when, "text": text}
-            t["progress"] = {"text": fit(text), "at": now(), "set": now(), "by": "herdr"}
+            t["progress"] = {"text": fit(f"Reviewers out of quota till {at}"), "at": now(), "set": now(), "by": "herdr"}
             s.dirty = True
         return f"{s.ref(t)}: {text}."
     if (t.get("pr") or {}).get("number"):  # FAC-88: the reviewer reads the commit GitHub has: pushed first, or ready stops
@@ -1464,6 +1466,7 @@ def cmd_edit(args):
             t["reviewer_at"] = max(now(), max((f.get("at") or 0 for f in t.get("review_failures") or []), default=0))
             if (t.get("attention") or "").startswith(REVIEWER_FAILED):
                 t.pop("attention", None)
+            t.pop("review_quota_wait", None)
         if [t.get(k) for k in ("agent", "model", "effort")] != pick:
             # The next agent started for it runs on the new choice (start_again), a queued one too.
             t["pick_at"] = now()

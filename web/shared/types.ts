@@ -366,7 +366,7 @@ export interface Task {
   /** diff line counts (counted vs generated, from ready) and size estimate, when known */
   lines?: { changed?: number; generated?: number; estimate?: number }
   /** who accepted it: the person, an Assistant, or "auto" for merge-after-checks / auto-merge */
-  acceptedBy?: 'person' | 'assistant' | 'auto'
+  acceptedBy?: 'person' | 'assistant' | 'auto' | 'engine' | 'fable'
 }
 
 /** An automation as a project's Tasks lists it: its name, when it runs, the task it adds */

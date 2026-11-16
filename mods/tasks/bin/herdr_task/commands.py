@@ -728,7 +728,7 @@ def gate_step(s, t):
         from .when import clock_words
         at = clock_words(when, now())
         text = f"{QUOTA_WAIT}; retries at {at}"
-        if (t.get("review_quota_wait") or {}).get("text") != text:
+        if [(t.get("review_quota_wait") or {}).get(k) for k in ("head", "text")] != [head, text]:  # a new head too
             t["review_quota_wait"] = {"head": head, "until": when, "text": text}
             t["progress"] = {"text": fit(f"Reviewers out of quota till {at}"), "at": now(), "set": now(), "by": "herdr"}
             s.dirty = True

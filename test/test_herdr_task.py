@@ -4037,9 +4037,13 @@ if sys.argv[1] == "kill" and alive:
                 tick.tick_store(self.store, {})
         tick_at(at - 60_000)  # before the reset: still waits
         self.assertEqual(self.runs, [])
+        self.head = self.task["head"] = self.change("a new commit during the wait")
+        self.ready()  # same reset: the wait moves to the new head, still Working
+        self.assertEqual(self.task["review_quota_wait"]["head"], self.head)
+        self.assertEqual(agents.task_status(self.task, [])[0], "working")
         self.pools[2]["five"] = 100.0
         tick_at(at + 1)  # the tick after the reset starts the reviewer
-        self.assertEqual([(r["cli"], r["model"]) for r in self.task["review_runs"]], [("agy", "gemini-4-argon-high")])
+        self.assertEqual([(r["cli"], r["model"], r["head"]) for r in self.task["review_runs"]], [("agy", "gemini-4-argon-high", self.head)])
         self.assertNotIn("review_quota_wait", self.task)
         self.valid()
 

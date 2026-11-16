@@ -164,7 +164,7 @@ Shepherdr became usable after weeks of flipping settings. These are on from the 
 |---|---|---|
 | sheepdog daemon, voice, phone pairing | The one-line installer or Homebrew, as today | One-action update already ships (v0.1.30) |
 | Engine, templates, reviewer sandbox profile | Embedded in the sheepdog binary | The engine imports only the standard library. Compressed it should be a few hundred KB (estimate) |
-| Python | The system `python3`. On a Mac, git comes with the Command Line Tools, which also bring `python3` (3.9) | The engine uses 3.8 syntax (86 walrus uses). *Unverified: the suite on 3.9; the exact floor.* Fallback if absent: `uv python install`, offered by `doctor`, never silent |
+| Python | A managed, current CPython (latest stable 3.x, pinned per release), installed by the installer through `uv python install` into sheepdog's own data folder; never the system `python3` (macOS ships 3.9). Owner decision 2026-11-16 | The engine may use current language features; CI runs only the pinned version. The install grows by one managed interpreter (tens of MB); `doctor` checks it and repairs it |
 | herdr-core | The installer fetches it if missing | `hc --help` lists no plugin command, and sheepdog's plugin manifest targets herdr 0.9.4 or newer (herdr-tui), so a plugin is not the route. *Unverified: whether today's installer fetches hc* |
 
 **Cannot be bundled**, so `sheepdog factory doctor` checks each with one plain fix line:
@@ -246,7 +246,7 @@ Dogfooding: **today's Shepherdr factory builds phases 1 to 4** as ordinary FAC t
 | # | Phase | Size | Exit test |
 |---|---|---|---|
 | 0 | Close out: land FAC-111 to 113; record the baseline (owner touches and outside interventions per day) | S, days | The three tasks merged; a baseline number exists |
-| 1 | **Extraction.** A line audit first; then `factory/` in the sheepdog repo with history; spaces → projects; herdr-app calls removed; five modules dropped; Python 3.9 in CI | M to L, Python est. 2,000 to 3,000 lines touched (unaudited) | The whole Python suite passes with no herdr-app installed. On a Linux VM and a clean Tart VM with only hc and one CLI, a task goes from `add` to a merged PR |
+| 1 | **Extraction.** A line audit first; then `factory/` in the sheepdog repo with history; spaces → projects; herdr-app calls removed; five modules dropped; the pinned current Python in CI | M to L, Python est. 2,000 to 3,000 lines touched (unaudited) | The whole Python suite passes with no herdr-app installed. On a Linux VM and a clean Tart VM with only hc and one CLI, a task goes from `add` to a merged PR |
 | 2 | **One install and staying alive.** Embed and unpack; daemon keeps the tick; doctor; coordinator lease and reconcile; engine-owned restart | M, Go ~500, Python ~400 | A fresh VM: one install command plus logins, `factory start`, first PR merged. Reboot mid-task: work resumes within 5 minutes with no person and exactly one coordinator |
 | 3 | **Owner channel.** Ask kinds and proven answers; quiet rule; `say`; rules with read-back; digest | M, Python ~500, Go ~600, Swift small | One full day by voice and phone only: goal, rule, ask, release, digest. In tests a typed "owner approved" and agent keys into an ask are refused. Zero worker speech. `make eval` shows no Safe regression |
 | 4 | **Graph.** Milestones, `plan apply`, critical path, merge order, voice summary, `/factory` page; the new CI rules | M, Python ~600, Go and JS ~500 | "What is blocking milestone 2?" is answered by voice from code-built facts. A split or replan keeps dependencies. The page shows order without opening a terminal |
@@ -277,9 +277,13 @@ Dogfooding: **today's Shepherdr factory builds phases 1 to 4** as ordinary FAC t
 | The Go–Python contract drifts | One fixture both test suites run; unknown ask kinds are refused |
 | A CLI changes under us (agy's sign-in moved, Claude's updater triggered a consent prompt) | Doctor runs a canary start of each CLI before every unattended run; auto-update off during runs |
 | Two factories during the move | Shepherdr builds, the new one is the product under test; phase 5 is a single switch with an importer |
-| System Python is missing or old | Doctor says so; `uv` fallback; measured in phase 6 |
+| The managed Python fails to install or is removed | The installer and `doctor` reinstall it with `uv`; measured in phase 6 |
 
-**Unverified, in one place:** the suite on Python 3.9; that `hc exec` and hc terminals share the same file-access grants; that the installer fetches hc; a sheepdog daemon with voice off; ask → card → tap end to end (it has never run); how Everywhere rules sync across machines; iOS behaviour of the `/factory` page.
+**Unverified, in one place:** the suite on the pinned current Python; that `hc exec` and hc terminals share the same file-access grants; that the installer fetches hc; a sheepdog daemon with voice off; ask → card → tap end to end (it has never run); how Everywhere rules sync across machines; iOS behaviour of the `/factory` page.
+
+### Owner decisions (2026-11-16)
+
+KC accepted all seven recommendations in the table above as written, with one change: the engine runs on a managed, current Python (latest stable, pinned per release) installed with `uv`, not on the system `python3` 3.9.
 
 ## 10. dsh-superagent: borrow, adapt, avoid
 

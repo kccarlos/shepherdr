@@ -86,6 +86,8 @@ How to run, build and lay out the code: [docs/develop.md](docs/develop.md).
   `cd test && python3 -m unittest test_herdr_task.ClassName` (from the repo root the module import fails).
 - Tests that run accept or merge with the real `finish()` must stub `github.live_agents` and `live_helpers` (hc is
   refused under test).
+- Tests never call the real codexbar: `test/home_guard.py` puts a failing codexbar first on PATH; GateReview stubs
+  `launch.send_when_clear` (GateEndToEnd restores the real one) so codex fallbacks don't wait 60 s.
 - Bun.spawn ignores a PATH changed inside a test: point the service at fakes with `SHEPHERDR_HERDR_APP` / `SHEPHERDR_HC`.
 - Window-mod render tests: `bun test` in service/ with `mock.module` for gpui-kit/gpui-base and herdr via
   service/fake-herdr.ts (bun's mocks are per process, so every herdr stand-in needs every name); see

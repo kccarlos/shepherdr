@@ -10921,6 +10921,7 @@ class HoldWhileMainIsRed(unittest.TestCase):
     the base's newest finished run is red, merges and branch updates are held; the Assistant hears once; it resumes
     by itself when the base is green. The person's own Accept still merges."""
 
+    args = BackToWork.args
     github, setUp, ready, go, updates = (UpToDateBeforeMerge.github, BackToWork.setUp, BackToWork.ready,
                                         UpToDateBeforeMerge.go, UpToDateBeforeMerge.updates)
 
@@ -10953,6 +10954,25 @@ class HoldWhileMainIsRed(unittest.TestCase):
         self.red()
         self.assertEqual(self.commands.merge_now(self.store, t, accepting=True), "main is red since deadbee: merges held until it's green.")
         self.assertEqual((self.updates(gh), gh["merged"]), ([], None))
+
+    def accepted(self, merge_result):
+        said = []
+        t = self.ready(mode="worktree", worktree="/w", branch="b", head="abc", pr={"number": 9, "repo": "o/r", "url": "u"})
+        with self.mock.patch.object(self.commands, "merge_now", lambda s, t, accepting=False: merge_result(t)), \
+                self.mock.patch.object(self.commands, "say", lambda args, data, text: said.append((data, text))):
+            self.commands.cmd_accept(self.args())
+        return t, said[-1]
+
+    def test_accept_on_a_green_base_says_merged_not_waiting(self):
+        t, (data, text) = self.accepted(lambda t: None)
+        self.assertEqual((data["accepted"], text), ("github", "SHEP-7 accepted: pull request #9 merged; done."))
+        self.assertNotIn("auto_merge", t)
+
+    def test_accept_on_a_red_base_waits_for_green(self):
+        self.red()
+        t, (data, text) = self.accepted(lambda t: self.commands.main_red_hold(self.store, "main"))
+        self.assertEqual((data["accepted"], text), ("checks", "SHEP-7 accepted: it merges once its checks pass."))
+        self.assertEqual(t["auto_merge"], "checks")
 
     def test_herdrs_own_words_say_merge_main_never_rebase(self):
         from herdr_task import templates

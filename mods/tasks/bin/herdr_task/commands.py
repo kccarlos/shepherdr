@@ -2070,7 +2070,7 @@ def cmd_accept(args):
             error = merge_now(s, t, accepting=True)
             if error == IN_QUEUE:
                 how, error = "queue", None
-            elif error in (CHECKS_RUNNING, WAITS_APPROVAL) or error == main_red_hold(s, t.get("base") or "main"):
+            elif error in (CHECKS_RUNNING, WAITS_APPROVAL) or (error and error == main_red_hold(s, t.get("base") or "main")):
                 # Accepted: it merges by itself once they pass, once it's approved, or once a red base is green (Merging).
                 t["auto_merge"], how, error = "checks", "approval" if error == WAITS_APPROVAL else "checks", None
         elif merged_here(s, t) or in_base(s, t):

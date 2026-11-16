@@ -156,7 +156,7 @@ Shepherdr became usable after weeks of flipping settings. These are on from the 
 | Crash, reboot, hc restart | At daemon start and every tick: every project with open tasks has **exactly one** live coordinator. None: start one from the store with a handoff. The store is the truth, as in Symphony, which re-polls after a restart rather than restoring state [1]. Workers come back through `revive.py` |
 | Coordinator identity | A lease in the project record (terminal, session, template hash). `say`, news and wakes go to the lease holder, not to "whatever terminal has the role label". A second claimant is refused. The restart path is engine code; today `watchdog.restart_assistant` runs `mods/coordinator/restart.sh` from the herdr-app folder, so it cannot work headless |
 
-*Not found in the repo:* the two bugs from today (an Assistant not restarted after a crash or disk event, and the assistant identity bugs) are not written in the field notes or the task store I read. The lease and the reconcile rule address the class; the exact cases must become tests before phase 2 closes.
+**Notes 54 and 55 are the cases this must pass, as tests.** Note 54: a coordinator exits during a disk stall; Autopilot, keyed to a dead space id, only queues wakes; workers keep a dead parent and their finished tasks reach no one for hours; recovery needed the owner to open a tab and type. Note 55: a hand-started `claude` and a tab renamed "Assistant" were taken for coordinators; a new space pointed at the home folder; a coordinator tab vanished before its first message; a listing showed the space's folder instead of the agent's cwd. The tests: after any coordinator exit the engine reaches exactly one coordinator per project, in the repo folder, with no owner message; workers with a dead parent are re-parented and their held news delivered; wakes are keyed by project folder; a terminal without the lease is never treated as the coordinator, whatever its name or labels.
 
 ## 6. One install
 
@@ -222,6 +222,7 @@ Outside `herdr_task`, the templates and engine call helpers that also need a fat
 | 31, 51 | An open ask outlives its worker; no blocking dialogs |
 | 33 | Every `gh` call pins the repo |
 | 38 | Ending an agent ends its process group |
+| 54, 55 | One coordinator per project after any exit; orphaned workers re-parented; identity by lease |
 | 39, 40 | Timed volume probe |
 | 45, 46 | The reviewed commit is the PR's head; merge-only commits are exempt |
 | 48 to 50 | Design waits for its gate; out-of-rounds is visible and self-granting; a wake after ready keeps the merge |
@@ -244,7 +245,7 @@ Dogfooding: **today's Shepherdr factory builds phases 1 to 4** as ordinary FAC t
 
 | # | Phase | Size | Exit test |
 |---|---|---|---|
-| 0 | Close out: land FAC-111 to 113; write today's two bugs as field notes; record the baseline (owner touches and outside interventions per day) | S, days | The three tasks merged; a baseline number exists |
+| 0 | Close out: land FAC-111 to 113; record the baseline (owner touches and outside interventions per day) | S, days | The three tasks merged; a baseline number exists |
 | 1 | **Extraction.** A line audit first; then `factory/` in the sheepdog repo with history; spaces → projects; herdr-app calls removed; five modules dropped; Python 3.9 in CI | M to L, Python est. 2,000 to 3,000 lines touched (unaudited) | The whole Python suite passes with no herdr-app installed. On a Linux VM and a clean Tart VM with only hc and one CLI, a task goes from `add` to a merged PR |
 | 2 | **One install and staying alive.** Embed and unpack; daemon keeps the tick; doctor; coordinator lease and reconcile; engine-owned restart | M, Go ~500, Python ~400 | A fresh VM: one install command plus logins, `factory start`, first PR merged. Reboot mid-task: work resumes within 5 minutes with no person and exactly one coordinator |
 | 3 | **Owner channel.** Ask kinds and proven answers; quiet rule; `say`; rules with read-back; digest | M, Python ~500, Go ~600, Swift small | One full day by voice and phone only: goal, rule, ask, release, digest. In tests a typed "owner approved" and agent keys into an ask are refused. Zero worker speech. `make eval` shows no Safe regression |
@@ -278,7 +279,7 @@ Dogfooding: **today's Shepherdr factory builds phases 1 to 4** as ordinary FAC t
 | Two factories during the move | Shepherdr builds, the new one is the product under test; phase 5 is a single switch with an importer |
 | System Python is missing or old | Doctor says so; `uv` fallback; measured in phase 6 |
 
-**Unverified, in one place:** the suite on Python 3.9; that `hc exec` and hc terminals share the same file-access grants; that the installer fetches hc; a sheepdog daemon with voice off; ask → card → tap end to end (it has never run); today's two bugs; how Everywhere rules sync across machines; iOS behaviour of the `/factory` page.
+**Unverified, in one place:** the suite on Python 3.9; that `hc exec` and hc terminals share the same file-access grants; that the installer fetches hc; a sheepdog daemon with voice off; ask → card → tap end to end (it has never run); how Everywhere rules sync across machines; iOS behaviour of the `/factory` page.
 
 ## 10. dsh-superagent: borrow, adapt, avoid
 

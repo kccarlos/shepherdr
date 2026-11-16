@@ -1465,7 +1465,6 @@ def cmd_edit(args):
         if args.prompt_file:
             with open(args.prompt_file) as f:
                 t["prompt"] = f.read()
-        sent = amend(s, t, args)
         pick = [t.get(k) for k in ("agent", "model", "effort")]
         rev_pick = [t.get(k) for k in ("reviewer", "reviewer_model", "reviewer_effort")]
         set_opts(t, args)
@@ -1499,20 +1498,23 @@ def cmd_edit(args):
         if t["mode"] != "worktree" and not t.get("worktree"):
             t.pop("branch", None)
         set_branch(s, t, getattr(args, "branch", None))
+        sent = amend(s, t, args)  # last: its agent is told only of an edit that saves
         s.dirty = True
         tabs = task_tabs(s, t) if t["title"] != old else []
         v = view(s, t)
     left = name_tabs([(tab, tab_title(s, t)) for tab in tabs])
     if at:
         ensure_scheduler_quietly()
-    say(args, {**v, "rename": left, **({"sent": sent} if sent else {})},
+    say(args, {**v, "rename": left, **({"sent": sent} if sent is not None else {})},
         f"{s.ref(t)} saved" + (f": {v['why']}." if v["status"] == "scheduled" else ".")
-        + (f" Its agent was told the brief changed ({sent})." if sent else ""))
+        + (f" Its agent was told the brief changed ({sent})." if sent else "")
+        + (" Its agent couldn't be told; the change is kept for its reviewer." if sent is False else ""))
 
 
 def amend(s, t, args):
     """FAC-109: `edit --amend` keeps the brief as it was and adds a dated change, which its reviewer judges by too;
-    a running task's agent is told at once. Returns the terminal told, if any."""
+    a running task's agent is told at once. Returns the terminal told, False when the send failed (the change
+    is kept), else None."""
     text = (getattr(args, "amend", None) or "").strip()
     if not text:
         if getattr(args, "amend", None) is not None:
@@ -1522,8 +1524,11 @@ def amend(s, t, args):
     s.dirty = True
     if t["state"] != "running":
         return None
-    return tell(s, t, f"The brief of {s.ref(t)} changed: {text}\nWork to it from now on; your reviewer judges by it too.",
-                args, start=False)[0]
+    try:
+        return tell(s, t, f"The brief of {s.ref(t)} changed: {text}\nWork to it from now on; your reviewer judges by it too.",
+                    args, start=False)[0]
+    except Fail:
+        return False
 
 
 def cmd_config(args):

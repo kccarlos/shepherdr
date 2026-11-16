@@ -4603,6 +4603,12 @@ class AmendBrief(unittest.TestCase):
         self.assertEqual(sent, [("w1", "The brief of SHEP-13 changed: Only the login half.\n"
                                        "Work to it from now on; your reviewer judges by it too.")])
 
+    def test_a_failed_send_keeps_the_change(self):
+        from unittest import mock
+        with mock.patch.object(self.commands, "tell", mock.Mock(side_effect=self.commands.Fail("hc send failed"))):
+            self.edit("Only the login half.")
+        self.assertEqual([a["text"] for a in self.task["amendments"]], ["Only the login half."])
+
     def test_amend_on_a_todo_task_sends_nothing(self):
         self.task["state"] = "todo"
         self.edit("Only the login half.")

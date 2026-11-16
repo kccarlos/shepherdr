@@ -9311,7 +9311,7 @@ class DesignAndDocReview(unittest.TestCase):
         from herdr_task import settings
         self.settings = settings
         with open(settings.SETTINGS, "w") as f:
-            json.dump({"everywhere": {"tasks": {"review_rounds": 5, "review_min": 2, "merge": "checks"}}}, f)
+            json.dump({"everywhere": {"tasks": {"review_rounds": 5, "review_min": 2, "merge": "checks", "auto_accept": False}}}, f)
         self.task.pop("set", None)
 
     def show_out(self, as_json=False):
@@ -10081,7 +10081,7 @@ class UpToDateBeforeMerge(unittest.TestCase):
                                  (ghnews, "pr_comments", lambda repo, n: []),
                                  (ghnews, "news_send", lambda address, text: self.sent.append(text) or True),
                                  (self.commands, "tell", tell), (self.commands, "branch_tip", lambda s, t: t["head"]),
-                                 (self.tick, "merge_wait_why", lambda s, t: None), (self.commands, "finish", finish),
+                                 (self.tick, "merge_hold", lambda s, t: False), (self.commands, "finish", finish),
                                  (self.tick, "finish", finish), (self.commands, "watch_main", lambda *a: None),
                                  (self.commands, "update_main", lambda *a: None), (self.tick, "watch_main", lambda *a: None)):
             p = self.mock.patch.object(mod, name, value)
@@ -10522,7 +10522,8 @@ class DesignDocAndOpenAskWaitForAccept(unittest.TestCase):
         self.git(self.main, "push", "-q", "-u", "origin", "main")
         self.git(self.wt, "push", "-q", "-u", "origin", "task/13")
         with open(settings.SETTINGS, "w") as f:
-            json.dump({"spaces": {"sp1": {"folder": self.main, "tasks": {"merge": "checks", "review_min": 2, "review_rounds": 5}}}}, f)
+            json.dump({"spaces": {"sp1": {"folder": self.main, "tasks": {"merge": "checks", "review_min": 2, "review_rounds": 5,
+                                                                          "auto_accept": False}}}}, f)  # FAC-99 off: FAC-94's waits stand
         self.task["set"], self.merges = {}, []
 
         def fake_gh(*a, **k):
@@ -10599,3 +10600,103 @@ class DesignDocAndOpenAskWaitForAccept(unittest.TestCase):
         self.assertEqual((self.tick_green()["done"], self.merges, "auto_merge" in self.task), ([], [], False))
         self.ask.save({"id": "a2", "question": "Keep old route?", "options": ["Yes", "No"], "recommend": "Yes", "task": None, "to": "w1", "at": 2, "answer": "Yes"})
         self.assertEqual(self.merge_line()[:2], ("checks", "folder"))
+
+
+class AutoAccept(unittest.TestCase):
+    """FAC-99: with tasks.auto_accept on (the default) and Merge "ask", a code task with its passing rounds on the
+    final commit, green CI and its proof is accepted and merged by the engine; a design task gets a Fable round
+    instead of the person's Accept; owner asks (release...) and auto_accept off still wait for the person."""
+
+    setUp_fac94, merge_line, tick_green = (DesignDocAndOpenAskWaitForAccept.setUp, DesignDocAndOpenAskWaitForAccept.merge_line,
+                                           DesignDocAndOpenAskWaitForAccept.tick_green)
+    setUp_gate, git, change, ready, verdict, env = (GateReview.setUp, GateReview.git, GateReview.change, GateReview.ready,
+                                                    GateReview.verdict, GateReview.env)
+
+    def setUp(self):
+        from unittest import mock
+        self.setUp_fac94()
+        with open(self.settings.SETTINGS, "w") as f:
+            json.dump({"spaces": {"sp1": {"folder": self.main, "tasks": {"review_min": 2, "review_rounds": 5}}}}, f)
+        self.proof = {"id": "art1", "title": "Gate · Proof"}
+        p = mock.patch.object(self.commands, "find_proof", lambda *a: self.proof)
+        p.start(); self.addCleanup(p.stop)
+
+    def auto_line(self):
+        return next(l for l in self.settings.settings_block(self.store, self.task).splitlines() if l.startswith("- Auto-accept:"))
+
+    def owner_ask(self, kind):
+        self.ask.save({"id": "a1", "question": "Tag v2.0.1?", "options": ["Yes", "No"], "recommend": "Yes", "task": "SHEP-13",
+                       "to": "t-coord", "at": 1, "kind": kind})
+
+    def test_code_task_meeting_the_bar_is_merged_by_the_engine_with_its_evidence(self):
+        import herdr_task.news as news
+        self.assertIn("Herdr accepts and merges it", self.auto_line())
+        self.ready(); self.verdict("term-1"); self.verdict("term-2")
+        self.assertEqual(self.task.get("auto_merge"), "checks")
+        self.assertEqual((self.tick_green()["done"], len(self.merges), self.task["state"], self.task["accepted_by"]), ([13], 1, "done", "engine"))
+        aa = self.task["auto_accepted"]
+        self.assertEqual((aa["by"], aa["head"], aa["rounds"], aa["ci"], aa["proof"]), ("engine", self.head, [1, 2], [self.head[:7]], "art1"))
+        self.assertIn("is done: merged, accepted by the engine", news.news_line(self.store, self.task, {}, "done"))
+        said = []
+        with self.mock_say(said):
+            self.commands.cmd_show(self.commands.argparse.Namespace(id="SHEP-13", json=False, folder=None, prompt=None, evidence=False))
+        self.assertIn(f"accepted by the engine at ", said[-1])
+        self.assertIn(f"head {self.head[:7]}, review rounds 1, 2, CI {self.head[:7]}, proof art1", said[-1])
+
+    def mock_say(self, said):
+        from unittest import mock
+        import contextlib
+        stack = contextlib.ExitStack()
+        stack.enter_context(mock.patch.object(self.commands, "say", lambda args, v, text=None: said.append(text)))
+        stack.enter_context(mock.patch.object(self.commands, "view", lambda s, t, live=None: dict(t, status="done", folder=self.main, ref="SHEP-13", live=[], asks=[], log=[])))
+        stack.enter_context(mock.patch.object(self.commands, "line", lambda v: "SHEP-13"))
+        return stack
+
+    def test_missing_proof_or_an_owner_ask_waits_for_the_person_and_says_why(self):
+        for why, prep in (("no proof artifact attached", lambda: setattr(self, "proof", None)),
+                          ("an open release question is yours to answer", lambda: self.owner_ask("release")),
+                          ("auto-accept is off", lambda: self.task["set"].update(auto_accept="off"))):
+            with self.subTest(why=why):
+                self.setUp()
+                prep()
+                self.ready(); self.verdict("term-1"); self.verdict("term-2")
+                self.assertNotIn("auto_merge", self.task)
+                self.assertEqual((self.tick_green()["done"], self.merges, self.task["state"]), ([], [], "ready"))
+                self.assertEqual(self.settings.accept_bar(self.store, self.task), (None, why))
+        self.env("HC_TERMINAL_ID", None)
+        self.commands.cmd_accept(self.commands.argparse.Namespace(id="SHEP-13", json=True, space=None, agent=None, argv=None))
+        self.assertEqual((len(self.merges), self.task["accepted_by"]), (1, "person"))
+
+    def test_design_task_gets_a_fable_round_whose_pass_merges_it(self):
+        self.task["set"] = {"review_kind": "design"}
+        self.assertIn("a Fable round judges it as the owner would", self.auto_line())
+        self.ready(); self.verdict("term-1")
+        cmd = self.runs[-1][self.runs[-1].index("--") + 1:]
+        self.assertEqual((len(self.runs), cmd[cmd.index("--model") + 1]), (2, "claude-fable-5-2"))
+        self.assertIn("This round is Fable's", " ".join(cmd))
+        self.verdict("term-2")
+        self.assertEqual((self.tick_green()["done"], len(self.merges), self.task["accepted_by"]), ([13], 1, "fable"))
+        self.assertEqual(self.task["auto_accepted"]["rounds"], [1, 2])
+
+    def test_fable_asking_for_changes_sends_it_back_to_its_worker(self):
+        self.task["set"] = {"review_kind": "doc"}
+        self.ready(); self.verdict("term-1")
+        self.verdict("term-2", passed=False, changes="major: the guide skips step 3", must_fix=1)
+        self.assertIn("the guide skips step 3", self.told[-1])
+        self.assertEqual((self.task["state"], "auto_merge" in self.task, "recap" in self.task, self.merges), ("running", False, False, []))
+
+    def test_a_release_ask_keeps_a_design_task_with_the_person(self):
+        self.task["set"] = {"review_kind": "design"}
+        self.owner_ask("release")
+        self.assertEqual(self.auto_line(), "- Auto-accept: on, but an open release question is yours to answer: the person accepts it")
+        self.ready(); self.verdict("term-1")
+        self.assertEqual((len(self.runs), "auto_merge" in self.task, self.task["state"]), (1, False, "ready"))
+        self.assertEqual((self.tick_green()["done"], self.merges), ([], []))
+
+    def test_a_plain_open_ask_is_judged_by_fable(self):
+        self.ask.save({"id": "a2", "question": "Keep the old route?", "options": ["Yes", "No"], "recommend": "Yes", "task": "SHEP-13",
+                       "to": "t-coord", "at": 2})
+        self.ready(); self.verdict("term-1"); self.verdict("term-2")
+        self.assertEqual(len(self.runs), 3)
+        self.verdict("term-3")
+        self.assertEqual((self.tick_green()["done"], self.task["accepted_by"]), ([13], "fable"))

@@ -71,7 +71,7 @@ export function boardOf(task: any, on: string | null, status: (addr: string) => 
   const stored = typeof task.size?.changed === "number" && typeof task.size?.generated === "number";
   const lines = stored || est !== undefined
     ? { ...(stored ? { changed: task.size.changed, generated: task.size.generated } : {}), ...(est !== undefined ? { estimate: est } : {}) } : undefined;
-  const acceptedBy = ["person", "assistant", "auto"].includes(task.accepted_by) ? task.accepted_by : undefined;
+  const acceptedBy = ["person", "assistant", "auto", "engine", "fable"].includes(task.accepted_by) ? task.accepted_by : undefined;
   return {
     agents, ...(reviews.length ? { reviews } : {}), ...(task.checks?.length ? { checks: task.checks } : {}),
     ...(task.verdicts?.length ? { verdicts: task.verdicts } : {}), size: { ...size, limit: est ?? null },

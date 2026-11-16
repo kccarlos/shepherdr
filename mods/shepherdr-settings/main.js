@@ -571,6 +571,10 @@ export default class ShepherdrSettings extends View {
       // line in each brief's Settings block (herdr-task's Proof line); a task may turn it off.
       .child(this.row(t, rowTitle("tasks.proof"), ABOUT["tasks.proof"],
         toggleSwitch("proof", k.proof !== false, (next, _e, cx) => this.set("tasks", "proof", next, cx)), this.scoped("tasks", "proof")))
+      // FAC-99: herdr-task accepts what meets the evidence bar; releases and owner asks still wait for the person.
+      .child(this.row(t, rowTitle("tasks.auto_accept"), ABOUT["tasks.auto_accept"],
+        toggleSwitch("autoaccept", k.auto_accept !== false, (next, _e, cx) => this.set("tasks", "auto_accept", next, cx)),
+        this.scoped("tasks", "auto_accept")))
       .child(this.row(t, rowTitle("tasks.max_running"), ABOUT["tasks.max_running"],
         this.stepper(t, "running", k.max_running, step("max_running", -1, 1, 10), step("max_running", 1, 1, 10)),
         this.scoped("tasks", "max_running")))

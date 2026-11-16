@@ -194,6 +194,7 @@ export const ABOUT = {
   "tasks.review_rounds": "A task's agent has its work reviewed and fixes what's found.",
   "tasks.must_fix": "What the agent fixes before it says ready. It lists the rest.",
   "tasks.proof": "Each task shows real proof of its work in one artifact, linked from Accept.",
+  "tasks.auto_accept": "Herdr accepts tasks with passing reviews, green CI and proof; Fable reviews design and doc tasks.",
   "tasks.max_running": "Per folder. More wait their turn and start by themselves.",
   "tasks.archive_after": "Done tasks move to Archived, with their chat and summary.",
   "tasks.worktrees": "In a git repo, each task gets its own worktree and branch.",
@@ -357,7 +358,7 @@ export const ROUNDS = [[0, "Off"], [1, "1 round"], [2, "2 rounds"], [3, "3 round
 export const ARCHIVE = [[0, "Off"], [1, "1 day"], [3, "3 days"], [7, "1 week"], [30, "1 month"]];
 export const ONOFF = [[true, "On"], [false, "Off"]];
 
-export const DEFAULTS = { tasks: { merge: "ask", review_rounds: 0, must_fix: "major", max_running: 10, worktrees: true, archive_after: 7, proof: true, reviewer_sandbox: true }, automations: { enabled: true },
+export const DEFAULTS = { tasks: { merge: "ask", review_rounds: 0, must_fix: "major", max_running: 10, worktrees: true, archive_after: 7, proof: true, reviewer_sandbox: true, auto_accept: true }, automations: { enabled: true },
   agents: { reactions: true, suggestions: true, feedback: true, feedback_repo: "" } };
 
 // [section, field, label, choices | { min, max }]
@@ -366,6 +367,7 @@ export const TASK_ROWS = [
   ["tasks", "review_rounds", "Review", ROUNDS],
   ["tasks", "must_fix", "Must fix", MUST_FIX],
   ["tasks", "proof", "Proof", ONOFF],
+  ["tasks", "auto_accept", "Auto-accept", ONOFF],
   ["tasks", "max_running", "Tasks at once", { min: 1, max: 10 }],
   ["tasks", "archive_after", "Archive Done after", ARCHIVE],
   ["tasks", "worktrees", "Worktrees", ONOFF],

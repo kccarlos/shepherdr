@@ -39,8 +39,11 @@
       "task": { "state": "ready", "ready_at": 1799999000000, "ready_turns": { "t1": 5 } },
       "live": [{ "address": "t1", "status": "working", "turn": 5, "role": "worker", "since": 1799999939000 }], "expect": true },
     { "name": "a turn herdr-task found only an idle compaction",
-      "task": { "state": "ready", "ready_at": 1799999000000, "ready_turns": { "t1": 5 }, "stray_turns": { "t1": 5 } },
+      "task": { "state": "ready", "ready_at": 1799999000000, "ready_turns": { "t1": 5 }, "stray_since": { "t1": 1799999800000 } },
       "live": [{ "address": "t1", "status": "working", "turn": 5, "role": "worker", "since": 1799999800000 }], "expect": false },
+    { "name": "its next wake after that one: judged afresh",
+      "task": { "state": "ready", "ready_at": 1799999000000, "ready_turns": { "t1": 5 }, "stray_since": { "t1": 1799999800000 } },
+      "live": [{ "address": "t1", "status": "working", "turn": 5, "role": "worker", "since": 1799999900000 }], "expect": true },
     { "name": "already Working",
       "task": { "state": "running", "ready_turns": { "t1": 5 } },
       "live": [{ "address": "t1", "status": "working", "turn": 9, "role": "worker" }], "expect": false }

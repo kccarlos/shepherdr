@@ -14,7 +14,7 @@ import time
 from .base import Fail, git, guard, hc_json, now, PR_EVERY, run, SHELLS, STORE, stop_note
 from .settings import machine_name, merge_hold, remove_build_dir, worker_argv
 from .agents import (
-    agent_log, agent_running, back_at_work, BG_ENDED_MSG, BG_NUDGE_MS, busy_again, detail, ended_jobs, fit, held_ask, last_question, live_agents, open_question, own_work, stray_turns,
+    agent_log, agent_running, back_at_work, BG_ENDED_MSG, BG_NUDGE_MS, busy_again, detail, ended_jobs, fit, held_ask, last_question, live_agents, open_question, own_work, stray_since,
     ready_turns, REVIEWER_FAILED, status_word, task_status, WAITING_BG,
 )
 from .provider import NUDGE, provider_cut, provider_error, PROVIDER_WAITS
@@ -192,9 +192,9 @@ def back_pass(s, t, report):
         report.setdefault("working_again", []).append(s.ref(t))
         return
     # FAC-107: a turn that is only an idle compaction, kept for the window's busyAgain()
-    stray = {**(t.get("stray_turns") or {}), **stray_turns(t, live)}
-    if stray and stray != t.get("stray_turns"):
-        t["stray_turns"] = stray
+    stray = {**(t.get("stray_since") or {}), **stray_since(t, live)}
+    if stray and stray != t.get("stray_since"):
+        t["stray_since"] = stray
         s.dirty = True
 
 
@@ -282,7 +282,8 @@ def tick_store(s, report):
             if t.get("auto_merge") and not t.get("accepted_by") and merge_hold(s, t):
                 t.pop("auto_merge", None)
                 s.dirty = True
-            if t["state"] == "ready" and t.get("auto_merge") and t.get("pr") and not t.get("attention") and t.get("_pr_fresh"):
+            if t["state"] == "ready" and t.get("auto_merge") and t.get("pr") and not t.get("attention") and t.get("_pr_fresh") \
+                    and not busy_again(t, [detail(k) for k in live_agents(s.key(t))]):  # FAC-107: not under a turn just begun
                 if not merge_now(s, t):
                     report["done"].append(t["id"])
             t.pop("_pr_fresh", None)

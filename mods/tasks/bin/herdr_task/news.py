@@ -159,9 +159,13 @@ def news_pass(report, folder=None):
                 prev = mine.get(str(t["id"]))
                 b = t.get("back") or {}
                 hold = (v["status"] == "working" and (prev or {}).get("status") in ("ready", "merging")
-                        and (t["state"] == "ready" and v.get("why") == WORKING_AGAIN
+                        and (t["state"] == "ready" and v.get("why") == WORKING_AGAIN and not t.get("attention")
                              or t["state"] == "running" and b.get("auto") and now() - (b.get("at") or 0) < BACK_HOLD_MS))
+                # held, then Ready: the same ready (settle_back()) is no news; a new one (its fix, then ready) is
+                held_at = (prev or {}).get("held_ready_at")
+                fresh = not hold and held_at is not None and v["status"] == "ready" and t.get("ready_at") != held_at
                 mine[str(t["id"])] = {"status": prev["status"] if hold else cur["status"], "stall": cur["stall"] or (prev or {}).get("stall"),
+                                      **({"held_ready_at": held_at or t.get("ready_at") or 0} if hold else {}),
                                       **({"needs": v["needs"]} if v.get("needs") else {}), **({"recap": True} if t.get("recap") else {}),
                                       **({"reviewer_failed": True} if rf else {})}
                 # Its backup took over (takeover()): told once; on a first look, old news.
@@ -180,7 +184,7 @@ def news_pass(report, folder=None):
                 elif v["status"] == "working" and ((prev or {}).get("status") in ("ready", "merging")
                                                  or (prev or {}).get("needs") == "attention" and t.get("attention")):
                     event = "working-again"
-                if event and ((prev or {}).get("status") != v["status"] or t.get("recap") and not (prev or {}).get("recap")
+                if event and ((prev or {}).get("status") != v["status"] or fresh or t.get("recap") and not (prev or {}).get("recap")
                               or rf and not (prev or {}).get("reviewer_failed")):
                     lines.append((event, news_line(s, t, v, event)))
                 if stall and stall[0] != (prev or {}).get("stall"):

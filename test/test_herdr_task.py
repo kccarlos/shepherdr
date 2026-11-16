@@ -758,18 +758,23 @@ class IdleCompaction(unittest.TestCase):
         self.tick.back_pass(self.store, self.task, report)
         self.assertEqual((self.task["state"], report), ("ready", {}))
         # kept for the window: its busyAgain() leaves that turn out too
-        self.assertEqual(self.task["stray_turns"], {"t1": 5})
+        self.assertEqual(self.task["stray_since"], {"t1": self.clock - 90_000})
         self.assertFalse(self.agents.busy_again(self.task, self.live))
-        # over, nothing new: Ready, its next turn new work again
+        # over, nothing new: Ready; its next wake (a new stint, even on the same turn count) is judged afresh
         self.live = self.worker("idle", 6)
         self.assertEqual(self.agents.task_status(self.task, self.live)[0], "ready")
+        self.stamp(-70_000, {"type": "user", "message": {"role": "user", "content": "Also handle the empty case"}})
+        self.live = self.worker(ago=70_000)
+        self.assertEqual(self.agents.task_status(self.task, self.live), ("working", None, "Working again"))
 
     def test_a_short_stray_turn_stays_ready_and_a_commit_flips_it(self):
-        # woken by a message, ten seconds in, nothing changed: still Ready
+        # woken by a message, ten seconds in, nothing changed: still Ready, though it set a status line
+        # once since ready (an earlier wake's): only one in this stint at work counts
+        self.task["progress"] = {"text": "Round 1 passed", "at": self.clock - 600_000, "set": self.clock - 600_000}
         self.stamp(-10_000, {"type": "user", "message": {"role": "user", "content": "<hc from=\"t9\">Round 2 passed</hc>"}})
         self.live = self.worker(ago=10_000)
         self.tick.back_pass(self.store, self.task, {})
-        self.assertEqual((self.task["state"], self.task.get("stray_turns")), ("ready", None))
+        self.assertEqual((self.task["state"], self.task.get("stray_since")), ("ready", None))
         # it commits: Working again at once, as before
         self.repo["head"] = "def"
         report = {}
@@ -795,10 +800,12 @@ class IdleCompaction(unittest.TestCase):
             p = self.mock.patch.object(m, n, v)
             p.start(); self.addCleanup(p.stop)
 
+        said_ready = self.clock - 1700_000
+
         def task(**kw):
             with store.Store(store.locate(repo), write=True) as s:
                 s.data.update(prefix="X", tasks=[{"id": 7, "title": "Fix", "space": "sp1", "ready_turns": {"t1": 5},
-                                                  "ready_at": self.clock - 1700_000, "agents": [{"address": "t1"}], **kw}])
+                                                  "agents": [{"address": "t1"}], **{"ready_at": said_ready, **kw}}])
                 s.dirty = True
 
         def passes(n=2, step=10_000):
@@ -818,12 +825,21 @@ class IdleCompaction(unittest.TestCase):
         term.update(status={"state": "idle"}, turn=6, status_ms=self.clock)
         passes()
         self.assertEqual(sent, [])
-        # one that lasts: told once, a single line
+        # a real fix inside the hold, then ready again (a new ready_at): that ready is told
         task(state="running", **back())
-        term.update(status={"state": "working"}, turn=6, status_ms=self.clock)
-        passes(25)
+        term.update(status={"state": "working"}, status_ms=self.clock)
+        passes(3)
+        task(state="ready", ready_at=self.clock)
+        term.update(status={"state": "idle"}, turn=7, status_ms=self.clock)
+        passes()
         self.assertEqual(len(sent), 1)
-        self.assertIn('event="working-again"', sent[0])
+        self.assertIn('event="ready"', sent[0])
+        # one that lasts: told once, a single line
+        task(state="running", ready_at=self.clock, **back())
+        term.update(status={"state": "working"}, turn=7, status_ms=self.clock)
+        passes(25)
+        self.assertEqual(len(sent), 2)
+        self.assertIn('event="working-again"', sent[1])
 
 
 class BackToWork(unittest.TestCase):

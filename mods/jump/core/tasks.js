@@ -90,7 +90,7 @@ export function reviewRunning(task) {
   return task.review_runs.some((r) => r.head === task.head && !done.has(r.round) && !failed.has(r.address));
 }
 // FAC-107: a later turn (ready_turns kept) counts once it has run REAL_TURN_MS (since: hc's status_ms), and never one
-// herdr-task found to be only an idle compaction (task.stray_turns); herdr-task's back_at_work() flips sooner on a
+// herdr-task found to be only an idle compaction (task.stray_since: when that stint at work began); herdr-task's back_at_work() flips sooner on a
 // real sign (a commit, changed files, its own status line).
 export const REAL_TURN_MS = 60000;
 export const laterTurn = (task, a) => !!task.ready_turns && (a.turn ?? 0) >= (task.ready_turns[a.address] ?? 0);
@@ -99,7 +99,7 @@ export function busyAgain(task, live, now = Date.now()) {
   const seen = task.ready_turns;
   if (!seen && now - (task.ready_at ?? 0) < STARTING_MS) return false;
   return live.some((a) => a.status === "working" && a.role !== "reviewer" && (a.turn ?? 0) >= (seen?.[a.address] ?? 0)
-    && task.stray_turns?.[a.address] !== (a.turn ?? 0) && (!seen || !a.since || now - a.since >= REAL_TURN_MS));
+    && !(a.since && task.stray_since?.[a.address] === a.since) && (!seen || !a.since || now - a.since >= REAL_TURN_MS));
 }
 
 // A task's attention (failing checks, a conflict, a failed merge) needs the person only while nobody is on it

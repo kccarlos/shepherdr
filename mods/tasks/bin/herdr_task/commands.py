@@ -1015,7 +1015,7 @@ def back_to_work(s, t, why, said=WORKING_AGAIN, auto=False):
     if t["state"] != "ready" and (auto or not (t.get("back") or {}).get("auto")):
         return False
     t["state"] = "running"
-    for k in ("ready_turns", "stray_turns", "merge_requested", *(() if auto else ("accepted_by",))):
+    for k in ("ready_turns", "stray_since", "merge_requested", *(() if auto else ("accepted_by",))):
         t.pop(k, None)
     t["back"] = {"at": now(), "why": why, **({"auto": True, "progress": t.get("progress")} if auto else {})}
     # by: Herdr's words, not its agent's (on_it() counts only an agent's own line).

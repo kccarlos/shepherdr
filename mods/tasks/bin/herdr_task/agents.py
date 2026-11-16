@@ -283,10 +283,8 @@ def busy_again(task, live):
     seen = task.get("ready_turns")
     if seen is None and now() - (task.get("ready_at") or 0) < STARTING_MS:
         return False
-    stray = task.get("stray_turns") or {}
     return any(status_word(k) == "working" and (k.get("labels") or {}).get("herdr.role") != "reviewer"
-               and (k.get("turn") or 0) >= (seen or {}).get(k.get("address"), 0)
-               and stray.get(k.get("address")) != (k.get("turn") or 0) for k in live)
+               and (k.get("turn") or 0) >= (seen or {}).get(k.get("address"), 0) and not stray(task, k) for k in live)
 
 
 # ---- a stray wake isn't work (FAC-107) --------------------------------------------------------
@@ -295,8 +293,9 @@ def busy_again(task, live):
 # task stays Ready, without a flip nor its news, unless the turn shows a real sign: a new commit,
 # changes in its worktree, its own status line since ready, or a minute at work (hc's status_ms)
 # that isn't an idle compaction. A turn of an idle compaction only (its log since its last turn: no
-# message, or its "Compacted while idle" notice) is kept as task["stray_turns"] for the window
+# message, or its "Compacted while idle" notice) is kept as task["stray_since"] for the window
 # (core/tasks.js busyAgain()), which also counts a later turn only once it has run REAL_TURN_MS.
+# Keyed by when that stint at work began (hc's status_ms), so the next wake is judged afresh.
 REAL_TURN_MS = 60000
 IDLE_COMPACTED = "Compacted while idle"
 
@@ -316,19 +315,18 @@ def compaction_only(task, address):
 
 def real_turn(task, k):
     """A Ready task's agent k, at work on a turn since ready: a real sign of new work in it."""
-    p = task.get("progress") or {}
-    if not p.get("by") and (p.get("set") or 0) > (task.get("ready_at") or 0):
-        return True
+    p, since = task.get("progress") or {}, k.get("status_ms")
+    if not p.get("by") and (p.get("set") or 0) > max(task.get("ready_at") or 0, since if isinstance(since, (int, float)) else 0):
+        return True  # its own status line in this stint at work
     wt = task.get("worktree") if task.get("mode") == "worktree" else None
     if wt and task.get("head") and os.path.isdir(wt):
         ok, head, _ = git(wt, "rev-parse", "HEAD")
         if ok and (head != task["head"] or git(wt, "status", "--porcelain", "--untracked-files=no")[1]):
             return True
-    since = k.get("status_ms")
     if not isinstance(since, (int, float)) or not since:
         return True  # hc doesn't say since when: as before FAC-107
-    if (task.get("stray_turns") or {}).get(k.get("address")) == (k.get("turn") or 0):
-        return False  # found an idle compaction already (stray_turns())
+    if stray(task, k):
+        return False  # found an idle compaction already (stray_since())
     return now() - since >= REAL_TURN_MS and not compaction_only(task, k.get("address"))
 
 
@@ -340,7 +338,7 @@ def later_turn(task, k):
 
 def back_at_work(task, live):
     """busy_again() with a real sign of new work (real_turn()): what flips a Ready task to Working."""
-    if not busy_again({**task, "stray_turns": None}, live):  # a real sign counts in a stray turn too
+    if not busy_again({**task, "stray_since": None}, live):  # a real sign counts in a stray turn too
         return False
     if task.get("ready_turns") is None:
         return True
@@ -348,10 +346,15 @@ def back_at_work(task, live):
                and real_turn(task, k) for k in live)
 
 
-def stray_turns(task, live):
-    """{address: turn} of its agents on a later turn that has run REAL_TURN_MS as an idle compaction
+def stray(task, k):
+    """k's stint at work is one found to be only an idle compaction (stray_since)."""
+    return bool(k.get("status_ms")) and (task.get("stray_since") or {}).get(k.get("address")) == k["status_ms"]
+
+
+def stray_since(task, live):
+    """{address: status_ms} of its agents on a later turn that has run REAL_TURN_MS as an idle compaction
     only and shows no real sign (real_turn()), for the window."""
-    return {k["address"]: k.get("turn") or 0 for k in live if k.get("address") and status_word(k) == "working"
+    return {k["address"]: k["status_ms"] for k in live if k.get("address") and status_word(k) == "working"
             and later_turn(task, k) and now() - (k.get("status_ms") or now()) >= REAL_TURN_MS and not real_turn(task, k)}
 
 

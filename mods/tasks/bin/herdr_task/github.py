@@ -707,13 +707,13 @@ def _indent(line):
 
 
 def _items(lines, i):
-    """The list a `key:` at lines[i] holds: inline ([a, b] or a) or the `- a` lines under it."""
+    """The list a `key:` at lines[i] holds: inline ([a, b] or a) or the `- a` lines under it (or at its own indent)."""
     rest = lines[i].split(":", 1)[1].strip()
     if rest:
         return [x.strip(" '\"") for x in rest.strip("[]").split(",") if x.strip()]
     out = []
     for line in lines[i + 1:]:
-        if _indent(line) <= _indent(lines[i]):
+        if _indent(line) < _indent(lines[i]) or _indent(line) == _indent(lines[i]) and not line.lstrip().startswith("-"):
             break
         if line.strip().startswith("-"):
             out.append(line.strip()[1:].strip(" '\""))
@@ -732,7 +732,7 @@ def runs_on_pr(text, base):
             return "pull_request" in re.findall(r"[\w-]+", m.group(1))
         block = []
         for x in lines[i + 1:]:
-            if _indent(x) == 0:
+            if _indent(x) == 0 and not x.startswith("-"):  # on:\n- pull_request: a list at on's own indent
                 break
             block.append(x)
         for j, b in enumerate(block):

@@ -11135,6 +11135,18 @@ class NoCIRunWithCISetUp(unittest.TestCase):
         self.age(self.commands.NO_CHECKS_MS)
         self.assertEqual((self.tick_green()["done"], len(self.merges), "no_ci" in self.task["pr"]), ([13], 1, False))
 
+    def test_the_workflow_reader_knows_the_usual_on_forms(self):
+        forms = {"on: pull_request": True, "on: [push, pull_request]": True, "on: push": False,
+                 "'on':\n  pull_request:\n    branches:\n      - main\n": True,
+                 "on:\n  pull_request:\n    branches:\n    - main\n": True,  # a list at its key's own indent
+                 "on:\n- push\n- pull_request\n": True, "on:\n  - push\n  - pull_request\n": True,
+                 "on:\n  pull_request:\n    branches:\n    - rel/*\n    types: [opened]\n": False,
+                 "on:\n  pull_request:\n    branches-ignore: [main]\n": False,
+                 "on:\n  pull_request_target:\n  push:\n": False,
+                 "on:\n  pull_request:\n    types: [opened]  # any base\njobs:\n  x:\n    branches: [nope]\n": True}
+        for text, runs in forms.items():
+            self.assertEqual(self.github.runs_on_pr(text, "main"), runs, text)
+
     def test_a_run_for_its_head_that_doesnt_show_yet_keeps_it_working(self):
         from unittest import mock
         self.workflow("  pull_request:\n")

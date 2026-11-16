@@ -29,6 +29,7 @@ from .ask import cmd_ask, cmd_ask_pane
 from .budget import cmd_recap, DECISIONS
 from .project import cmd_project
 from .simulators import cmd_simulator
+from .devices import cmd_device_wait
 
 
 # ---- another machine ------------------------------------------------------------------------
@@ -281,6 +282,8 @@ def main():
     c.add_argument("--title")
     c.add_argument("--prompt")
     c.add_argument("--prompt-file")
+    c.add_argument("--amend", help="add a dated change to the brief (kept beside it; the reviewer judges by both); "
+                                   "a running task's agent is told at once")
     task_opts(c)
     notes_opts(c)
     c.add_argument("--after", help="start only once these tasks are done: 3,5, WEB-2, vm-b:HAT-12 (\"\" clears)")
@@ -308,6 +311,13 @@ def main():
         c.add_argument("--folder", help="the task folder (default: here)")
         c.add_argument("--json", action="store_true")
         c.set_defaults(fn=cmd_simulator)
+    c = sub.add_parser("device-wait", help="this task waits on the physical device (locked, untrusted, not connected): Needs you until it's available")
+    c.add_argument("why", nargs="?", help='what the person must do, like "unlock and trust the iPhone"')
+    c.add_argument("--clear", action="store_true", help="clear the wait by hand")
+    c.add_argument("--task", dest="task_opt", help="task id (default: this worker's own task)")
+    c.add_argument("--folder", help="the task folder (default: here)")
+    c.add_argument("--json", action="store_true")
+    c.set_defaults(fn=cmd_device_wait, id=None)
     pr = sub.add_parser("project", help="start a factory project in one command (repo, settings, requirements, space, Assistant)").add_subparsers(dest="project")
     c = pr.add_parser("start", help="make sure the folder is a git repo, set factory defaults, import requirements, create or find its space and Assistant")
     c.add_argument("folder", nargs="?", help="the project's folder (default: here)")

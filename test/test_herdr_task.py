@@ -4715,6 +4715,91 @@ if sys.argv[1] == "kill" and alive:
             self.assertEqual(claude_bg_shells(text), want, text)
 
 
+class AmendBrief(unittest.TestCase):
+    """FAC-109: `edit --amend` keeps the brief, adds dated changes the reviewer and `show` see, and tells a running
+    task's agent (tell faked), never a todo one's. GateReview's setting, without rerunning its tests."""
+    setUp, env, git, change, ready = GateReview.setUp, GateReview.env, GateReview.git, GateReview.change, GateReview.ready
+
+    def edit(self, text):
+        import argparse
+        from unittest import mock
+        with mock.patch.object(self.commands, "view", lambda s, t, live=None: {**t, "status": t["state"]}), \
+                mock.patch.object(self.commands, "task_tabs", lambda *a: []), mock.patch.object(self.commands, "name_tabs", lambda *a: []):
+            self.commands.cmd_edit(argparse.Namespace(**{k: None for k in (
+                "folder", "title", "prompt", "prompt_file", "agent", "model", "effort", "reviewer", "reviewer_model",
+                "reviewer_effort", "set", "base", "start_notes", "finish_notes", "after", "at", "in_", "branch")},
+                id="SHEP-13", json=True, here=False, worktree=False, amend=text))
+
+    def show(self):
+        import argparse
+        from unittest import mock
+        out = []
+        with mock.patch.object(self.commands, "say", lambda args, v, text: out.append((v, text))), \
+                mock.patch.object(self.commands, "view", lambda s, t, live=None: {**t, "status": t["state"], "folder": self.main,
+                                                                                   "live": [], "worktree": None, "ref": "SHEP-13"}):
+            self.commands.cmd_show(argparse.Namespace(id="SHEP-13", json=False, folder=None, evidence=False))
+        return out[0]
+
+    def test_amend_stores_and_shows_keeping_the_brief(self):
+        self.edit("Only the login half; the signup half is WUKO-108.")
+        self.edit("Drop the dark-mode part.")
+        self.assertEqual(self.task["prompt"], "Make the gate.")
+        self.assertEqual([a["text"] for a in self.task["amendments"]],
+                         ["Only the login half; the signup half is WUKO-108.", "Drop the dark-mode part."])
+        self.assertTrue(all(isinstance(a["at"], int) for a in self.task["amendments"]))
+        v, text = self.show()
+        self.assertEqual([a["text"] for a in v["amendments"]], [a["text"] for a in self.task["amendments"]])  # --json
+        brief, head = text.index("Make the gate."), text.index("Brief changes (newest last, these win over the brief above):")
+        self.assertLess(brief, head)
+        self.assertLess(text.index("Only the login half"), text.index("Drop the dark-mode part."))
+        self.assertGreater(text.index("Only the login half"), head)
+        with self.assertRaises(self.commands.Fail):
+            self.edit("  ")
+
+    def test_the_reviewer_prompt_has_the_amendment_after_the_brief(self):
+        self.edit("Only the login half.")
+        self.ready()
+        cmd = self.runs[0][self.runs[0].index("--") + 1:]
+        prompt = cmd[cmd.index("-i") + 1]
+        brief = prompt.index("Make the gate.")
+        head = prompt.index("Brief changes (newest last, these win over the brief above):")
+        self.assertLess(brief, head)
+        self.assertLess(head, prompt.index("Only the login half."))
+        self.assertLess(prompt.index("Only the login half."), prompt.index(f"Review commit {self.head}"))
+
+    def test_a_running_tasks_agent_is_told(self):
+        self.edit("Only the login half.")
+        self.assertEqual(len(self.told), 1)
+        self.assertIn("The brief of SHEP-13 changed: Only the login half.", self.told[0])
+
+    def test_the_real_tell_sends_through_hc_without_starting_one(self):
+        from unittest import mock
+        import herdr_task.news as news
+        sent = []
+        with mock.patch.object(self.commands, "tell", self.real_tell), \
+                mock.patch.object(self.commands, "workers", lambda s, t: [{"address": "w1"}]), \
+                mock.patch.object(news, "send_or_hold", lambda to, msg: sent.append((to, msg)) or True), \
+                mock.patch.object(self.commands, "start_again", mock.Mock(side_effect=AssertionError("started"))):
+            self.edit("Only the login half.")
+        self.assertEqual(sent, [("w1", "The brief of SHEP-13 changed: Only the login half.\n"
+                                       "Work to it from now on; your reviewer judges by it too.")])
+
+    def test_a_failed_send_keeps_the_change(self):
+        from unittest import mock
+        with mock.patch.object(self.commands, "tell", mock.Mock(side_effect=self.commands.Fail("hc send failed"))):
+            self.edit("Only the login half.")
+        self.assertEqual([a["text"] for a in self.task["amendments"]], ["Only the login half."])
+
+    def test_amend_on_a_todo_task_sends_nothing(self):
+        self.task["state"] = "todo"
+        self.edit("Only the login half.")
+        self.assertEqual(self.told, [])
+        self.assertEqual(len(self.task["amendments"]), 1)
+        from herdr_task.launch import task_text
+        self.assertTrue(task_text(self.task).endswith("Only the login half."))  # the worker's brief at start has it
+
+
+
 class LoopBreaker(GateReview):
     """FAC-54: a task whose herdr-task rounds don't converge, or that is far over its estimate, stops
     as Needs you "Recap required"; ready refuses until the Assistant decides (continue once)."""
@@ -10572,6 +10657,106 @@ class SimulatorPool(unittest.TestCase):
         self.assertEqual(self.shutdowns(), [self.U1])
         lst = json.loads(self.run_cli("simulator", "list", "--folder", self.repo, "--json")[1])["simulators"]
         self.assertEqual([r["holder"] for r in lst], [None])
+
+
+class DeviceWait(unittest.TestCase):
+    """FAC-110: a task waiting only on the physical iPhone says so as Needs you, alerts once, and the tick clears it
+    (and tells its worker) once a paired device is available; unknown availability never clears it."""
+
+    run_cli, U1, U2 = SimulatorPool.run_cli, SimulatorPool.U1, SimulatorPool.U2
+
+    def setUp(self):
+        from unittest import mock
+        SimulatorPool.setUp(self)
+        import herdr_task.agents as agents, herdr_task.commands as commands, herdr_task.devices as devices, herdr_task.news as news
+        self.agents, self.devices, self.mock, self.alerts, self.sent, self.clock = agents, devices, mock, [], [], 10_000_000
+        self.worker = {"address": "t5", "status": {"state": "idle"}, "foreground": {"pid": 100, "name": "claude"}, "labels": {}}
+        for p in (mock.patch.object(commands, "send_alert", lambda *a, **k: self.alerts.append(a) or {}),
+                  mock.patch.object(devices, "now", lambda: self.clock),
+                  mock.patch.object(agents, "live_agents", lambda key: [self.worker]), mock.patch.object(agents, "detail", lambda k: k),
+                  mock.patch.object(news, "send_or_hold", lambda addr, text, how="send": self.sent.append((addr, text)) or "sent")):
+            p.start(); self.addCleanup(p.stop)
+        self.assertEqual(self.run_cli("add", "Device check", "--folder", self.repo)[0], 0)
+        with self.store.Store(self.store.locate(self.repo), write=True) as s:
+            self.slug = s.slug
+            s.find("1").update(state="running", started=1, agents=[{"address": "t5", "agent": "claude", "at": 1}])
+            s.dirty = True
+        self.env = {"HERDR_BROWSER_TASK": f"{self.slug}#1", "HC_TERMINAL_ID": "t5"}
+
+    def task(self):
+        with self.store.Store(self.store.locate(self.repo), write=False) as s:
+            return s.find("1")
+
+    def tick(self, answer):
+        calls = []
+        self.devices.device_pass({}, self.repo, check=lambda: calls.append(1) or answer)
+        return len(calls)
+
+    def test_the_wait_shows_as_needs_you_with_its_reason_and_alerts_once(self):
+        import herdr_task.output as output
+        for _ in range(2):
+            self.assertEqual(self.run_cli("device-wait", "unlock and trust the iPhone", env=self.env)[0], 0)
+        self.assertEqual(len(self.alerts), 1)
+        self.assertEqual(self.alerts[0][1], "Device not available: unlock and trust the iPhone")
+        t = dict(self.task(), progress={"text": "Waiting on the iPhone", "set": 1})  # its own status line doesn't hide it
+        why = "Device not available: unlock and trust the iPhone"
+        self.assertEqual(self.agents.task_status(t, [self.worker]), ("needs", "reply", why))
+        with self.store.Store(self.store.locate(self.repo), write=False) as s, \
+                self.mock.patch.object(output, "waiting_for", lambda s, t: []), self.mock.patch.object(output, "waiting_ext", lambda t: []), \
+                self.mock.patch.object(output, "subagents", lambda key: []):
+            v = output.view(s, t, [self.worker])
+        self.assertEqual((v["status"], v["why"]), ("needs", why))
+        self.assertTrue("device-wait" in self.launch.OWN and self.launch.own_command("/x/herdr-task", "/x/herdr-task device-wait --clear"))
+        self.assertEqual(self.run_cli("device-wait", "--clear", env=self.env)[0], 0)
+        self.assertNotIn("device_wait", self.task())
+
+    def test_a_tick_that_finds_the_device_clears_it_and_tells_the_worker(self):
+        self.run_cli("device-wait", "unlock and trust the iPhone", env=self.env)
+        self.assertEqual(self.tick(True), 1)
+        self.assertNotIn("device_wait", self.task())
+        self.assertEqual(self.sent, [("t5", "The device is available now: carry on with the device check.")])
+        self.assertEqual(len(self.alerts), 1)
+
+    def test_a_wait_again_soon_after_a_clear_neither_alerts_nor_loops(self):
+        self.run_cli("device-wait", "unlock the iPhone", env=self.env)
+        self.tick(True)
+        self.clock += 60_000  # still locked, though devicectl read it as available: it waits again
+        self.run_cli("device-wait", "unlock the iPhone", env=self.env)
+        self.clock += 60_000
+        self.assertEqual(self.tick(True), 1)
+        self.assertIn("device_wait", self.task())
+        self.assertEqual((len(self.alerts), len(self.sent)), (1, 1))
+        for answer in (False, True):
+            self.clock += 60_000
+            self.tick(answer)
+        self.assertNotIn("device_wait", self.task())
+        self.assertEqual(len(self.sent), 2)
+
+    def test_unknown_never_clears(self):
+        self.run_cli("device-wait", "connect the iPhone", env=self.env)
+        self.assertEqual(self.tick(None), 1)
+        self.assertEqual(self.tick(True), 0)  # at most once a minute
+        for _ in range(3):
+            self.clock += 60_000
+            self.tick(None)
+        self.assertIn("device_wait", self.task())
+        self.assertEqual(self.sent, [])
+        with self.mock.patch.object(self.devices.sys, "platform", "linux"):
+            self.assertIsNone(self.devices.device_available())
+
+    def test_device_available_reads_devicectl_json(self):
+        out = os.path.join(self.tmp, "devicectl.json")
+        with open(os.path.join(self.bin_dir, "xcrun"), "w") as f:
+            f.write(f"#!{sys.executable}\nimport sys\nsys.stdout.write(open({out!r}).read())\n")
+        dev = lambda tunnel: {"identifier": "X", "connectionProperties": {"pairingState": "paired", "tunnelState": tunnel}}
+        with self.mock.patch.object(self.devices.sys, "platform", "darwin"):
+            for body, want in ((json.dumps({"result": {"devices": [dev("connected")]}}), True),
+                               (json.dumps({"result": {"devices": [dev("disconnected")]}}), True),  # "available (paired)"
+                               (json.dumps({"result": {"devices": [dev("unavailable")]}}), False),
+                               ("not json", None)):
+                with open(out, "w") as f:
+                    f.write(body)
+                self.assertIs(self.devices.device_available(), want)
 
 
 class EndGroup(unittest.TestCase):

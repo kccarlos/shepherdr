@@ -474,7 +474,7 @@ def cmd_recap(args):
             except OSError:
                 text = None
             lines = [f"{s.ref(t)}: " + (rc["title"] if rc else "no recap open")] + [f"- {x}" for x in (rc or {}).get("reasons", [])]
-            lines += [f"decided: {d['decision']} ({d['why']})" for d in t.get("recaps") or []]
+            lines += [f"decided: {d['decision']}{' --small' if d.get('small') else ''} ({d['why']})" for d in t.get("recaps") or []]
             lines += ["", text.strip()] if text else ["(no RECAP.md yet)"] if rc else []
             say(args, {"recap": rc, "recaps": t.get("recaps") or [], "recap_md": text}, "\n".join(lines))
             return
@@ -490,8 +490,12 @@ def cmd_recap(args):
             raise Fail("--small goes with --decide continue only.")
         if args.decide == "continue" and t.get("recaps"):
             if any(d.get("small") for d in t["recaps"]):
-                raise Fail(f"{s.ref(t)} already had its small continue and went past its bound ({'; '.join(rc.get('reasons') or ['recap again'])}): "
+                why = rc.get("reasons") or ["a recap again"]
+                past = "went past its bound" if any(w.startswith("past the small continue's bound") for w in why) else "stopped again"
+                raise Fail(f"{s.ref(t)} already had its small continue and {past} ({'; '.join(why)}): "
                            f"no third continue; split it, give it a new approach, or drop it.")
+            if not any(d.get("decision") == "continue" for d in t["recaps"]):
+                raise Fail(f"{s.ref(t)} already had a recap decided without continue: split it, give it a new approach, or drop it.")
             if not small:
                 raise Fail(f"{s.ref(t)} already had its one continue after a recap: split it, give it a new approach, or drop it. "
                            f"For a small follow-up fix (a nit, a one-line test fix): --decide continue --small "

@@ -4714,8 +4714,7 @@ class LoopBreaker(GateReview):
     def test_a_second_continue_small_is_bounded_and_a_third_is_refused(self):
         """FAC-108: a second recap can continue once more with --small: 1 more round, 60 more lines."""
         from unittest import mock
-        from herdr_task.budget import budget_pass, budget_lines, change_lines, size_triggers
-        self.ready()
+        from herdr_task.budget import budget_lines, change_lines, size_triggers
         self.task.pop("recaps", None)
         self.task["recap"] = {"title": "Recap required: x", "reasons": ["x"]}
         with self.assertRaises(self.commands.Fail) as e:
@@ -4738,14 +4737,18 @@ class LoopBreaker(GateReview):
         self.assertIn("at most 1 more review round and 60 more changed lines", self.told[-1])
         self.assertIn("recap decided: continue --small (a nit after the rebase)", budget_lines(self.task))
         self.assertEqual(self.why(), [])
-        self.rounds(("pass", 0, ""), since=dec["at"])
-        self.assertEqual(self.why(), [])  # within the bound: a passing round
         self.assertEqual(size_triggers(self.task), [])
-        # the extra round still has Must-fix findings: past the bound, recap again
-        self.rounds(("changes", 1, "a.py"), since=dec["at"])
-        self.assertIn("past the small continue's bound", self.why()[0])
-        with mock.patch.object(self.commands, "workers", lambda s, t: []):
-            self.assertTrue(budget_pass(self.store, self.task))
+        # the extra round, for real, still has Must-fix findings: past the bound, a recap again, not "Fix these"
+        self.head = self.change("the nit")
+        self.task["reviews"] = []  # second_recap's stand-in rounds: numbered like the real runs
+        with mock.patch.object(self.commands, "workers", lambda s, t: [{"address": "w1"}]):
+            self.ready()
+            self.assertEqual(self.task["review_runs"][-1]["head"], self.head)  # ready started the extra round
+            self.verdict(self.task["review_runs"][-1]["address"], passed=False, changes="major: still a nit", must_fix=1)
+        self.assertIn("past the small continue's bound", self.task["recap"]["reasons"][0])
+        self.assertEqual(self.task["attention"], "Recap required again: change direction")
+        self.assertIn("RECAP.md", self.told[-1])
+        self.assertNotIn("Fix these", self.told[-1])
         for small in (False, True):  # no third continue in any form, and the refusal names the bound
             with self.assertRaises(self.commands.Fail) as e:
                 self.recap("continue", small=small)

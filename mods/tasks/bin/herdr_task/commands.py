@@ -14,7 +14,7 @@ import time
 from .checks import checks_line
 from .base import Fail, git, guard, hc_json, kill_agent, now, run, STORE, stop_note, VERSION
 from .settings import (
-    accept_bar, accepted_word, auto_accepter, agent_argv, agent_key, argv_for, bare, build_dir_of, codex_review_argv, ensure_build_dir, FABLE,
+    accept_bar, accepted_word, auto_accepter, agent_argv, fable_said, agent_key, argv_for, bare, build_dir_of, codex_review_argv, ensure_build_dir, FABLE,
     fable_due, gate_min, merge_hold, merge_policy,
     merge_wait_why, MUST_WORDS, remove_build_dir, review_kind, review_limits, set_opts, settings_block, settings_for, space_base,
     task_settings, worker_argv, worktrees_on,
@@ -26,7 +26,7 @@ from .agents import (
 from .sessions import refresh_sessions
 from .github import (already_merged, pr_head_problem, push_branch, drop_branch, finish, gh, github, merged_here, needs_approval, note_checks, own_work, pr_adopt, pr_open,
                      pr_pending, pr_problem, pr_repo, pr_behind, pr_update_branch, synced_head, task_problem, SYNC_CHECKS_MS, SYNC_GRACE_MS, UPDATE_CONFLICT, pr_view, remote_of, task_github, update_main, watch_main)
-from .github import CHECKS_RUNNING as PR_CHECKS_RUNNING
+from .github import CHECKS_RUNNING as PR_CHECKS_RUNNING, NO_CHECKS_MS
 from .launch import (
     base_ref, brief, caller_labels, caller_space, current_base, default_space, folder_for, handoff, is_coordinator, launch, name_tabs,
     own_path, parent_for, resume_argv, REVIEW_READS, review_reads, retag_tabs, reviewer_sandbox, sandboxes, set_branch, tab_title, task_tabs,
@@ -667,7 +667,7 @@ def gate_step(s, t):
         s.dirty = True
         return f"{s.ref(t)}: {why}."
     # FAC-99: a judgement task's last round is Fable's, judging it as the owner would; never capped by its rounds.
-    fable = not merge_only and need > gate_min(s, t) and gate_passes(t, head) >= need - 1
+    fable = not merge_only and fable_due(s, t) and (fable_said(t, "changes") or gate_passes(t, head) >= need - 1)
     granted = not merge_only and not fable and used >= rounds and auto_grant(s, t, mine, rounds, head)
     if granted:
         rounds += 1
@@ -735,7 +735,9 @@ FABLE_WORDS = ("This round is Fable's (FAC-99): you stand in for the owner at th
 
 def gate_need(s, t):
     """Passing rounds herdr-task's reviewer gives a head: review.min, plus Fable's round for a judgement task."""
-    return gate_min(s, t) + (1 if fable_due(s, t) else 0)
+    if not fable_due(s, t):
+        return gate_min(s, t)
+    return 1 if fable_said(t, "changes") else gate_min(s, t) + 1  # after its changes, Fable alone reviews the fix
 
 
 AUTO_GRANTS = 2  # FAC-95: rounds Herdr adds itself per task, then the Assistant decides (review-more)
@@ -1715,6 +1717,8 @@ def merge_now(s, t):
             return CHECKS_RUNNING
         if not t.get("accepted_by") and (by := auto_accepter(s, t)):  # FAC-99: its evidence, on the head merged
             if not v.get("statusCheckRollup"):
+                if t["pr"].get("wait") or now() - (t.get("ready_at") or 0) < NO_CHECKS_MS:
+                    return CHECKS_RUNNING  # its checks may not show yet
                 t.pop("auto_merge", None)
                 t["accept_wait"] = "no CI checks ran on it, so it waits for your Accept"
                 return t["accept_wait"]

@@ -733,7 +733,8 @@ def merge_wait_why(s, t):
 
 
 # FAC-99: asks only the owner answers (herdr-task ask --kind): their task never auto-accepts.
-OWNER_ASK_KINDS = ("release", "paid-key", "delete", "install", "reset", "owner")
+OWNER_ASK_KINDS = ("release", "paid-key", "delete", "install", "reset", "owner", "decision", "gate", "rule")
+FABLE_CHANGES = 2  # Fable's change requests on a task, then the person decides
 FABLE = {"agent": "claude", "model": "claude-fable-5-2", "effort": None}
 
 
@@ -748,7 +749,11 @@ def owner_gate(s, t, asks):
     if not auto_accept_on(s, t):
         return "auto-accept is off"
     kinds = sorted({a.get("kind") for a in asks if a.get("kind") in OWNER_ASK_KINDS})
-    return f"an open {'/'.join(kinds)} question is yours to answer" if kinds else None
+    if kinds:
+        return f"an open {'/'.join(kinds)} question is yours to answer"
+    # Only a plan question its own worker raised is Fable's to judge; one its Assistant asked is the person's.
+    workers = {a.get("address") for a in t.get("agents") or [] if isinstance(a, dict)}
+    return "an open question its Assistant asked is yours to answer" if any(a.get("to") not in workers for a in asks) else None
 
 
 def fable_runs(t):
@@ -756,11 +761,18 @@ def fable_runs(t):
     return {r.get("address") for r in t.get("review_runs") or [] if r.get("model") == FABLE["model"]}
 
 
+def fable_said(t, verdict):
+    """How many of Fable's rounds on this task gave this verdict."""
+    fable = fable_runs(t)
+    return sum(1 for r in t.get("reviews") or [] if r.get("by") in fable and r.get("verdict") == verdict)
+
+
 def fable_due(s, t):
     """A judgement task (design/doc, or open plan questions) that auto-accept hands to a Fable round."""
     from .ask import open_asks
     asks = open_asks(s, t)
-    return t.get("mode") == "worktree" and bool(review_kind(t) or asks) and not owner_gate(s, t, asks)
+    return (t.get("mode") == "worktree" and bool(review_kind(t) or asks) and not owner_gate(s, t, asks)
+            and fable_said(t, "changes") < FABLE_CHANGES)
 
 
 def accept_bar(s, t):
@@ -775,7 +787,8 @@ def accept_bar(s, t):
     revs = [r for r in t.get("reviews") or [] if head and r.get("head") == head]
     if review_kind(t) or asks:
         ok = any(r.get("by") in fable_runs(t) and r.get("verdict") == "pass" for r in revs)
-        return ("fable", None) if ok else (None, "waits for Fable's review round")
+        return ("fable", None) if ok else (None, "Fable asked for changes twice" if fable_said(t, "changes") >= FABLE_CHANGES
+                                           else "waits for Fable's review round")
     gate = gate_min(s, t)  # at least one passing round, even with review off
     got = sum(1 for r in revs if ((r.get("started_by") == "herdr-task" and r.get("verdict") == "pass") if gate else
                                   r.get("result") in ("report", "pass")))

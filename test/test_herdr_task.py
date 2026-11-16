@@ -10626,7 +10626,19 @@ class AutoAccept(unittest.TestCase):
 
     def owner_ask(self, kind):
         self.ask.save({"id": "a1", "question": "Tag v2.0.1?", "options": ["Yes", "No"], "recommend": "Yes", "task": "SHEP-13",
-                       "to": "t-coord", "at": 1, "kind": kind})
+                       "to": "t-coord", "at": 1, **({"kind": kind} if kind else {})})
+
+    def test_checks_not_shown_yet_wait_and_none_at_all_go_to_the_person(self):
+        self.ready(); self.verdict("term-1"); self.verdict("term-2")
+        rows = []
+        view = lambda t: {"state": "OPEN", "mergeable": "MERGEABLE", "headRefOid": self.head, "statusCheckRollup": rows}
+        from unittest import mock
+        with mock.patch.object(self.commands, "pr_view", view), mock.patch.object(self.tick, "pr_view", view):
+            self.assertEqual((self.tick_green()["done"], self.task.get("auto_merge")), ([], "checks"))  # just opened: waits
+            self.task["ready_at"] -= self.commands.NO_CHECKS_MS
+            self.task["pr"].pop("wait", None)
+            self.assertEqual(self.commands.merge_now(self.store, self.task), "no CI checks ran on it, so it waits for your Accept")
+        self.assertEqual((self.merges, "auto_merge" in self.task, self.task["state"]), ([], False, "ready"))
 
     def test_code_task_meeting_the_bar_is_merged_by_the_engine_with_its_evidence(self):
         import herdr_task.news as news
@@ -10655,6 +10667,7 @@ class AutoAccept(unittest.TestCase):
     def test_missing_proof_or_an_owner_ask_waits_for_the_person_and_says_why(self):
         for why, prep in (("no proof artifact attached", lambda: setattr(self, "proof", None)),
                           ("an open release question is yours to answer", lambda: self.owner_ask("release")),
+                          ("an open question its Assistant asked is yours to answer", lambda: self.owner_ask(None)),
                           ("auto-accept is off", lambda: self.task["set"].update(auto_accept="off"))):
             with self.subTest(why=why):
                 self.setUp()
@@ -10684,6 +10697,12 @@ class AutoAccept(unittest.TestCase):
         self.verdict("term-2", passed=False, changes="major: the guide skips step 3", must_fix=1)
         self.assertIn("the guide skips step 3", self.told[-1])
         self.assertEqual((self.task["state"], "auto_merge" in self.task, "recap" in self.task, self.merges), ("running", False, False, []))
+        self.change("doc fixed")
+        self.ready()  # Fable alone reviews the fix
+        cmd = self.runs[-1][self.runs[-1].index("--") + 1:]
+        self.assertEqual((len(self.runs), cmd[cmd.index("--model") + 1]), (3, "claude-fable-5-2"))
+        self.verdict("term-3")
+        self.assertEqual((self.tick_green()["done"], self.task["accepted_by"]), ([13], "fable"))
 
     def test_a_release_ask_keeps_a_design_task_with_the_person(self):
         self.task["set"] = {"review_kind": "design"}
@@ -10695,7 +10714,7 @@ class AutoAccept(unittest.TestCase):
 
     def test_a_plain_open_ask_is_judged_by_fable(self):
         self.ask.save({"id": "a2", "question": "Keep the old route?", "options": ["Yes", "No"], "recommend": "Yes", "task": "SHEP-13",
-                       "to": "t-coord", "at": 2})
+                       "to": "w1", "at": 2})  # raised by its own worker
         self.ready(); self.verdict("term-1"); self.verdict("term-2")
         self.assertEqual(len(self.runs), 3)
         self.verdict("term-3")

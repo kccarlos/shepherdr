@@ -5126,12 +5126,21 @@ class Scheduled(unittest.TestCase):
         self.assertEqual(self.tick_at(None), ["APP-3", "APP-4"])
         v = self.run_cmd(self.commands.cmd_config, prefix=None, build_dir=None, set=["tasks.max_running=default"])
         self.assertEqual(v["max_running"], 2)  # Everywhere's again
-        for bad in (["tasks.max_running=0"], ["tasks.merge=auto"]):
+        with open(settings.SETTINGS) as f:
+            self.assertNotIn("tasks", json.load(f)["spaces"]["sp1"])
+        for bad in (["tasks.max_running=0"], ["tasks.merge=auto"], ["tasks.max_running"]):
             with self.assertRaises(self.Fail):
                 self.run_cmd(self.commands.cmd_config, prefix=None, build_dir=None, set=bad)
         os.remove(settings.SETTINGS)
         with self.assertRaises(self.Fail):  # no space works here and none was named
             self.run_cmd(self.commands.cmd_config, prefix=None, build_dir=None, set=["tasks.max_running=3"])
+        for text in ('{"spaces": {"sp1": {"folder": "x"}', json.dumps({"pushed_from": "mini", "spaces": {}})):
+            with open(settings.SETTINGS, "w") as f:  # a broken file, a pushed copy: left as they are
+                f.write(text)
+            with self.assertRaises(self.Fail):
+                self.run_cmd(self.commands.cmd_config, prefix=None, build_dir=None, space="sp1", set=["tasks.max_running=3"])
+            with open(settings.SETTINGS) as f:
+                self.assertEqual(f.read(), text)
 
     def four_tasks(self):
         """FAC-10's folder: two tasks went ready then done, one still works, the fourth is queued."""

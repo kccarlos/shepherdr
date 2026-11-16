@@ -1525,8 +1525,8 @@ def cmd_config(args):
         if not cfg:
             s.data.pop("config", None)
         for pair in getattr(args, "set", None) or []:  # FAC-103: the folder's "Tasks at once" from the CLI
-            k, _, v = pair.partition("=")
-            if k.strip().lower() not in ("tasks.max_running", "max_running"):
+            k, eq, v = pair.partition("=")
+            if not eq or k.strip().lower() not in ("tasks.max_running", "max_running"):
                 raise Fail(f"config --set takes tasks.max_running=N, not {pair!r}.")
             v = v.strip().strip("\"'")
             if v and v.lower() != "default" and not (v.isdigit() and 1 <= int(v) <= 50):

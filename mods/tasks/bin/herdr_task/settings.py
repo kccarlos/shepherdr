@@ -93,8 +93,17 @@ def write_autopilot(space, values):
 def write_max_running(s, space, value):
     """FAC-103: `config --set tasks.max_running=N`, the folder's "Tasks at once" as the window writes it:
     in the space layer of the space working in this folder (--space's when given). None unsets it
-    there. Returns the space id. Refused on a pushed copy, as write_autopilot."""
-    d = read_settings()
+    there. Returns the space id. Refused on a pushed copy, as write_autopilot, and on a file that
+    is there but unreadable (writing would lose every other setting in it)."""
+    try:
+        with open(SETTINGS) as f:
+            d = json.load(f)
+    except FileNotFoundError:
+        d = {}
+    except (OSError, ValueError) as e:
+        raise Fail(f"Can't read {SETTINGS} ({e}): not changing it.")
+    if not isinstance(d, dict):
+        raise Fail(f"{SETTINGS} isn't a settings object: not changing it.")
     if d.get("pushed_from"):
         raise Fail("This machine's Shepherdr settings are a copy from the machine whose window sets them: change Tasks at once in Settings there.")
     spaces = d.setdefault("spaces", {})
@@ -108,7 +117,7 @@ def write_max_running(s, space, value):
     layer["folder"] = folder
     tasks = dict(layer.get("tasks") or {})
     tasks.pop("max_running", None) if value is None else tasks.update(max_running=value)
-    layer["tasks"] = tasks
+    layer.update(tasks=tasks) if tasks else layer.pop("tasks", None)
     d["version"] = 1
     os.makedirs(os.path.dirname(SETTINGS), exist_ok=True)
     tmp = f"{SETTINGS}.{os.getpid()}.tmp"

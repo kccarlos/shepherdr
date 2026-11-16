@@ -89,11 +89,17 @@ export function reviewRunning(task) {
   const failed = new Set((task.review_failures ?? []).map((f) => f.address).filter(Boolean));
   return task.review_runs.some((r) => r.head === task.head && !done.has(r.round) && !failed.has(r.address));
 }
+// FAC-107: a later turn (ready_turns kept) counts once it has run REAL_TURN_MS (since: hc's status_ms), and never one
+// herdr-task found to be only an idle compaction (task.stray_since: when that stint at work began); herdr-task's back_at_work() flips sooner on a
+// real sign (a commit, changed files, its own status line).
+export const REAL_TURN_MS = 60000;
+export const laterTurn = (task, a) => !!task.ready_turns && (a.turn ?? 0) >= (task.ready_turns[a.address] ?? 0);
 export function busyAgain(task, live, now = Date.now()) {
   if (task.state !== "ready" || task.merge_requested) return false;
   const seen = task.ready_turns;
   if (!seen && now - (task.ready_at ?? 0) < STARTING_MS) return false;
-  return live.some((a) => a.status === "working" && a.role !== "reviewer" && (a.turn ?? 0) >= (seen?.[a.address] ?? 0));
+  return live.some((a) => a.status === "working" && a.role !== "reviewer" && (a.turn ?? 0) >= (seen?.[a.address] ?? 0)
+    && !(a.since && task.stray_since?.[a.address] === a.since) && (!seen || !a.since || now - a.since >= REAL_TURN_MS));
 }
 
 // A task's attention (failing checks, a conflict, a failed merge) needs the person only while nobody is on it
@@ -176,6 +182,8 @@ export function place(list, task, { live = [], helpers = [], loaded = true, now 
   else if (task.trust_ask && live.some((a) => a.address === task.trust_ask && !a.status)) need("asks", task.waits ?? REASONS.trust);
   // Out of review rounds (FAC-95, herdr-task's task_status()): it waits on its Assistant whatever its agent does.
   else if (st === "running" && task.review_out) need("reply", task.waits ?? OUT_OF_ROUNDS);
+  // Waits on the physical device (FAC-110, herdr-task device-wait): locked, untrusted or not connected.
+  else if (st === "running" && live.length && task.device_wait?.why) need("reply", `Device not available: ${task.device_wait.why}`);
   // Back at work after it said ready: no Accept until it says ready again.
   else if (busyAgain(task, live, now)) { section = "working"; why = WORKING_AGAIN; }
   else if (fixing) { section = "working"; why = st === "ready" ? WORKING_AGAIN : null; }
@@ -187,7 +195,7 @@ export function place(list, task, { live = [], helpers = [], loaded = true, now 
     // Said ready but not at rest yet (SHEP-148, herdr-task's not_at_rest()): still at work in the turn it said ready
     // in, or its own work still running (a background job, a Monitor, a helper: task.own_work, kept by its scheduler).
     // Working until it is, and only then Ready.
-    if (section === "ready" && live.length && (busy || task.own_work || live.some((a) => a.status === "working" && a.role !== "reviewer"))) section = "working";
+    if (section === "ready" && live.length && (busy || task.own_work || live.some((a) => a.status === "working" && a.role !== "reviewer" && !laterTurn(task, a)))) section = "working";
   }
   // Its agents' terminals aren't known yet (the machine is loading): no verdict yet.
   else if (states.some((x) => x !== "idle" && x !== "done") || (!live.length && !loaded)) section = "working";

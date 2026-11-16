@@ -13,6 +13,9 @@
   shepherdr web status                  which machine serves it, and its link
   shepherdr web https-port [N]          the tailnet HTTPS port this machine shares the web app on (default 443): another
                                         one when something else here holds 443; no N: the one now
+  shepherdr web owners [login ...|none] the Tailscale logins that may open the web app (the service.owners setting):
+                                        needed on a tagged machine (tag:mac…), which has no owner; elsewhere beside the
+                                        machine's owner; no login: the ones now
   shepherdr secrets move-to <machine|here> [--restore]   the machine that keeps the secrets (the vault agents use by
                                         name): moves them there, with a backup on both; --restore: the old one takes its
                                         backup back when the other is gone for good
@@ -60,6 +63,7 @@ import hashlib
 import json
 import os
 import pwd
+import re
 import shutil
 import subprocess
 import sys
@@ -1454,6 +1458,8 @@ def say_web(root, home, a, since):
         return
     if w.get("share_error"):
         say(f"  ✗ the web app isn't shared: {w['share_error']}")
+    elif w.get("owners_unset"):
+        say(f"  ✗ {w['why']}")
     elif w.get("link") and not (w.get("serve") or {}).get("host"):
         say(f"  web app: {w['link']}")
 
@@ -1474,6 +1480,8 @@ def serve_check(root):
     if w.get("share_error"):
         # tailscale serve refused it here: its own words, and another port when the HTTPS port is taken (GitHub #754)
         bad.append(f"web app isn't shared: {w['share_error']}")
+    elif w.get("owners_unset"):
+        bad.append(f"web app lets nobody in: {w['why']}")
     elif w.get("why"):
         notes.append(f"web app: {w['why']}")
     if w.get("https_port", 443) != 443:
@@ -1885,9 +1893,79 @@ def cmd_web_https_port(a):
     return 1 if out["error"] else 0
 
 
+LOGIN = re.compile(r"^[^\s,@]+@[^\s,]+$")
+
+
+def read_owners(root):
+    """(settings path, its contents, service.owners as a list): who may open the web app beside this machine's owner,
+    or instead of one on a tagged Tailscale machine (service/auth.ts ownersIn reads the same)."""
+    path = where_for(root).path("settings")
+    try:
+        with open(path) as f:
+            d = json.load(f)
+    except (OSError, ValueError):
+        d = {}
+    if not isinstance(d, dict):
+        d = {}
+    v = ((d.get("everywhere") or {}).get("service") or {}).get("owners")
+    raw = v if isinstance(v, list) else [v] if isinstance(v, str) else []
+    words = " ".join(x for x in raw if isinstance(x, str)).replace(",", " ").split()
+    return path, d, list(dict.fromkeys(words))
+
+
+def cmd_web_owners(a):
+    """shepherdr web owners [login ...|none]: the service.owners setting, the Tailscale logins that may open the web
+    app. A tagged machine (Tailscale tags, e.g. tag:mac) has no user owner, so it lets nobody in until this names
+    someone; elsewhere they're let in beside the machine's owner. none: clears it. The service reads it within seconds."""
+    root = real_home()
+    path, d, owners = read_owners(root)
+    given = " ".join(([a.machine] if a.machine else []) + list(a.more or [])).replace(",", " ").split()
+    if not given:
+        if a.json:
+            print(json.dumps({"owners": owners, "settings": path}))
+        elif owners:
+            say("Who may open the web app here (service.owners): " + ", ".join(owners))
+        else:
+            say("No service.owners set: only this machine's Tailscale owner opens the web app (a tagged machine: nobody). "
+                "`shepherdr web owners <your Tailscale login>` sets it.")
+        return 0
+    if given == ["none"]:
+        new = []
+    else:
+        bad = [x for x in given if not LOGIN.match(x)]
+        if bad:
+            raise Stop(f"{bad[0]} doesn't look like a Tailscale login (you@example.com, or name@github): "
+                       "`tailscale whois $(tailscale ip -4 <a device of yours>)` shows yours")
+        new = list(dict.fromkeys(given))
+    e = d.setdefault("everywhere", {})
+    if not isinstance(e, dict):
+        e = d["everywhere"] = {}
+    svc = e.get("service") if isinstance(e.get("service"), dict) else {}
+    if new:
+        svc["owners"] = new
+        e["service"] = svc
+    else:
+        svc.pop("owners", None)
+        if svc:
+            e["service"] = svc
+        else:
+            e.pop("service", None)
+    os.makedirs(os.path.dirname(path), mode=0o700, exist_ok=True)
+    atomic_write(path, (json.dumps(d, indent=2) + "\n").encode())
+    if a.json:
+        print(json.dumps({"owners": new, "settings": path}))
+    else:
+        say(("Kept: " + ", ".join(new) + " may open the web app here") if new else "Cleared service.owners: only this machine's own Tailscale owner gets in")
+        if d.get("pushed_from"):
+            say("  this machine's settings come from another machine's Shepherdr window: set it there too, or its next push replaces it")
+    return 0
+
+
 def cmd_web(a):
     if a.action == "install-on":
         return cmd_web_install_on(a)
+    if a.action == "owners":
+        return cmd_web_owners(a)
     if a.action == "https-port":
         return cmd_web_https_port(a)
     if a.action in ("serve-from", "status"):
@@ -1902,7 +1980,7 @@ def cmd_web(a):
         argv = [bun, script, a.action] + ([a.machine] if a.machine else []) + (["--take-link"] if a.take_link else []) + (["--json"] if a.json else [])
         env = {**os.environ, "SHEPHERDR_CLI": os.path.realpath(__file__)}
         return subprocess.run(argv, env=env).returncode
-    raise Stop("shepherdr web serve-from <machine|here> [--take-link] | shepherdr web status | shepherdr web https-port [N]")
+    raise Stop("shepherdr web serve-from <machine|here> [--take-link] | shepherdr web status | shepherdr web https-port [N] | shepherdr web owners [login ...|none]")
 
 
 def cmd_where(a):
@@ -2043,8 +2121,9 @@ def main(argv):
                                                           "for updates, `shepherdr web https-port` changes it): when something else here holds 443")
             c.add_argument("--no-build", action="store_true", help="install the web app as it is in the checkout: no build, even when it's missing or old")
     w = sub.add_parser("web", help="where the web app is served from (Serve from)")
-    w.add_argument("action", choices=["serve-from", "status", "install-on", "https-port"])
-    w.add_argument("machine", nargs="?", help="a machine linked over herdr-core (hc machine ls), or here; https-port: the port")
+    w.add_argument("action", choices=["serve-from", "status", "install-on", "https-port", "owners"])
+    w.add_argument("machine", nargs="?", help="a machine linked over herdr-core (hc machine ls), or here; https-port: the port; owners: a Tailscale login, or none")
+    w.add_argument("more", nargs="*", help=argparse.SUPPRESS)
     w.add_argument("--take-link", action="store_true", help="that machine's /shepherdr is shared to something else: set it aside (moving away puts it back)")
     w.add_argument("--json", action="store_true")
     s = sub.add_parser("secrets", help="which machine keeps the secrets (Settings › Secrets › Kept on)")

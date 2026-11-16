@@ -6,7 +6,9 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { DATA, MOUNT } from "./paths.ts";
 
-export type Me = { login: string; name: string; dns: string; host: string };
+// tagged: the machine carries Tailscale tags (tag:mac…), so it has no user owner: login is "" and who may use the board
+// comes from the service.owners setting alone (owners.ts).
+export type Me = { login: string; name: string; dns: string; host: string; tagged: boolean };
 
 export const DEFAULT_HTTPS = 443;
 export const HTTPS_PORT_FILE = join(DATA, "https-port");
@@ -43,14 +45,18 @@ async function serveStatus(): Promise<any> {
 
 /** The machine owner's login and the machine's tailnet name from `tailscale status --json`'s output, or null.
  *  User ids can pass 2^53 (#845): JSON.parse would round them and miss their exact key in User, so they are read as
- *  strings. */
+ *  strings. A tagged machine (Self.Tags) has no user owner: its UserID leads to a placeholder (the machine's own name or
+ *  "tagged-devices"), never a person, so its login is "" whatever User says. */
 export function meOf(out: string): Me | null {
   try {
     const s = JSON.parse(out.replace(/"UserID"\s*:\s*(\d+)/g, '"UserID":"$1"'));
-    const user = s.User?.[String(s.Self?.UserID)];
     const dns = String(s.Self?.DNSName ?? "").replace(/\.$/, "");
-    if (!user?.LoginName || !dns) return null;
-    return { login: user.LoginName, name: user.DisplayName ?? user.LoginName, dns, host: s.Self?.HostName ?? dns.split(".")[0] };
+    const host = s.Self?.HostName ?? dns.split(".")[0];
+    if (!dns) return null;
+    if (Array.isArray(s.Self?.Tags) && s.Self.Tags.length) return { login: "", name: host, dns, host, tagged: true };
+    const user = s.User?.[String(s.Self?.UserID)];
+    if (!user?.LoginName) return null;
+    return { login: user.LoginName, name: user.DisplayName ?? user.LoginName, dns, host, tagged: false };
   } catch {
     return null;
   }

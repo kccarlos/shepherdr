@@ -109,6 +109,8 @@ shepherdr doctor      [--root DIR]: checks files, links, shared copies, herdr-ta
 
 `--port N` moves the service off `127.0.0.1:7788`; `--https-port N` shares the web app on the tailnet's port N instead
 of 443, when something else here holds 443 (`shepherdr web https-port N` changes it later; [Web](web.md)). Updates keep both.
+On a tagged Tailscale machine (`tag:mac`…), say who may open the web app once: `shepherdr web owners
+<your Tailscale login>` ([Web](web.md)).
 
 `--root DIR` installs under another folder instead of your home (it mirrors `.config/herdr-app`, `.local/bin`,
 `.config/herdr-core/templates`, `.claude`, `.codex`): a scratch try you can look through and diff. It never starts

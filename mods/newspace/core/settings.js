@@ -331,7 +331,16 @@ export function addonAbout(about, now, stop) {
 }
 
 // ---- Web -------------------------------------------------------------------------------------------------------
-export const WEB = { title: "Shepherdr on the web", link: "Link", copy: "Copy", copied: "Copied", phone: "Open it on your phone" };
+export const WEB = { title: "Shepherdr on the web", link: "Link", copy: "Copy", copied: "Copied", phone: "Open it on your phone",
+  owners: "Who may open it" };
+// Who may open the web app (the service.owners setting, service/auth.ts): its value, and how to change it. A tagged
+// Tailscale machine (tag:mac…) has no owner, so only the logins set there get in; elsewhere they join the owner. Set on
+// the machine itself (`shepherdr web owners`), never from a page: a slip there could lock the owner out.
+export const ownersValue = (owners, tagged) => owners.length ? owners.join(", ") : tagged ? "Nobody yet" : "This machine's owner";
+export const ownersAbout = (owners, tagged) => (tagged
+  ? "This machine is a tagged Tailscale device, so it has no owner: only the Tailscale logins named here open the web app."
+  : "This machine's Tailscale owner opens the web app" + (owners.length ? ", and the logins named here too." : "."))
+  + " Set it on this machine: shepherdr web owners you@example.com (several: separate them with spaces; none clears it).";
 // The Web page's state line: off (the Web add-on), not read yet, no service, or what the service last said (web.json).
 // Served from another machine (Serve from, core/host.js): says which; a move under way says that first.
 export const webState = (off, loaded, w) => (off ? "Off. Turn it on under Window › Add-ons." : !loaded ? "Reading…"

@@ -14,7 +14,7 @@ import * as APc from "../core/autopilot.js";
 import type { SettingRow, SettingSection } from "../web/shared/types.ts";
 
 const { TASK_ROWS, DEFAULTS, wordFor, valueFor, ROLES: CORE_ROLES, NOTES: CORE_NOTES, ABOUT, BACKUP, REACTIONS, SUGGESTIONS, FEEDBACK, feedbackRepo, upgradeReactions, BASE, BRANCH, branchPattern, MACHINES, OLD_NAMES, SECTIONS,
-  WEB, modelLabel, roleSel, otherCli, otherCliWords, backupProblem, homeAbout, webState, fromWord, LOADING_AGENTS, RESET, machineLabel } = C as any;
+  WEB, ownersValue, ownersAbout, modelLabel, roleSel, otherCli, otherCliWords, backupProblem, homeAbout, webState, fromWord, LOADING_AGENTS, RESET, machineLabel } = C as any;
 const AP = APc as any;
 /** Autopilot as Everywhere has it now (herdr-task's view: what Settings keeps, else what it kept before, else the
  *  defaults): its schedule's words, events, heartbeat words and what wakes it in plain words */
@@ -135,7 +135,7 @@ export class Settings {
 
   /** Every page at every level: Agents and Tasks (Everywhere and each space), Machines (all and each machine), Web.
    *  web: what the service last said of the web app (web.json: on, link, why, its QR picture's SVG). */
-  sections(web: { on: boolean; link: string | null; why: string | null; qr?: string | null; serve?: Serve } | string | null, spaces: Scope[] = [], machines: string[] = [], host = LOCAL,
+  sections(web: { on: boolean; link: string | null; why: string | null; qr?: string | null; serve?: Serve; owners?: string[]; tagged?: boolean } | string | null, spaces: Scope[] = [], machines: string[] = [], host = LOCAL,
     pilot: { everywhere: PilotEverywhere; trigger?: (space: string) => string | undefined } | null = null): SettingSection[] {
     this.host = host;
     this.scopes = spaces;
@@ -158,7 +158,7 @@ export class Settings {
   private homes: Record<string, any> | null = null;
 
   /** Web, as the window's page: the web app's state, then its link (Copy) and its QR code to open it on a phone. */
-  private web(w: { on: boolean; link: string | null; why: string | null; qr?: string | null; serve?: Serve }): SettingSection {
+  private web(w: { on: boolean; link: string | null; why: string | null; qr?: string | null; serve?: Serve; owners?: string[]; tagged?: boolean }): SettingSection {
     const rows: SettingRow[] = [{ label: WEB.title, key: "", value: "", hint: webState(!w.on, true, w), fixed: true }];
     // Serve from (core/host.js): the machine serving it now, and every connected one to move it to
     const sv = w.serve;
@@ -169,6 +169,8 @@ export class Settings {
     }
     const shown = w.on && w.link && !w.why;
     if (shown) rows.push({ label: WEB.link, key: "web.link", value: "", hint: w.link!, copy: w.link!, fixed: true });
+    // who may open it (service.owners): shown, set on the machine itself (core/settings.js ownersAbout)
+    if (w.on && w.owners) rows.push({ label: WEB.owners, key: "web.owners", value: ownersValue(w.owners, !!w.tagged), hint: ownersAbout(w.owners, !!w.tagged), fixed: true });
     return { name: title("web"), global: true, rows, ...(shown && w.qr ? { qr: w.qr, qrTitle: WEB.phone } : {}) };
   }
 

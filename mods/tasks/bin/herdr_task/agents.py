@@ -878,7 +878,8 @@ def _text(x):
 # Needs you, saying so. While any job of its own still runs, it is left alone.
 BG_NUDGE_MS = BG_GRACE_MS = 5 * 60000
 BG_ENDED_WHY = "Waits on a background job that ended"
-BG_ENDED_MSG = "Your background job {} ended (no longer running); check its output and carry on."
+BG_ENDED_MSG = ("Your background job {} ended (no longer running); check its output and carry on.",
+                "Your background jobs {} ended (no longer running); check their output and carry on.")
 
 
 def turn_since(told, live):
@@ -986,7 +987,7 @@ def _bg_scan(lines, seen):
             stamp = TIMESTAMP.search(raw)
             for m in TOOL_USE.finditer(raw):
                 opened[m.group(1)] = (m.group(2), (_ms(stamp.group(1)) if stamp else None) or now())
-            if "run_in_background" in raw or '"Monitor"' in raw:
+            if '"Bash"' in raw or '"Monitor"' in raw:  # a Bash may go to the background later (its timeout)
                 try:
                     content = (json.loads(raw).get("message") or {}).get("content") or []
                 except (ValueError, AttributeError):
@@ -995,6 +996,8 @@ def _bg_scan(lines, seen):
                     if isinstance(c, dict) and c.get("type") == "tool_use" and isinstance(c.get("input"), dict):
                         inp = c["input"]  # a WebSocket Monitor has no process of its own to look for
                         names[c.get("id")] = (" ".join(str(inp.get("description") or inp.get("command") or "").split())[:80], "ws" in inp)
+                for i in list(names)[:-100]:
+                    names.pop(i)
         if '"tool_use_id"' in raw:
             for m in TOOL_DONE.finditer(raw):
                 opened.pop(m.group(1), None)

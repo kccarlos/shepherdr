@@ -554,7 +554,7 @@ def bg_ended_pass(s, t, live):
         jobs = {i: j for i, j in ended_jobs(t, k).items() if i not in told}
         if not jobs or not quiet or now() - quiet < BG_NUDGE_MS:
             continue
-        msg = BG_ENDED_MSG.format(", ".join(jobs.values()))
+        msg = BG_ENDED_MSG[len(jobs) > 1].format(", ".join(jobs.values()))
         if send_or_hold(k["address"], msg):
             t["bg_told"] = {"ids": told + list(jobs), "at": now(), "address": k["address"], "turn": k.get("turn") or 0}
             s.dirty = True

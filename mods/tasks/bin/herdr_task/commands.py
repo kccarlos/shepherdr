@@ -1881,6 +1881,8 @@ def merge_now(s, t, accepting=False):
         # FAC-98 (note 52): checks ran on its head, not on it with its base's tip: brought up to date first (a merge
         # queue tests the combination itself), merged once the new head's checks pass.
         if not queue and v.get("statusCheckRollup") and at and pr_behind(t, repo, at):
+            if held := main_red_hold(s, base):
+                return held  # FAC-113: never updated onto a red base, an Accept included (an up-to-date one may still merge)
             ok, err = pr_update_branch(t, repo, at)
             if not ok:
                 t["attention"], t["attention_at"] = f"{UPDATE_CONFLICT}: {err}", now()
@@ -2068,9 +2070,9 @@ def cmd_accept(args):
             error = merge_now(s, t, accepting=True)
             if error == IN_QUEUE:
                 how, error = "queue", None
-            elif error in (CHECKS_RUNNING, WAITS_APPROVAL):
-                # Accepted: it merges by itself once they pass, or once it's approved (Merging).
-                t["auto_merge"], how, error = "checks", "checks" if error == CHECKS_RUNNING else "approval", None
+            elif error in (CHECKS_RUNNING, WAITS_APPROVAL) or error == main_red_hold(s, t.get("base") or "main"):
+                # Accepted: it merges by itself once they pass, once it's approved, or once a red base is green (Merging).
+                t["auto_merge"], how, error = "checks", "approval" if error == WAITS_APPROVAL else "checks", None
         elif merged_here(s, t) or in_base(s, t):
             # Its own work already in the base branch, or none of its own: nothing to merge.
             t["merged"] = merged_here(s, t)

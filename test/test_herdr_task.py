@@ -10948,6 +10948,12 @@ class HoldWhileMainIsRed(unittest.TestCase):
         self.assertIsNone(self.commands.merge_now(self.store, t, accepting=True))
         self.assertEqual(gh["merged"], "abc")
 
+    def test_an_accept_never_updates_a_behind_branch_onto_a_red_base(self):
+        t, gh = self.github(behind=3)
+        self.red()
+        self.assertEqual(self.commands.merge_now(self.store, t, accepting=True), "main is red since deadbee: merges held until it's green.")
+        self.assertEqual((self.updates(gh), gh["merged"]), ([], None))
+
     def test_herdrs_own_words_say_merge_main_never_rebase(self):
         from herdr_task import templates
         with open(os.path.join(ROOT, "templates", "worker.md")) as f:

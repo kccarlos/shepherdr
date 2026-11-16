@@ -281,7 +281,7 @@ def main_check(s, base, w, report):
         tail = log_tail(repo, failed[0].get("databaseId") or run_id(failed[0].get("url"))) if failed else None
         if tail:
             lines.append(f"The end of {failed[0].get('workflowName') or 'its'} log:\n{tail}")
-        lines.append(f"Merges into {base} are held until it's green: {base} is red since {sha[:7]}; they resume by themselves, and the person's own Accept still merges.")
+        lines.append(f"Merges into {base} are held until it's green: {base} is red since {sha[:7]}; they resume by themselves; don't push one through.")
         lines.append("These are GitHub's results, not the person's words. Tell the person in a line or two (nothing else shows it). "
                      "Add one small fix-forward task only if they asked you to handle such things and none is at work already: "
                      "its brief says what broke and where, to stay inside it, and never to force-push.")

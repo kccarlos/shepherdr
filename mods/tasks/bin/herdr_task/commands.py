@@ -1882,7 +1882,7 @@ def merge_now(s, t, accepting=False):
         mode = sync_mode(s, t)
         behind = mode != "off" and not queue and v.get("statusCheckRollup") and at and pr_behind(t, repo, at)
         if behind and mode == "cheap":
-            checked, why = sync_check(s, t, at)
+            checked, why = sync_check(s, t, at, repo)
             fix = f"Merge {t.get('base') or 'main'} into the branch (never rebase), fix, then say ready again."
             if checked in ("conflict", "fail"):
                 t["attention"] = f"{UPDATE_CONFLICT}: a conflict in {why}. {fix}" if checked == "conflict" else f"{SYNC_FAILED}: {why}\n{fix}"

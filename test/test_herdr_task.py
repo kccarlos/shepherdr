@@ -10829,9 +10829,10 @@ class SyncBehindBase(unittest.TestCase):
         return subprocess.run(["git", "-C", cwd, *a], check=True, capture_output=True, text=True).stdout.strip()
 
     def repo(self, sync, check, head_file=("a.txt", "task\n"),
-             base_file=("b.txt", "base\n")):
+             base_file=("b.txt", "base\n"), move_base=True, origin_repo="o/r"):
         """origin with main at m0; the task branch b one commit on (head_file); main then one more (base_file)."""
         import herdr_task.checks as checks
+        import herdr_task.github as github
         d = tempfile.mkdtemp(prefix="sync-")
         self.addCleanup(shutil.rmtree, d, True)
         origin, main, other = (os.path.join(d, x) for x in ("origin.git", "main", "other"))
@@ -10851,12 +10852,15 @@ class SyncBehindBase(unittest.TestCase):
         self.sh(other, "config", "user.email", "t@t"), self.sh(other, "config", "user.name", "t")
         with open(os.path.join(other, base_file[0]), "w") as f:
             f.write(base_file[1])
-        self.sh(other, "add", "."), self.sh(other, "commit", "-qm", "base moved"), self.sh(other, "push", "-q", "origin", "main")
+        if move_base:
+            self.sh(other, "add", "."), self.sh(other, "commit", "-qm", "base moved"), self.sh(other, "push", "-q", "origin", "main")
         self.store.loc = {**(getattr(self.store, "loc", None) or {}), "folder": main}
         tasks = {"sync": sync, "check": check}
-        p = self.mock.patch.object(checks, "settings_for", lambda s, space=None: {"tasks": tasks})
-        p.start()
-        self.addCleanup(p.stop)
+        for mod, name, value in ((checks, "settings_for", lambda s, space=None: {"tasks": tasks}),
+                                 (github, "remote_repo", lambda main, remote: origin_repo)):
+            p = self.mock.patch.object(mod, name, value)
+            p.start()
+            self.addCleanup(p.stop)
         t, gh = self.github()
         gh["head"] = t["head"] = head
         self.main, self.head = main, head
@@ -10883,7 +10887,7 @@ class SyncBehindBase(unittest.TestCase):
         self.assertEqual((t["state"], gh["merged"], self.updates(gh), t.get("attention")), ("done", self.head, [], None))
         self.leftovers()
 
-    def test_cheap_a_check_failing_only_on_the_merge_goes_back_to_the_worker(self):
+    def test_cheap_a_check_failing_only_on_the_merge_needs_attention(self):
         """The check passes on the head alone and on the base alone; only their merge fails it."""
         t, gh = self.repo("cheap", check="! { test -f a.txt && test -f b.txt; }")
         self.go(gh)
@@ -10898,7 +10902,7 @@ class SyncBehindBase(unittest.TestCase):
             self.go(gh)
         self.assertEqual((gh["merged"], t["attention"][:20]), (None, self.commands.SYNC_FAILED[:20]))
 
-    def test_cheap_a_conflict_goes_back_to_the_worker(self):
+    def test_cheap_a_conflict_needs_attention_as_an_update_conflict_does(self):
         t, gh = self.repo("cheap", check="true", head_file=("a.txt", "task\n"), base_file=("a.txt", "base\n"))
         self.go(gh)
         self.assertEqual((t["state"], gh["merged"], self.updates(gh)), ("ready", None, []))
@@ -10909,9 +10913,38 @@ class SyncBehindBase(unittest.TestCase):
     def test_cheap_that_cant_check_falls_back_to_full(self):
         t, gh = self.repo("cheap", check="true")
         self.sh(self.main, "remote", "set-url", "origin", "/nonexistent/origin.git")
+        self.assert_full(t, gh)
+
+    def test_cheap_checks_a_committed_merge(self):
+        """A check reading git status (a drift check) sees a clean, committed merge, not one in progress."""
+        t, gh = self.repo("cheap", check='test -z "$(git status --porcelain)" && git rev-parse -q --verify HEAD^2')
+        self.go(gh)
+        self.assertEqual((gh["merged"], t.get("attention")), (self.head, None))
+        self.leftovers()
+
+    def assert_full(self, t, gh):
         self.go(gh)
         self.assertEqual((t["state"], gh["merged"], len(self.updates(gh)), t.get("attention")), ("ready", None, 1, None))
         self.leftovers()
+
+    def test_cheap_never_merges_unchecked_on_a_stale_base(self):
+        """GitHub says behind but the base here isn't ahead (stale, or another repo's): full, never the head alone."""
+        t, gh = self.repo("cheap", check="true", move_base=False)
+        self.assert_full(t, gh)
+
+    def test_cheap_on_another_repos_remote_is_full(self):
+        t, gh = self.repo("cheap", check="true", origin_repo="fork/r")
+        self.assert_full(t, gh)
+
+    def test_cheap_a_slow_check_is_full(self):
+        import herdr_task.checks as checks
+        t, gh = self.repo("cheap", check="sleep 3")
+        with self.mock.patch.object(checks, "SYNC_LIMIT_S", 1):
+            self.assert_full(t, gh)
+
+    def test_cheap_a_check_that_cant_run_here_is_full(self):
+        t, gh = self.repo("cheap", check="no-such-program-here")
+        self.assert_full(t, gh)
 
     def test_cheap_without_a_check_is_full(self):
         t, gh = self.repo("cheap", check="  ")

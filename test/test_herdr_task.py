@@ -7411,9 +7411,10 @@ class TaskFlow(unittest.TestCase):
             {"id": 2, "title": "Queued", "state": "queued", "mode": "here", "agents": [], "queue": {"argv": ["claude"]}},
             {"id": 3, "title": "Codex", "state": "todo", "mode": "here", "agents": [], "agent": "codex"},
             {"id": 4, "title": "Old", "state": "done", "mode": "here", "agents": [], "agent": "claude"},
-            {"id": 5, "title": "Opus", "state": "todo", "mode": "here", "agents": [], "agent": "claude", "model": "opus"}]
+            {"id": 5, "title": "Opus", "state": "todo", "mode": "here", "agents": [], "agent": "claude", "model": "opus", "effort": "max"},
+            {"id": 6, "title": "Ready", "state": "ready", "mode": "here", "agents": [], "agent": "claude"}]
         got = []
-        self.patch(self.commands, "workers", lambda s, t: [{"address": "t1", "labels": {}}] if t["id"] == 1 else [])
+        self.patch(self.commands, "workers", lambda s, t: [{"address": "t1", "labels": {}}] if t["id"] in (1, 6) else [])
         self.patch(self.commands, "refresh_sessions", lambda *a: None)
         self.patch(self.commands, "end_agent", lambda s, t, address: got.append(("end", address)))
         self.patch(self.commands, "start_again", lambda s, t, space, key, *a, **k: (
@@ -7431,11 +7432,18 @@ class TaskFlow(unittest.TestCase):
         self.assertEqual(got[1][:3], ("start", 1, None))
         self.assertEqual(got[1][3][0], "agy")
         self.assertIn("gemini-4-carbon-high", got[1][3])
-        self.assertEqual([tasks[i].get("agent") for i in (1, 2, 3, 4, 5)], ["agy", "agy", "codex", "claude", "agy"])
+        self.assertEqual([tasks[i].get("agent") for i in (1, 2, 3, 4, 5, 6)], ["agy", "agy", "codex", "claude", "agy", "agy"])
         self.assertEqual(tasks[5]["model"], "gemini-4-carbon-high")
+        self.assertNotIn("effort", tasks[5])  # claude's effort words aren't agy's
+        self.assertEqual(len([g for g in got if g[0] == "start"]), 1)  # a Ready task is edited, never restarted
         self.assertEqual(tasks[2]["queue"]["argv"][0], "agy")  # the queued start runs on the new pick
         self.assertEqual(tasks[2]["state"], "queued")
-        self.assertEqual(self.said[-1].split("\n")[1:], ["SHEP-2: edit claude -> agy", "SHEP-5: edit claude -> agy"])
+        self.assertEqual(self.said[-1].split("\n")[1:], ["SHEP-2: edit claude -> agy", "SHEP-5: edit claude -> agy",
+                                                         "SHEP-6: edit claude -> agy"])
+        with self.assertRaises(self.commands.Fail):  # --dry-run only goes with --all: never a real switch
+            self.commands.cmd_switch(self.args(id="SHEP-1", all=False, dry_run=True, agent="agy"))
+        with self.assertRaises(self.commands.Fail):
+            self.commands.cmd_switch(self.args(id=None, all=True, from_="agy", agent="nosuchcli", argv=None, dry_run=False))
         self.assertTrue(self.said[-1].startswith("SHEP-1: agy t9 took over, t1 ended"))
 
     def test_switch_all_from_a_model_and_dry_run(self):
@@ -7491,9 +7499,12 @@ class TaskFlow(unittest.TestCase):
         self.patch(launch, "closing_line", lambda *a: "")
         self.patch(launch, "settings_block", lambda *a: "")
         self.patch(self.commands, "launch", lambda s, t, argv, space, message=None, **k: (
-            sent.append(message), {"address": "t2", "agent": "agy", "argv": argv})[1])
-        self.commands.cmd_switch(self.args(agent="agy", argv=None, model=None, space=None, parent=None, keep=False))
-        text = sent[0]
+            sent.append((argv, message)), {"address": "t2", "agent": "agy", "argv": argv})[1])
+        self.patch(self.commands, "workers", lambda s, t: self.live)
+        self.commands.cmd_switch(self.args(id=None, all=True, from_="claude", agent="agy", model=None, argv=None, space=None,
+                                           parent=None, keep=False, dry_run=False, reviewer=False))
+        argv, text = sent[0]
+        self.assertEqual(argv[0], "agy")
         self.assertIn("Move a folder's work to another pool.", text)
         block = text[text.index("<herdr-handoff>"):text.index("</herdr-handoff>") + len("</herdr-handoff>")]
         self.assertLessEqual(len(block), handoff.CONTEXT_CAP)

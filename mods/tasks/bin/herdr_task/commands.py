@@ -17,7 +17,7 @@ from .settings import (
     accept_bar, accepted_word, auto_accepter, agent_argv, fable_said, agent_key, argv_for, bare, build_dir_of, codex_review_argv, ensure_build_dir, FABLE,
     fable_due, gate_min, merge_hold, merge_policy,
     merge_wait_why, MUST_WORDS, remove_build_dir, review_kind, review_limits, set_opts, settings_block, settings_for, space_base,
-    task_settings, worker_argv, worker_pick, worktrees_on, set_task, argv_model,
+    task_settings, worker_argv, worker_pick, worktrees_on, set_task, argv_model, AGENTS,
 )
 from .agents import (
     agent_log, agent_running, agy_bg_tasks, background_jobs, busy_again, claude_bg_shells, detail, fit, LINE_MAX, live_agents, ready_turns,
@@ -1622,11 +1622,12 @@ def end_agent(s, t, address):
 
 def retarget(s, t, agent, model):
     """Sets the task's agent (and model) as edit does: the next agent started for it, queued too, runs on it.
-    Another CLI drops the old model and effort (they name the old CLI's) unless --model gives one."""
-    if agent != worker_pick(s, t, t.get("space")).get("agent") or model:
+    Another CLI drops the old model (unless --model gives one) and effort: their words differ per CLI."""
+    if agent != worker_pick(s, t, t.get("space")).get("agent"):
         set_task(t, "model", model or "")
-        if not model:
-            set_task(t, "effort", "")
+        set_task(t, "effort", "")
+    elif model:
+        set_task(t, "model", model)
     set_task(t, "agent", agent)
     t["pick_at"] = now()
     q = t.get("queue") or {}
@@ -1684,6 +1685,8 @@ def cmd_switch(args):
         return switch_all(args)
     if not args.id:
         raise Fail("Name a task, or give --all --from <cli[:model]> --agent <cli>.")
+    if getattr(args, "dry_run", False) or getattr(args, "from_", None) or getattr(args, "reviewer", False):
+        raise Fail("--dry-run, --from and --reviewer go with --all.")
     with open_store(args) as s:
         t = s.find(args.id)
         if getattr(args, "model", None):
@@ -1710,12 +1713,14 @@ def switch_all(args):
         raise Fail("switch --all takes --from <cli[:model]> and --agent <cli>, and no task id.")
     if args.argv:
         raise Fail("switch --all takes --agent and --model, not --argv.")
+    if args.agent not in AGENTS:
+        raise Fail(f"--agent is one of {', '.join(AGENTS)}, not {args.agent!r}.")
     lines, out, owns = [], [], []
     with open_store(args, write=not args.dry_run) as s:
         for t in s.data.get("tasks") or []:
             if t.get("state") == "done" or t.get("archived"):
                 continue
-            live = workers(s, t) if t.get("state") in ("running", "ready") else []
+            live = workers(s, t) if t.get("state") == "running" else []  # Ready and the rest: edited
             prev = last_agent(t)
             if live and prev and prev.get("argv"):
                 pick = {"agent": prev.get("agent") or agent_key(prev["argv"]), "model": argv_model(prev["argv"])[0]}
@@ -1734,6 +1739,7 @@ def switch_all(args):
             if rev:
                 set_task(t, "reviewer", args.agent)
                 set_task(t, "reviewer_model", args.model or "")
+                t["reviewer_at"] = now()  # as edit: earlier reviewer failures no longer hold it
                 s.dirty = True
             if not matches(pick, args.from_):
                 lines.append(line.replace(f": {what} ", ": reviewer ", 1))

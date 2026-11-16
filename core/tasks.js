@@ -182,6 +182,8 @@ export function place(list, task, { live = [], helpers = [], loaded = true, now 
   else if (task.trust_ask && live.some((a) => a.address === task.trust_ask && !a.status)) need("asks", task.waits ?? REASONS.trust);
   // Out of review rounds (FAC-95, herdr-task's task_status()): it waits on its Assistant whatever its agent does.
   else if (st === "running" && task.review_out) need("reply", task.waits ?? OUT_OF_ROUNDS);
+  // Waits on the physical device (FAC-110, herdr-task device-wait): locked, untrusted or not connected.
+  else if (st === "running" && live.length && task.device_wait?.why) need("reply", `Device not available: ${task.device_wait.why}`);
   // Back at work after it said ready: no Accept until it says ready again.
   else if (busyAgain(task, live, now)) { section = "working"; why = WORKING_AGAIN; }
   else if (fixing) { section = "working"; why = st === "ready" ? WORKING_AGAIN : null; }

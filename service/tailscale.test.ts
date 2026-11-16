@@ -67,24 +67,24 @@ describe("who owns this machine (GitHub #845)", () => {
 // Self.UserID at a placeholder: the "tagged-devices" user, or (as a real tagged Mac shows) a user named after the
 // machine itself. Neither is a person, so the login is "" and the gate takes service.owners alone (FAC-114).
 describe("a tagged machine has no owner (FAC-114)", () => {
-  const users = `"User":{"4541223725506859":{"ID":4541223725506859,"LoginName":"tagged-devices","DisplayName":"Tagged Devices"},` +
-    `"1327191438015865":{"ID":1327191438015865,"LoginName":"box.tailnet.example","DisplayName":"box"},` +
-    `"4836637045552338":{"ID":4836637045552338,"LoginName":"sam@example.com","DisplayName":"Sam"}}`;
+  const users = `"User":{"4000000000000001":{"ID":4000000000000001,"LoginName":"tagged-devices","DisplayName":"Tagged Devices"},` +
+    `"4000000000000002":{"ID":4000000000000002,"LoginName":"box.tailnet.example","DisplayName":"box"},` +
+    `"4000000000000003":{"ID":4000000000000003,"LoginName":"sam@example.com","DisplayName":"Sam"}}`;
   const tagged = (id: string, tags = `["tag:mac"]`) =>
-    `{"Self":{"UserID":${id},"Tags":${tags},"DNSName":"box.tailnet.example.","HostName":"box"},"Peer":{"p":{"UserID":4836637045552338}},${users}}`;
+    `{"Self":{"UserID":${id},"Tags":${tags},"DNSName":"box.tailnet.example.","HostName":"box"},"Peer":{"p":{"UserID":4000000000000003}},${users}}`;
   test("UserID at the tagged-devices user: tagged, no login", () => {
-    expect(meOf(tagged("4541223725506859"))).toEqual({ login: "", name: "box", dns: "box.tailnet.example", host: "box", tagged: true });
+    expect(meOf(tagged("4000000000000001"))).toEqual({ login: "", name: "box", dns: "box.tailnet.example", host: "box", tagged: true });
   });
   test("UserID at a user named after the machine (a real tagged Mac): tagged, no login", () => {
-    expect(meOf(tagged("1327191438015865"))).toMatchObject({ login: "", tagged: true, dns: "box.tailnet.example" });
+    expect(meOf(tagged("4000000000000002"))).toMatchObject({ login: "", tagged: true, dns: "box.tailnet.example" });
   });
   test("tagged with UserID at a person still has no login: tags win", () => {
-    expect(meOf(tagged("4836637045552338"))).toMatchObject({ login: "", tagged: true });
+    expect(meOf(tagged("4000000000000003"))).toMatchObject({ login: "", tagged: true });
   });
   test("tagged with no User entry at all still has its name, so the web app stays shared", () => {
     expect(meOf(`{"Self":{"UserID":1,"Tags":["tag:mac"],"DNSName":"box.tailnet.example.","HostName":"box"},"User":{}}`)).toMatchObject({ tagged: true, dns: "box.tailnet.example" });
   });
   test("an empty Tags list is untagged", () => {
-    expect(meOf(tagged("4836637045552338", "[]"))).toMatchObject({ login: "sam@example.com", tagged: false });
+    expect(meOf(tagged("4000000000000003", "[]"))).toMatchObject({ login: "sam@example.com", tagged: false });
   });
 });

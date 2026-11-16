@@ -384,7 +384,7 @@ async function tailnet() {
   let qr: string | null = null;
   try { if (link && on && !why) qr = qrFile(existsSync(join(APP_DATA, "..")) ? APP_DATA : DATA, link); } catch {}
   const serve = serveNow();
-  writeFileSync(join(DATA, "web.json"), JSON.stringify({ on, link, qr, why, share_error: shareWhy, owners_unset: why === OWNERS_UNSET, https_port: hp, serve, at: Date.now() }) + "\n");
+  writeFileSync(join(DATA, "web.json"), JSON.stringify({ on, link, qr, why, share_error: shareWhy, owners_unset: why === OWNERS_UNSET, owners: g.owners ?? [], tagged: !!me?.tagged, https_port: hp, serve, at: Date.now() }) + "\n");
   let picture: string | null = null;
   try { if (qr) picture = `data:image/svg+xml;base64,${Buffer.from(readFileSync(qr)).toString("base64")}`; } catch {}
   const was = JSON.stringify(webNow);

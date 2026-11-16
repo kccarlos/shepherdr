@@ -12,7 +12,7 @@ import { on } from "./addons.js";
 import { localService, localToken } from "./local.js";
 import { dirsReady } from "./dirs.js";
 // The page's words and its state line: core/settings.js and core/host.js, shared with the web app.
-import { WEB, SECTIONS, webState } from "./core/settings.js";
+import { WEB, SECTIONS, webState, ownersValue, ownersAbout } from "./core/settings.js";
 import { SERVE } from "./core/host.js";
 
 let web = null, readAt = 0, loaded = false;
@@ -89,6 +89,9 @@ export function webSection(view, t) {
   return v_flex()
     .child(view.title(t, SECTIONS.find((s) => s.id === "web").title))
     .child(view.row(t, WEB.title, state, div()))
+    // who may open it (service.owners, from web.json): shown, set on the machine (`shepherdr web owners`)
+    .when(Boolean(!off && Array.isArray(w?.owners)), (el) => el.child(view.row(t, WEB.owners, ownersAbout(w.owners, !!w.tagged),
+      div().max_w(220).truncate().text_size(TEXT.label).text_color(t.foreground).child(ownersValue(w.owners, !!w.tagged)))))
     .when(Boolean(!off && w?.serve?.rows?.length), (el) => el.child(servePicker(view, t, w.serve)))
     .when(Boolean(!off && w?.link && !w?.why), (el) => el
       .child(view.row(t, WEB.link, w.link, button("web-copy", copied ? WEB.copied : WEB.copy, { onClick: (_e, cx) => {

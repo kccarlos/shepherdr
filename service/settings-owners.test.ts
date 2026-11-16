@@ -1,7 +1,7 @@
 // The service hears a change to the settings file by its own name (FAC-114): settings.json since the data move, which
 // `shepherdr web owners` replaces with a rename, so service.owners applies without a restart.
 import { expect, test } from "bun:test";
-import { mkdtempSync, renameSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Settings } from "./settings.ts";
@@ -32,4 +32,23 @@ test("Settings › Web shows who may open it, read-only, with the command", () =
   expect(row([], true).hint).toContain("shepherdr web owners");
   expect(row(["me@example.com", "two@github"], true).value).toBe("me@example.com, two@github");
   expect(row([], false).value).toBe("This machine's owner");
+});
+
+test("a page can't set who may open it: only the machine can (shepherdr web owners)", () => {
+  const dir = mkdtempSync(join(tmpdir(), "shep-owners-"));
+  const file = join(dir, "settings.json");
+  const before = JSON.stringify({ everywhere: { service: { owners: ["me@example.com"] } } });
+  writeFileSync(file, before);
+  const was = process.env.HERDR_TASK_SETTINGS;
+  process.env.HERDR_TASK_SETTINGS = file;
+  try {
+    const s = new Settings();
+    for (const key of ["service.owners", "web.owners"]) {
+      expect(() => s.set(key, "evil@example.com")).toThrow();
+      expect(() => s.set(key, null)).toThrow();
+    }
+    expect(readFileSync(file, "utf8")).toBe(before);
+  } finally {
+    process.env.HERDR_TASK_SETTINGS = was;
+  }
 });

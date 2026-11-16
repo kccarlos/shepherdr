@@ -190,7 +190,7 @@ export class PanelHost {
   // Its worker took up work again since it said ready (core/tasks.js busyAgain()): Working, no Accept.
   again(st, addr) {
     const r = this.rec, k = addr ? terminals().find((x) => x.address === addr) : null;
-    return Boolean(r && k) && busyAgain(r, [{ address: addr, status: st, turn: k.turn, role: k.labels?.["herdr.role"] ?? "worker" }]);
+    return Boolean(r && k) && busyAgain(r, [{ address: addr, status: st, turn: k.turn, since: k.status_ms, role: k.labels?.["herdr.role"] ?? "worker" }]);
   }
 
   // Accept shows what you approve first: the Accept card (mods/accept-card) runs herdr-task

@@ -20,7 +20,7 @@ from .settings import (write_max_running,
     task_settings, worker_argv, worker_pick, worktrees_on, set_task, argv_model, AGENTS,
 )
 from .agents import (
-    agent_log, agent_running, agy_bg_tasks, background_jobs, busy_again, claude_bg_shells, detail, fit, LINE_MAX, live_agents, ready_turns,
+    agent_log, agent_running, agy_bg_tasks, back_at_work, background_jobs, busy_again, claude_bg_shells, detail, fit, LINE_MAX, live_agents, ready_turns,
     REVIEWER_FAILED, STARTING_MS, STATUSES, status_word, SUMMARY_MAX, WORKING_AGAIN,
 )
 from .sessions import refresh_sessions
@@ -223,7 +223,7 @@ def cmd_show(args):
         refresh_sessions(s, t, live)
         # Back at work since it said ready: saved at once, so the Accept card (which reads this)
         # says it's Working, not Ready.
-        if busy_again(t, live):  # its agent's own turn, as the tick's back_pass() (FAC-96)
+        if back_at_work(t, live):  # its agent's own turn, as the tick's back_pass() (FAC-96, FAC-107)
             back_to_work(s, t, "its agent is at work again", auto=True)
         if t.get("auto_merge") and not t.get("accepted_by") and merge_hold(s, t):
             t.pop("auto_merge", None)
@@ -1015,7 +1015,7 @@ def back_to_work(s, t, why, said=WORKING_AGAIN, auto=False):
     if t["state"] != "ready" and (auto or not (t.get("back") or {}).get("auto")):
         return False
     t["state"] = "running"
-    for k in ("ready_turns", "merge_requested", *(() if auto else ("accepted_by",))):
+    for k in ("ready_turns", "stray_turns", "merge_requested", *(() if auto else ("accepted_by",))):
         t.pop(k, None)
     t["back"] = {"at": now(), "why": why, **({"auto": True, "progress": t.get("progress")} if auto else {})}
     # by: Herdr's words, not its agent's (on_it() counts only an agent's own line).

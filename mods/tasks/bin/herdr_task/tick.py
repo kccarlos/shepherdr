@@ -14,7 +14,7 @@ import time
 from .base import Fail, git, guard, hc_json, now, PR_EVERY, run, SHELLS, STORE, stop_note
 from .settings import machine_name, merge_hold, remove_build_dir, worker_argv
 from .agents import (
-    agent_log, agent_running, BG_ENDED_MSG, BG_NUDGE_MS, busy_again, detail, ended_jobs, fit, held_ask, last_question, live_agents, open_question, own_work,
+    agent_log, agent_running, back_at_work, BG_ENDED_MSG, BG_NUDGE_MS, busy_again, detail, ended_jobs, fit, held_ask, last_question, live_agents, open_question, own_work, stray_turns,
     ready_turns, REVIEWER_FAILED, status_word, task_status, WAITING_BG,
 )
 from .provider import NUDGE, provider_cut, provider_error, PROVIDER_WAITS
@@ -184,9 +184,18 @@ def back_pass(s, t, report):
     again until its next ready (busy_again()); its Assistant hears it (news: working-again)."""
     live = live_agents(s.key(t))
     # Cheap while nothing works: hc ls alone; its records in full (roles) only then.
-    if any(status_word(k) == "working" for k in live) and busy_again(t, [detail(k) for k in live]):
+    if not any(status_word(k) == "working" for k in live):
+        return
+    live = [detail(k) for k in live]
+    if back_at_work(t, live):
         back_to_work(s, t, "its agent is at work again", auto=True)
         report.setdefault("working_again", []).append(s.ref(t))
+        return
+    # FAC-107: a turn that is only an idle compaction, kept for the window's busyAgain()
+    stray = {**(t.get("stray_turns") or {}), **stray_turns(t, live)}
+    if stray and stray != t.get("stray_turns"):
+        t["stray_turns"] = stray
+        s.dirty = True
 
 
 def settle_back(s, t, report):

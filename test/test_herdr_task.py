@@ -10592,7 +10592,7 @@ class DeviceWait(unittest.TestCase):
                 self.mock.patch.object(output, "subagents", lambda key: []):
             v = output.view(s, t, [self.worker])
         self.assertEqual((v["status"], v["why"]), ("needs", why))
-        self.assertTrue("device-wait" in self.launch.OWN)
+        self.assertTrue("device-wait" in self.launch.OWN and self.launch.own_command("/x/herdr-task", "/x/herdr-task device-wait --clear"))
         self.assertEqual(self.run_cli("device-wait", "--clear", env=self.env)[0], 0)
         self.assertNotIn("device_wait", self.task())
 
@@ -10625,7 +10625,8 @@ class DeviceWait(unittest.TestCase):
         dev = lambda tunnel: {"identifier": "X", "connectionProperties": {"pairingState": "paired", "tunnelState": tunnel}}
         with self.mock.patch.object(self.devices.sys, "platform", "darwin"):
             for body, want in ((json.dumps({"result": {"devices": [dev("connected")]}}), True),
-                               (json.dumps({"result": {"devices": [dev("disconnected")]}}), False),
+                               (json.dumps({"result": {"devices": [dev("disconnected")]}}), True),  # "available (paired)"
+                               (json.dumps({"result": {"devices": [dev("unavailable")]}}), False),
                                ("not json", None)):
                 with open(out, "w") as f:
                     f.write(body)

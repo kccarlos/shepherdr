@@ -17,7 +17,8 @@ CARRY_ON = "The device is available now: carry on with the device check."
 
 
 def device_available():
-    """True when `xcrun devicectl list devices` shows a paired, connected device; False when it lists none such;
+    """True when `xcrun devicectl list devices` shows a paired (trusted) device it can reach: tunnelState "connected", or
+    "disconnected" (the table's "available (paired)"), not "unavailable"; False when it lists none such;
     None (unknown) off macOS, without xcrun, or on any output it can't read."""
     if sys.platform != "darwin" or not (xc := shutil.which("xcrun")):
         return None
@@ -40,7 +41,7 @@ def device_available():
                         return x[name]
         return None
     return any(isinstance(d, dict) and field(d, "pairingState") == "paired"
-               and (field(d, "tunnelState") == "connected" or field(d, "ddiServicesAvailable") is True) for d in devices)
+               and (field(d, "tunnelState") in ("connected", "disconnected") or field(d, "ddiServicesAvailable") is True) for d in devices)
 
 
 def cmd_device_wait(args):
@@ -66,24 +67,28 @@ def cmd_device_wait(args):
     alerted = False
     if first and os.environ.get("HC_TERMINAL_ID"):  # one alert per wait, never per tick or per repeat
         try:
-            send_alert(os.environ["HC_TERMINAL_ID"], WHY.format(why), f"{s.ref(t)} waits until the phone is ready.", task=s.ref(t))
+            send_alert(os.environ["HC_TERMINAL_ID"], WHY.format(why), f"{s.ref(t)} waits until the phone is ready: "
+                       "it carries on by itself once it's seen, or say so in its chat.", task=s.ref(t))
             alerted = True
         except (Fail, OSError):
             pass
     say(args, {"task": s.ref(t), "why": why, "alerted": alerted},
-        f"{s.ref(t)} waits on the device: {why}. End your turn; you're told when it's available.")
+        f"{s.ref(t)} waits on the device: {why}. End your turn; you're told when it's available. Carrying on before that "
+        f"(the person says it's ready): run `herdr-task device-wait --clear` first.")
 
 
 def device_pass(report, folder=None, check=None):
     """Clears device waits once a paired device is available (checked at most every CHECK_MS per wait, once per
-    pass) and tells each task's worker; unknown never clears. A task no longer running drops its wait."""
+    pass, outside the store's lock) and tells each task's worker; unknown never clears. A task no longer running
+    drops its wait."""
     from .agents import agent_running, detail, HELPER_ROLES, live_agents
     from .news import send_or_hold
-    seen = []  # the pass's one answer
-    for p in store_files(folder):
-        d = read_list(p)
-        if not d or not os.path.isdir(d.get("folder") or "") or not any(t.get("device_wait") for t in d.get("tasks") or []):
-            continue
+    lists = [d for d in map(read_list, store_files(folder))
+             if d and os.path.isdir(d.get("folder") or "") and any(t.get("device_wait") for t in d.get("tasks") or [])]
+    due = any(t.get("state") == "running" and now() - ((t.get("device_wait") or {}).get("checked") or 0) >= CHECK_MS
+              for d in lists for t in d.get("tasks") or [] if t.get("device_wait"))
+    seen = (check or device_available)() if due else None
+    for d in lists:
         try:
             with Store(locate(d["folder"])) as s:
                 for t in s.data["tasks"]:
@@ -93,14 +98,12 @@ def device_pass(report, folder=None, check=None):
                     if t.get("state") != "running":
                         t.pop("device_wait"); s.dirty = True
                         continue
-                    if now() - (w.get("checked") or 0) < CHECK_MS:
+                    if not due or now() - (w.get("checked") or 0) < CHECK_MS:
                         continue
-                    if not seen:
-                        seen.append((check or device_available)())
                     w["checked"] = now(); s.dirty = True
-                    if seen[0] is False:
+                    if seen is False:
                         w["seen_off"] = True
-                    if seen[0] is not True or not w.get("seen_off"):
+                    if seen is not True or not w.get("seen_off"):
                         continue
                     workers = [k for k in map(detail, live_agents(s.key(t))) if agent_running(k)
                                and (k.get("labels") or {}).get("herdr.role") not in HELPER_ROLES]

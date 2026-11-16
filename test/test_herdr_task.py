@@ -10598,21 +10598,33 @@ class DeviceWait(unittest.TestCase):
 
     def test_a_tick_that_finds_the_device_clears_it_and_tells_the_worker(self):
         self.run_cli("device-wait", "unlock and trust the iPhone", env=self.env)
-        self.assertEqual(self.tick(False), 1)
-        self.assertEqual(self.tick(True), 0)  # at most once a minute
-        self.assertIn("device_wait", self.task())
-        self.clock += 60_000
         self.assertEqual(self.tick(True), 1)
         self.assertNotIn("device_wait", self.task())
         self.assertEqual(self.sent, [("t5", "The device is available now: carry on with the device check.")])
         self.assertEqual(len(self.alerts), 1)
 
-    def test_unknown_never_clears_nor_does_available_before_it_was_seen_unavailable(self):
-        self.run_cli("device-wait", "connect the iPhone", env=self.env)
-        self.assertEqual(self.tick(True), 1)  # a locked phone may read available: not cleared at once
-        for answer in (False, None, None):
+    def test_a_wait_again_soon_after_a_clear_neither_alerts_nor_loops(self):
+        self.run_cli("device-wait", "unlock the iPhone", env=self.env)
+        self.tick(True)
+        self.clock += 60_000  # still locked, though devicectl read it as available: it waits again
+        self.run_cli("device-wait", "unlock the iPhone", env=self.env)
+        self.clock += 60_000
+        self.assertEqual(self.tick(True), 1)
+        self.assertIn("device_wait", self.task())
+        self.assertEqual((len(self.alerts), len(self.sent)), (1, 1))
+        for answer in (False, True):
             self.clock += 60_000
             self.tick(answer)
+        self.assertNotIn("device_wait", self.task())
+        self.assertEqual(len(self.sent), 2)
+
+    def test_unknown_never_clears(self):
+        self.run_cli("device-wait", "connect the iPhone", env=self.env)
+        self.assertEqual(self.tick(None), 1)
+        self.assertEqual(self.tick(True), 0)  # at most once a minute
+        for _ in range(3):
+            self.clock += 60_000
+            self.tick(None)
         self.assertIn("device_wait", self.task())
         self.assertEqual(self.sent, [])
         with self.mock.patch.object(self.devices.sys, "platform", "linux"):

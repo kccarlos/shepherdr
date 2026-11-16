@@ -2,8 +2,8 @@
 waits. `herdr-task device-wait "<why>"` keeps {"at", "why"} as the task's "device_wait": Needs you, "Device not
 available: <why>", with one alert. The tick checks at most every CHECK_MS whether a paired device is available
 (device_available(): True, False or None for unknown) and, once it is, clears the wait and tells the worker to carry on.
-devicectl shows pairing and connection, maybe not a lock: a wait clears only after a check said "not available" since
-it was recorded, so a phone that reads available while locked can't clear it at once and alert again each cycle."""
+devicectl shows pairing and connection, maybe not a lock: a wait recorded again within REWAIT_MS of a clear (a locked
+phone read as available) alerts no more and clears only after a check has seen it unavailable, never in a loop."""
 
 import json, os, shutil, subprocess, sys
 
@@ -11,7 +11,7 @@ from .base import Fail, now
 from .output import say
 from .store import locate, read_list, Store, store_files
 
-CHECK_MS = 60_000
+CHECK_MS, REWAIT_MS = 60_000, 10 * 60_000
 WHY = "Device not available: {}"
 CARRY_ON = "The device is available now: carry on with the device check."
 
@@ -61,8 +61,9 @@ def cmd_device_wait(args):
             raise Fail('Say why: herdr-task device-wait "unlock and trust the iPhone"')
         if t.get("state") != "running":
             raise Fail(f"{s.ref(t)} isn't running; it can't wait on a device.")
-        first = not t.get("device_wait")
-        t["device_wait"] = {**(t.get("device_wait") or {}), "at": now(), "why": why}
+        again = now() - (t.get("device_cleared_at") or 0) < REWAIT_MS
+        first = not t.get("device_wait") and not again
+        t["device_wait"] = {**(t.get("device_wait") or ({"needs_off": True} if again else {})), "at": now(), "why": why}
         s.dirty = True
     alerted = False
     if first and os.environ.get("HC_TERMINAL_ID"):  # one alert per wait, never per tick or per repeat
@@ -103,12 +104,13 @@ def device_pass(report, folder=None, check=None):
                     w["checked"] = now(); s.dirty = True
                     if seen is False:
                         w["seen_off"] = True
-                    if seen is not True or not w.get("seen_off"):
+                    if seen is not True or (w.get("needs_off") and not w.get("seen_off")):
                         continue
                     workers = [k for k in map(detail, live_agents(s.key(t))) if agent_running(k)
                                and (k.get("labels") or {}).get("herdr.role") not in HELPER_ROLES]
                     if workers and send_or_hold(workers[0]["address"], CARRY_ON):
                         t.pop("device_wait")
+                        t["device_cleared_at"] = now()
                         report.setdefault("device_ready", []).append(s.ref(t))
         except Fail:
             continue

@@ -8278,6 +8278,24 @@ class Resume(unittest.TestCase):
             self.assertEqual(last["argv"], ["agy", "--model", "gemini-4-argon-high", "--dangerously-skip-permissions"])
             self.assertEqual(last["session"], "0199-sid")
 
+    def test_a_resumed_agy_worker_idle_at_turn_0_gets_one_nudge(self):
+        """FAC-100 (note 14): a resumed agy session sits at turn 0 until it hears something: the tick nudges it once."""
+        from unittest import mock
+        import herdr_task.news as news
+        ref = self.started_task({"agent": "agy", "perm": "auto"})
+        self.call(self.commands.cmd_resume, id=ref, space=None, agent=None, argv=None, parent=None)
+        sends, t0 = [], time.time() * 1000
+        with self.store_mod.open_store(self.argparse.Namespace(folder=self.repo, id=ref)) as s:
+            t = s.find(ref)
+            addr = t["agents"][-1]["address"]
+            term = {"address": addr, "state": "live", "agent": "agy", "turn": 0, "status": {"state": "idle"}}
+            for off in (5_000, 45_000, 60_000, 120_000):
+                with mock.patch.object(self.commands, "now", lambda: t0 + off), \
+                        mock.patch.object(self.commands, "hc_json", lambda *a: dict(term) if a[:2] == ("get", addr) else None), \
+                        mock.patch.object(news, "send_or_hold", lambda a, m, how="send": sends.append((a, m)) or "sent"):
+                    self.commands.start_nudge(s, t)
+        self.assertEqual(sends, [(addr, self.commands.RESUME_START_NUDGE)])
+
     def test_claude_launch_and_resume_never_auto_update(self):
         """FAC-87: a self-updated Claude binary makes macOS ask about a removable volume and every new agent hangs."""
         ref = self.started_task({"agent": "claude"})
@@ -10825,6 +10843,14 @@ class AgyStartNudge(unittest.TestCase):
         self.sends.clear()
         self.tick(c.START_QUIET_MS * 3)
         self.assertEqual((self.sends, self.why(c.START_QUIET_MS * 3 + c.START_GRACE_MS)[1]), ([], "Signed out"))
+
+    def test_another_dialog_at_turn_0_gets_no_nudge_and_keeps_its_reason(self):
+        self.term["status"] = {"state": "blocked", "kind": "permission"}  # a trust or first-run screen
+        for off in range(0, self.c.START_WINDOW_MS, 15_000):
+            self.tick(off)
+        self.assertEqual(self.sends, [])
+        self.task["agents"][0]["start_nudged"] = self.t0  # even had it been nudged: its own reason stays
+        self.assertNotEqual(self.why(self.c.START_GRACE_MS * 2)[1], self.c.START_STUCK)
 
     def test_a_resumed_agy_worker_gets_one_nudge(self):
         c = self.c

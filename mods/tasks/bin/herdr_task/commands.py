@@ -1295,6 +1295,12 @@ RESUME_START_NUDGE = "Carry on where you left off."
 START_STUCK = "agy didn't start its first turn"
 
 
+def start_idle(k):
+    """Idle, or blocked on agy's startup auth report; never another dialog (trust, a first-run screen): a nudge could pick in it."""
+    st = k.get("status") if isinstance(k.get("status"), dict) else {}
+    return status_word(k) in ("idle", "done") or (status_word(k) == "blocked" and st.get("kind") == "auth")
+
+
 def start_nudge(s, t):
     """One nudge for the task's newest agy worker idle at turn 0 past START_QUIET_MS (field on its agent record, so a
     resumed or switched agent gets its own). A refused send, or a real sign-in screen, is tried again next tick."""
@@ -1305,7 +1311,7 @@ def start_nudge(s, t):
     if not START_QUIET_MS <= age < START_WINDOW_MS:
         return
     k = hc_json("get", a["address"]) or {}
-    if k.get("state") != "live" or not agent_running(k) or k.get("turn") or status_word(k) not in ("idle", "done", "blocked"):
+    if k.get("state") != "live" or not agent_running(k) or k.get("turn") or not start_idle(k):
         return
     if sign_in_screen(screen_of(a["address"], 60)):  # pressing on a real sign-in screen could pick a sign-in option
         return
@@ -1323,7 +1329,7 @@ def start_stuck(t, k):
     """START_STUCK when live agent k is the task's agy worker, nudged START_GRACE_MS ago and still at turn 0; else None.
     Signed out for real (its auth report still on and a sign-in screen showing) stays Signed out."""
     a = next((x for x in reversed(t.get("agents") or []) if x.get("address") == (k or {}).get("address")), None)
-    if not a or a.get("agent") != "agy" or not a.get("start_nudged") or k.get("turn") or now() - a["start_nudged"] < START_GRACE_MS:
+    if not a or a.get("agent") != "agy" or not a.get("start_nudged") or k.get("turn") or not start_idle(k) or now() - a["start_nudged"] < START_GRACE_MS:
         return None
     st = k.get("status") if isinstance(k.get("status"), dict) else {}
     if st.get("kind") == "auth" and sign_in_screen(screen_of(k["address"], 60)):

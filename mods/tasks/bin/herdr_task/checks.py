@@ -3,6 +3,7 @@ with tasks.check set, herdr-task runs the check itself on the task's exact head,
 detached worktree, and records the real result (contracts/gate-evidence.md, t["checks"])."""
 
 import json
+import subprocess
 import shutil
 import tempfile
 
@@ -114,3 +115,52 @@ def checks_line(t):
         return ""
     ci = (c.get("ci") or {}).get("state")
     return f"checks: {'passed' if c['exit'] == 0 else 'failed (exit %d)' % c['exit']} on {c['sha'][:8]}" + (f", CI {ci}" if ci else "")
+
+
+# FAC-111 (WUKO-130 B1): tasks.sync says what a green pull request behind its base needs before Herdr merges it.
+# full: GitHub's update-branch and a whole new CI run on the new head (FAC-98). cheap: the folder's tasks.check run
+# here on its head merged with the base's tip, then merged; the run on the base after the merge is the integration
+# test. off: merged as it is. cheap without a tasks.check is full: never quietly off.
+SYNC_MODES = ("full", "cheap", "off")
+SYNC_LIMIT_S = 5 * 60  # a cheap check runs in seconds; one this slow falls back to full, never merges unchecked
+SYNC_FAILED = "Its check failed on it merged with its base branch (the base moved on since)"
+
+
+def sync_mode(s, t):
+    k = settings_for(s, t.get("space"))["tasks"]
+    mode = k.get("sync") if k.get("sync") in SYNC_MODES else "full"
+    return "full" if mode == "cheap" and not (k.get("check") or "").strip() else mode
+
+
+def sync_check(s, t, at):
+    """cheap's local check: `at` (the pull request's head) merged with its base's tip on the remote, in a throwaway
+    detached worktree, then tasks.check there. Returns ("pass", None), ("conflict", files), ("fail", why) or
+    ("error", why) when it couldn't check (fall back to full). Leaves the task's worktree, branch and folder alone."""
+    from .github import remote_of
+    main, base = s.loc["folder"], t.get("base") or "main"
+    cmd = (settings_for(s, t.get("space"))["tasks"].get("check") or "").strip()
+    remote = remote_of(main)
+    ok, _, err = git(main, "fetch", "--quiet", remote, f"+refs/heads/{base}:refs/remotes/{remote}/{base}", timeout=120)
+    ok2, tip, _ = git(main, "rev-parse", "--verify", "--quiet", f"refs/remotes/{remote}/{base}^{{commit}}") if ok else (False, "", "")
+    if not (ok2 and tip):
+        return "error", f"couldn't fetch {base}: {err}"
+    if not git(main, "cat-file", "-e", f"{at}^{{commit}}")[0]:
+        return "error", f"{at[:8]} isn't here"
+    tmp = tempfile.mkdtemp(prefix="herdr-sync-")
+    try:
+        if not git(main, "worktree", "add", "--detach", tmp, at)[0]:
+            return "error", "couldn't make a worktree"
+        ok, out, err = git(tmp, "merge", "--no-commit", "--no-ff", tip)
+        if not ok:
+            files = git(tmp, "diff", "--name-only", "--diff-filter=U")[1].split()
+            return ("conflict", ", ".join(files[:5]) + (" and more" if len(files) > 5 else "")) if files else ("error", err or out)
+        try:
+            r = run(["sh", "-c", cmd], cwd=tmp, timeout=SYNC_LIMIT_S)
+        except subprocess.TimeoutExpired:
+            return "error", f"the check ran longer than {SYNC_LIMIT_S // 60} minutes"
+        if r.returncode:
+            tail = (r.stdout + r.stderr).strip()[-600:]
+            return "fail", f"`{cmd}` exited {r.returncode} on {at[:8]} merged with {base} at {tip[:8]}" + (f":\n{tail}" if tail else "")
+        return "pass", None
+    finally:
+        clean(s, tmp)

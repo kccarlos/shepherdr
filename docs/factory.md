@@ -96,7 +96,7 @@ Shepherdr's states: todo, scheduled, queued, working, needs, ready, merging, don
 | Stalled (30 min quiet) | Assistant | — | Read the screen. Interrupt and "continue from git diff". A second hang gets a fresh agent with a handoff. |
 | Provider cut or empty pool | herdr-task | — | Section 7 |
 | Gate incomplete | herdr-task | — | Start what is missing (review round, verifier, checks) |
-| Base moved | herdr-task | — | Back to the implementer to rebase. Rounds are re-recorded on the new head. |
+| Base moved | herdr-task | — | Back to the implementer to merge the base in. Rounds are re-recorded on the new head. |
 | Open ask | person | none | The task is Needs you and the others go on. The morning digest repeats open asks. |
 | Needs a person's check (device, login, live voice) | Assistant | next digest | Marked "needs your check". The Assistant never puts `--after` on such a task. The digest lists it with the exact steps. |
 
@@ -114,7 +114,7 @@ herdr-task merges only after it has checked all of these itself, against the SHA
 - PRs: `gh pr merge --match-head-commit <SHA>`, then the gate re-reads the PR state.
 - Local branches: `git merge --ff-only <SHA>` run by herdr-task, then a check that base now equals that SHA.
 
-The implementer never merges. This replaces Shepherdr's current local path, where the worker rebases, checks and merges itself (commands.py:897).
+The implementer never merges. This replaces Shepherdr's current local path, where the worker merges the base in, checks and merges itself (commands.py:897).
 
 Factory projects set `review_rounds` to at least 2 (the default is 0) and `merge` to auto. Auto stays off until phase 3's sandbox exists. Until then, the orchestrator presses Accept, which runs the same checks.
 

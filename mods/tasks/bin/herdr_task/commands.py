@@ -25,7 +25,7 @@ from .agents import (
 )
 from .sessions import refresh_sessions
 from .github import (already_merged, pr_head_problem, push_branch, drop_branch, finish, gh, github, merged_here, needs_approval, note_checks, own_work, pr_adopt, pr_open,
-                     pr_pending, pr_problem, pr_repo, pr_behind, pr_update_branch, synced_head, task_problem, SYNC_CHECKS_MS, SYNC_GRACE_MS, UPDATE_CONFLICT, pr_view, remote_of, task_github, update_main, watch_main)
+                     pr_pending, pr_problem, pr_repo, pr_behind, main_red_hold, pr_update_branch, synced_head, task_problem, SYNC_CHECKS_MS, SYNC_GRACE_MS, UPDATE_CONFLICT, pr_view, remote_of, task_github, update_main, watch_main)
 from .github import CHECKS_RUNNING as PR_CHECKS_RUNNING, ci_awaited, NO_CHECKS_MS, NO_CI_RUN
 from .launch import (
     base_ref, brief, caller_labels, caller_space, current_base, default_space, folder_for, handoff, is_coordinator, launch, name_tabs,
@@ -1806,7 +1806,7 @@ def local_merge_msg(s, t):
     main, wt, br, base = s.loc["folder"], t["worktree"], t["branch"], t.get("base") or "main"
     q = shlex.quote
     return (f"Merge task {s.ref(t)} \"{t['title']}\" now:\n"
-            f"1. In {wt}: commit any remaining work, then rebase {br} onto {base} (git rebase {base}) and resolve conflicts.\n"
+            f"1. In {wt}: commit any remaining work, then merge {base} into {br} (git merge {base}; never rebase) and resolve conflicts.\n"
             f"2. Run the project's checks (tests, build, lint) and fix what fails.\n"
             f"3. Merge into {base}: git -C {q(main)} merge --ff-only {br} when {main} has {base} checked out, else git -C {q(main)} fetch . {br}:{base}. If {main} has uncommitted changes in the way, or another worktree has {base} checked out, stop and tell the person; don't stash or reset their work.\n"
             f"4. Clean up: git -C {q(main)} worktree remove {q(wt)} && git -C {q(main)} branch -d {br}\n"
@@ -1869,6 +1869,8 @@ def merge_now(s, t, accepting=False):
             return WAITS_APPROVAL
         t["pr"].pop("needs_approval", None)
         base = t.get("base") or "main"
+        if not accepting and (held := main_red_hold(s, base)):
+            return held  # FAC-113: not an attention: the tick asks again, and merges once main is green. The person's Accept still merges.
         at = synced or head or v.get("headRefOid") or ""
         merge = lambda *extra: gh("pr", "merge", n, "--repo", repo, "--squash", *extra, "--match-head-commit", at)
         queue = uses_queue(s, base)
@@ -2011,7 +2013,7 @@ def cmd_accept(args):
     """The person's Accept on a Ready task (the one thing they do in the Tasks panel): Done at
     once when there is nothing to merge, else merged first, as the merge settings say how: a pull
     request is squash-merged on GitHub (or merges once its checks pass); a local branch is
-    fast-forwarded when it can be, else its agent merges it (rebase, checks) and marks it done."""
+    fast-forwarded when it can be, else its agent merges it (merge main in, checks) and marks it done."""
     error, how, sent, started, back, mid = None, "done", None, False, False, False
     owner = (getattr(args, "owner_approved", None) or "").strip()
     with open_store(args) as s:
@@ -2107,7 +2109,7 @@ def cmd_fix(args):
         problem = args.reason or t.get("attention") or "The pull request can't merge yet."
         main, wt, br, base = s.loc["folder"], t["worktree"], t["branch"], t.get("base") or "main"
         msg = (f"Task {s.ref(t)} \"{t['title']}\" can't merge yet: {problem}\n"
-               f"Fix it in {wt}: for conflicts, rebase {br} onto {base}; for failing checks, find out why and fix them. "
+               f"Fix it in {wt}: for conflicts, merge {base} into {br} (never rebase or force-push); for failing checks, find out why and fix them. "
                f"Run the checks, commit, then run `herdr-task ready {t['id']} --folder {shlex.quote(main)}` to push the fix.")
         # Handed the problem: someone is on it while its agent starts (on_it()).
         t["fix_requested"] = t["handed_at"] = now()

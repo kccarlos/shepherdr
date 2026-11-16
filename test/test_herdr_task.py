@@ -3101,7 +3101,7 @@ class ChecksBeforeReady(PrLooks):
         self.github_says(mergeable="CONFLICTING", checks=[self.PASSED])
         self.assertEqual(self.look(t, after=1000), ("working", "Back to its agent to fix", None))
         self.tick.pr_deliver(self.store, t, {})
-        self.assertIn("It conflicts with main: rebase onto main", self.sent[-1][1])
+        self.assertIn("It conflicts with main: merge main into your branch", self.sent[-1][1])
         self.assertEqual(self.agents.task_status(t, self.live)[0], "working")
 
     def test_no_checks_is_ready_once_github_had_time_to_start_them(self):
@@ -10914,6 +10914,97 @@ class UpToDateBeforeMerge(unittest.TestCase):
         self.go(gh)
         self.assertEqual((gh["merged"], self.updates(gh)), ("abc", []))
         self.assertFalse(any("/compare/" in str(x) for a in gh["calls"] for x in a))
+
+
+class HoldWhileMainIsRed(unittest.TestCase):
+    """FAC-113 (WukongMind, 11-15): a red main turned 4 open pull requests red, because each was updated onto it. While
+    the base's newest finished run is red, merges and branch updates are held; the Assistant hears once; it resumes
+    by itself when the base is green. The person's own Accept still merges."""
+
+    github, setUp, ready, go, updates = (UpToDateBeforeMerge.github, BackToWork.setUp, BackToWork.ready,
+                                        UpToDateBeforeMerge.go, UpToDateBeforeMerge.updates)
+
+    def red(self, sha="deadbeefcafe0000"):
+        self.store.data["main_watch"] = {"main": {"red": sha, "repo": "o/r", "until": 0}}
+
+    def test_a_red_base_holds_the_update_and_the_merge_and_green_resumes_it(self):
+        t, gh = self.github()
+        self.red()
+        for _ in range(3):
+            self.go(gh)
+        self.assertEqual((t["state"], gh["merged"], self.updates(gh), t.get("attention")), ("ready", None, [], None))
+        self.assertEqual(self.commands.merge_now(self.store, t), "main is red since deadbee: merges held until it's green.")
+        self.assertEqual(t["auto_merge"], "checks")
+        self.store.data["main_watch"]["main"].pop("red")  # main_check saw it green
+        self.go(gh)
+        self.assertEqual(len(self.updates(gh)), 1)  # brought up to date at last
+        gh["checks"] = "SUCCESS"
+        self.go(gh)
+        self.assertEqual((t["state"], gh["merged"]), ("done", "m1"))
+
+    def test_the_persons_accept_still_merges_a_red_base(self):
+        t, gh = self.github(behind=0)
+        self.red()
+        self.assertIsNone(self.commands.merge_now(self.store, t, accepting=True))
+        self.assertEqual(gh["merged"], "abc")
+
+    def test_herdrs_own_words_say_merge_main_never_rebase(self):
+        from herdr_task import templates
+        with open(os.path.join(ROOT, "templates", "worker.md")) as f:
+            worker = f.read()
+        for words in (worker, templates.WORKER_MD):
+            self.assertIn("Never rebase or force-push a branch that already has a pull request", words)
+            self.assertIn("merge main into it", words)
+        self.assertIn(templates.WORKER_MD_BEFORE_NOREBASE, templates.OLD_WORKERS)
+        with open(os.path.join(ROOT, "templates", "assistant.md")) as f:
+            self.assertNotIn("rebase onto", f.read())
+        for name in ("commands.py", "ghnews.py", "github.py"):
+            with open(os.path.join(BIN, "herdr_task", name)) as f:
+                for line in f:
+                    self.assertNotRegex(line.lower(), r"rebase \{?\w+\}? onto|then rebase|conflicts, rebase", name)
+
+    def test_another_base_is_not_held(self):
+        t, gh = self.github(behind=0)
+        self.store.data["main_watch"] = {"other": {"red": "deadbeef"}}
+        self.assertIsNone(self.github_module_hold("main"))
+        self.go(gh)
+        self.assertEqual(gh["merged"], "abc")
+
+    def github_module_hold(self, base):
+        import herdr_task.github as github
+        return github.main_red_hold(self.store, base)
+
+    def test_the_assistant_is_told_once_and_it_resumes_when_green(self):
+        import herdr_task.ghnews as ghnews
+        runs = {"r": [{"headSha": "c2", "status": "completed", "conclusion": "failure", "url": "u/1", "workflowName": "Check",
+                       "databaseId": 1}, {"headSha": "c1", "status": "completed", "conclusion": "success"}]}
+
+        def fake_gh(*a, **k):
+            if a[0] == "api" and "commits?sha=main" in a[1]:
+                return True, '["c2", "c1"]', ""
+            if a[0] == "run" and a[1] == "list":
+                return True, json.dumps(runs["r"]), ""
+            return False, "", ""
+        with unittest.mock.patch.object(ghnews, "gh", fake_gh), unittest.mock.patch.object(ghnews, "log_tail", lambda *a: ""):
+            w = {"repo": "o/r"}
+            ghnews.main_check(self.store, "main", w, {})
+            self.assertEqual(w["red"], "c2")
+            text = w["notice"]["text"]
+            self.assertIn("Merges into main are held until it's green: main is red since c2", text)
+            self.assertIsNone(self.github_module_hold("main"))  # (no watch stored yet)
+            self.store.data["main_watch"] = {"main": w}
+            self.assertEqual(self.github_module_hold("main"), "main is red since c2: merges held until it's green.")
+            notice = w["notice"]
+            ghnews.main_check(self.store, "main", w, {})
+            self.assertIs(w["notice"], notice)  # told once
+            runs["r"].insert(0, {"headSha": "c3", "status": "completed", "conclusion": "success"})
+            ghnews.main_check(self.store, "main", w, {})  # c3 isn't in the history: still red
+            self.assertIn("red", w)
+            runs["r"][0]["headSha"] = "c2"
+            runs["r"][1] = {"headSha": "c2", "status": "completed", "conclusion": "success"}
+            runs["r"].pop(0)
+            ghnews.main_check(self.store, "main", w, {})
+            self.assertEqual((w.get("red"), w.get("notice"), self.github_module_hold("main")), (None, None, None))
 
 
 class MergeOnlyReviewRounds(unittest.TestCase):

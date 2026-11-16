@@ -1130,6 +1130,16 @@ class BackToWork(unittest.TestCase):
         self.assertEqual(t["state"], "running")
         self.assertNotIn("accepted_at", t)
 
+    def test_accept_in_a_turn_with_no_real_sign_refuses_without_a_flip(self):
+        """FAC-107: Accept during a turn ten seconds in (maybe a stray wake) is refused, Ready kept: no flip, no news."""
+        t = self.ready()
+        self.live = [dict(self.agent({"address": "t1", "status": "working", "turn": 5, "role": "worker"}), status_ms=self.agents.now() - 10_000)]
+        with self.assertRaises(self.commands.Fail) as no:
+            self.commands.cmd_accept(self.args())
+        self.assertIn("Accept it once that turn ends", str(no.exception))
+        self.assertEqual((t["state"], t.get("back")), ("ready", None))
+        self.assertNotIn("accepted_at", t)
+
     def out_task(self):
         t = self.pr_task()
         t.update(state="running", review_out=5)

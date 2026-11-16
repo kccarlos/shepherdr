@@ -1955,7 +1955,7 @@ def cmd_web_owners(a):
     if a.json:
         print(json.dumps({"owners": new, "settings": path}))
     else:
-        say(("Kept: " + ", ".join(new) + " may open the web app here") if new else "Cleared service.owners: only this machine's own Tailscale owner gets in")
+        say(("Kept: " + ", ".join(new) + " may open the web app here") if new else "Cleared service.owners: only this machine's Tailscale owner gets in (a tagged machine: nobody)")
         if d.get("pushed_from"):
             say("  this machine's settings come from another machine's Shepherdr window: set it there too, or its next push replaces it")
     return 0

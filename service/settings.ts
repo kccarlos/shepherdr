@@ -4,7 +4,7 @@
 // Levels as the window's scopes: Everywhere ("everywhere"), a space ("spaces"[its id], with its repo folder, which is
 // how herdr-task finds it), and for the Machines page each machine ("machines"[its name, "local" here]).
 import { existsSync, readFileSync, renameSync, watch, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { HOME, settingsFile, where, writableSettings } from "./paths.ts";
 import * as C from "../core/settings.js";
 import { SH } from "../core/paths.js";
@@ -95,7 +95,9 @@ export class Settings {
 
   start() {
     this.read();
-    if (existsSync(dirname(settingsFile()))) watch(dirname(settingsFile()), (_e, name) => { if (name === "shepherdr.json") this.read(); });
+    // the file by its own name (settings.json since the data move; shepherdr.json before): a write replaces it, so the
+    // folder is watched
+    if (existsSync(dirname(settingsFile()))) watch(dirname(settingsFile()), (_e, name) => { if (name === basename(settingsFile())) this.read(); });
   }
 
   private read() {

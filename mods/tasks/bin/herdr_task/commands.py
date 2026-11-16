@@ -700,7 +700,7 @@ def gate_step(s, t):
     fails = [f for f in t.get("review_failures") or []
              if f["round"] == round_n and f["head"] == head and (f.get("at") or 0) > since]
     rows = {x["label"]: x["value"] for x in task_settings(s, t)}
-    pick, reset = (None, None) if len(fails) >= REVIEW_TRIES else fallback_reviewer(s, t, rows["Reviewer"], [f["cli"] for f in fails])
+    pick, reset = (None, None) if len(fails) >= REVIEW_TRIES else fallback_reviewer(s, t, rows.get("Reviewer"), [f["cli"] for f in fails])
     if not pick and not reset:
         why = (f"{REVIEWER_FAILED} " + ", ".join(f"{f['cli']} ({f['why']})" for f in fails[:REVIEW_TRIES]))[:160]
         # What each last saw, one line each, so the Assistant can tell sign-in from a refusal or a crash (FAC-75).

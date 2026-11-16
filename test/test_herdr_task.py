@@ -5687,6 +5687,7 @@ class GateEndToEnd(GateReview):
         self.task["set"]["review_min"] = 1
         self.addCleanup(lambda: [(p.kill(), p.wait()) for p in self.procs])
         for mod, name, value in ((launch, "run", self.hc_run), (self.commands, "run", self.hc_read),
+                                 (launch, "send_when_clear", self.real_send),  # the fake codex gets its prompt for real
                                  (self.commands, "own_path", lambda: os.path.join(self.fake, "herdr-task"))):
             p = mock.patch.object(mod, name, value)
             p.start()
@@ -5772,6 +5773,7 @@ class GateEndToEnd(GateReview):
 
     def test_agy_hits_a_quota_error_and_the_round_goes_to_claude(self):  # FAC-81
         self.mode = "quota"
+        self.pools = [{"name": "codex", "state": "ok", "five": 0.0, "week": 40.0, "five_reset": None, "week_reset": None}]  # FAC-101
         self.ready()
         argv = self.argv_of(1)
         self.assertEqual((argv[argv.index("--mode") + 1], "-i" in argv), ("plan", True))

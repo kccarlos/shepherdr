@@ -115,16 +115,20 @@ def facts(s, t, report):
         # Ready only once its checks are done and GitHub knows it can merge (SHEP-175): Working till then.
         if t["state"] == "ready":
             ci = v.get("state") == "OPEN" and ci_awaited(s, t, v)
-            wait = pr_wait(v, t.get("ready_at"), ci)
+            # FAC-105: timed from its newest head Herdr made (FAC-98's update-branch), else from ready.
+            since = max(t.get("ready_at") or 0, (pr.get("synced") or {}).get("at") or 0) if ci else t.get("ready_at")
+            wait = pr_wait(v, since, ci)
             if ci and not wait and not pr.get("no_ci"):
-                # FAC-105: its base's workflows run on pull requests, yet none ran on it: Ready, never merged by
-                # itself (merge_now()), and the reason told; an Actions run for its head that doesn't show yet waits.
-                if ci_runs_on(t, v) and now() - (t.get("ready_at") or 0) < UNKNOWN_CHECKS_MS:
+                # FAC-105: its base's workflows run on pull requests, yet none ran on it: Ready for the person, its
+                # pending merge set aside (kept in no_ci), the reason told; an Actions run for its head not shown yet waits.
+                if ci_runs_on(t, v) and now() - since < UNKNOWN_CHECKS_MS:
                     wait = CHECKS_RUNNING
                 else:
-                    pr["no_ci"], s.dirty = True, True
-            elif not ci and pr.pop("no_ci", None):
+                    pr["no_ci"], s.dirty = t.pop("auto_merge", None) or True, True
+            elif not ci and (held := pr.pop("no_ci", None)):
                 s.dirty = True
+                if held is not True and not t.get("accepted_by"):
+                    t.setdefault("auto_merge", held)  # its checks showed after all: merges by itself as it would have
             if wait != pr.get("wait"):
                 if wait:
                     pr["wait"] = wait

@@ -11101,7 +11101,9 @@ class NoCIRunWithCISetUp(unittest.TestCase):
         self.assertEqual((self.tick_green()["done"], self.merges, self.task["pr"].get("wait")), ([], [], "Checks running"))
         self.age(self.github.NO_CI_RUN_MS)
         self.assertEqual((self.tick_green()["done"], self.merges, self.task["state"]), ([], [], "ready"))
-        self.assertEqual((self.task["pr"].get("no_ci"), "wait" in self.task["pr"], self.task.get("auto_merge")), (True, False, "checks"))
+        self.assertEqual((self.task["pr"].get("no_ci"), "wait" in self.task["pr"], "auto_merge" in self.task), ("checks", False, False))
+        self.assertEqual((self.agents.task_status(self.task, [])[0], self.output.view(self.store, self.task, [])["status"],
+                          self.news.news_state(self.store, self.task, [])[1]), ("ready", "ready", "ready"))  # Ready, told
         why = self.github.NO_CI_RUN
         self.assertEqual(self.show(), why)
         self.assertIn(f"waits for the person's Accept: {why}", self.shown[-1][1])
@@ -11110,6 +11112,7 @@ class NoCIRunWithCISetUp(unittest.TestCase):
         self.assertEqual((self.tick_green()["done"], self.merges), ([], []))  # every tick, not just once
         self.rows.append({"name": "check", "status": "COMPLETED", "conclusion": "SUCCESS"})  # a run shows up at last
         self.assertEqual((self.tick_green()["done"], len(self.merges), "no_ci" in self.task["pr"]), ([13], 1, False))
+        self.assertEqual(self.task["accepted_by"], "auto")
 
     def test_auto_accept_agrees_and_the_persons_accept_merges(self):
         from unittest import mock

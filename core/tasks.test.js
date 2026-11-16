@@ -218,6 +218,14 @@ test("place: a task out of review rounds needs you, even with its agent at work"
   expect(place(list, { ...task, review_out: undefined }, { live: [{ address: "t1", status: "working" }] }).section).toBe("working");
 });
 
+test("place: a task waiting on the iPhone needs you, saying why (FAC-110)", () => {
+  const list = { slug: "x", folder: "/x", prefix: "X", tasks: [] };
+  const task = { id: 1, state: "running", started: 1, agents: [{ address: "t1", at: 1 }], device_wait: { at: 1, why: "unlock and trust the iPhone" } };
+  const p = place(list, task, { live: [{ address: "t1", status: "idle", role: "worker" }] });
+  expect([p.section, p.needs, p.why]).toEqual(["needs", "reply", "Device not available: unlock and trust the iPhone"]);
+  expect(place(list, task, { live: [] }).why).not.toContain("Device");
+});
+
 describe("This space (inSpace)", () => {
   const sp = { id: "sp3", machine: null, folder: "/work/shop" };
   test("its list's folder, on its machine", () => {

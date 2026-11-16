@@ -3187,6 +3187,13 @@ class CiStopped(PrLooks):
         self.tick.pr_deliver(self.store, t, {})
         self.assertIn("its timeout-minutes is 45", self.sent[-1][1])
 
+    def test_a_job_with_no_timeout_minutes_counts_githubs_360_default(self):
+        t = self.said_ready()
+        self.github_says(checks=[self.stop(conclusion="CANCELLED", start="10:00", end="16:00")])
+        self.look(t, after=1000)
+        self.assertEqual(self.reruns(), [])
+        self.assertIn("too long, not a hiccup", t["attention"])
+
     def test_a_timed_out_conclusion_is_not_re_run_either(self):
         t = self.said_ready()  # no workflow file to give a limit: the conclusion says it
         self.github_says(checks=[self.stop(conclusion="TIMED_OUT", end="10:12")])

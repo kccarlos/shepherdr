@@ -598,7 +598,7 @@ def hit_limit(task, c):
     a, b = _ms(c.get("startedAt")), _ms(c.get("completedAt"))
     took = int(b - a) // 60000 if a and b and b >= a else None
     limit = job_timeout(task.get("worktree"), name)
-    reached = bool(limit and took is not None and took >= limit - 1)
+    reached = bool((limit or 360) and took is not None and took >= (limit or 360) - 1)  # GitHub's default is 360
     return word(c) == "TIMED_OUT" or reached, took, limit
 
 

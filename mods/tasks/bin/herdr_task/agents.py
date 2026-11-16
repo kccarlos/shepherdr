@@ -194,7 +194,7 @@ def task_status(task, live):
     # Told its background job ended (FAC-106, bg_ended_pass): Waiting on it a while longer, then Needs you
     # if it still took no turn since.
     told = task.get("bg_told") if st == "running" else None
-    if live and told and told.get("at") and not turn_since(told, live):
+    if told and told.get("at") and any(k.get("address") == told.get("address") for k in live) and not turn_since(told, live):
         return ("working", None, WAITING_BG) if now() - told["at"] < BG_GRACE_MS else ("needs", "reply", BG_ENDED_WHY)
     if live and own_work(task, live):
         return "working", None, WAITING_BG

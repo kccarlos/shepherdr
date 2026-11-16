@@ -1803,6 +1803,18 @@ class BackgroundJobEnded(unittest.TestCase):
         self.assertEqual(self.status(), ("working", None, "Waiting on a background job"))
         self.clock += 5 * 60000
         self.assertEqual(self.status(), ("needs", "reply", "Waits on a background job that ended"))
+        # the Tasks panel and list say so too, not its stale status line (news_pass keeps v["why"] as t["waits"])
+        import herdr_task.output as output
+        self.task["progress"] = {"text": "Waiting on remote tests", "set": self.clock - 1200_000}
+
+        class S:
+            write, loc, prefix = False, {"folder": "/f"}, "X"
+            key = ref = lambda self, t: "X-7"
+        with self.mock.patch.object(output, "waiting_for", lambda s, t: []), self.mock.patch.object(output, "waiting_ext", lambda t: []):
+            v = output.view(S(), self.task, self.idle)
+        self.assertEqual((v["needs"], v["why"], v["own_work"]), ("reply", "Waits on a background job that ended", False))
+        # a told agent no longer there (a takeover) never pins it
+        self.assertNotEqual(self.status([dict(self.idle[0], address="t2")])[2], "Waits on a background job that ended")
         # it took a turn since: no longer waiting on b9, and never told about it again
         self.idle = [dict(self.idle[0], turn=4, status_ms=self.clock - 600_000)]
         self.assertEqual(self.status()[0:2], ("needs", "reply"))

@@ -1,0 +1,278 @@
+# sheepdog-factory: design and roadmap (2026-11-16)
+
+A direction-setting design. Code and docs were read, not run. Web sources are cited by number; *search summary* means I did not open the primary page. *Unverified* means a path nobody has exercised.
+
+This doc **supersedes the verdicts** of [sheepdog-integration-design.md](sheepdog-integration-design.md) ("keep the fork, sheepdog controls it") and [owner-console-evaluation.md](owner-console-evaluation.md) ("Shepherdr's phone web first"). Their engine findings (forged approvals, ask kinds, typed rules, the owner contract) are kept and reused below.
+
+Words: the **owner** is the person. The **engine** is today's `herdr_task` Python package. The **coordinator** is the one Opus agent per project (Shepherdr's "Assistant"). The **brain** is sheepdog's `internal/brain`. The **babysitter** is the outside Opus session that watched the factory by hand; it must not come back.
+
+## 1. Verdict
+
+**Yes, this is the right direction under the new goals. Build one product: the engine leaves the Shepherdr fork and ships inside sheepdog's install, on herdr-core only. But extract it, do not rewrite it: the Python engine and its tests move as they are, and the Go port stays off the plan until a trigger fires.**
+
+What changed since 2026-11-14, and why the earlier answer no longer holds:
+
+| Earlier argument | Now |
+|---|---|
+| "Upstream still pays for most of it" | Upstream's work is mostly the desktop UI we are dropping: 53.4k lines of JS mods, 13.8k of TS `service/`, 29.9k of `web/`. The part we keep (`herdr_task`, 19.3k lines) is where our own changes are. One upstream sync cost a 34,000-line, 30-conflict merge (note 34). |
+| "Shepherdr's phone web is the cheapest console" | The owner chose the console: sheepdog voice. A second owner channel is what "stitched" means. |
+| "Sheepdog is a second consumer, only if a test fails" | Sheepdog is the product; the factory is a mode of it. |
+| "Releases cannot be delegated" | The owner already delegates patch releases after QA. Delegation becomes a typed rule with a scope and an expiry (section 3). |
+
+What still holds, and how this plan respects it:
+
+| Earlier argument | Evidence today | How the plan respects it |
+|---|---|---|
+| The rules are a moving target | Since the 11-14 doc: 14 engine changes merged (FAC-96 to FAC-110), 3 in flight (FAC-111 to 113), 4 new field notes (50 to 53) | No rewrite. The Python moves with its history; pitfall fixes keep landing during the move |
+| A port throws the tests away | 16.5k lines of Python tests in 20 files; `test_herdr_task.py` alone has 534 tests in 77 classes | The suite is the acceptance test of the extraction (phase 1) |
+| The brain cannot judge factory work | 6 steps and 25 s per turn (`brain.go`), not Opus | The brain routes and reads back. Judgement stays with the coordinator and the Fable gate |
+| An owner approval can be forged | `accepted_by` is free text; an agent can type "the owner approved" | Owner answers are proven by the daemon, in code (section 3). Sheepdog's rule "rails stay in code" applies |
+| No babysitter layer | Night one needed about 40 interventions | Every duty has a named owner in code or in the coordinator (section 5) |
+
+One honest cost: we lose upstream for good and own 19k lines of Python alone. And the seam does not vanish, it moves inside one install: a Go daemon and a Python engine still talk over a contract. That is acceptable because the owner sees one tool, one update and one channel; the contract gets a fixture test in the same repo.
+
+## 2. Product shape: what "hands-off, voice-only" means
+
+The owner's whole loop is five things. Each is one short exchange.
+
+| Touchpoint | The owner says or hears | What happens in code |
+|---|---|---|
+| Give a goal | "In WukongMind, build Learn on ask for 1.5." | The brain picks the project and passes the words unchanged to its coordinator (`say`). The coordinator plans a graph (section 4). The owner hears a three-sentence plan summary |
+| Set a rule | "Designs don't wait for me; Fable decides." | Read back with its class and scope ("Typed rule, this project: … Save?"). Saved on a yes. Never asked again |
+| Answer an ask | "Two things need you. WukongMind: tag 1.5.0 now? …" "Yes." | The ask is a record; the answer goes through the rail; the engine runs what it unlocks |
+| Approve a release | Same as an ask, kind `release`, unless a delegation rule covers it | Engine tags or triggers the workflow after the proven answer |
+| Hear a digest | "Since last night: 9 merged, milestone 2 done, 1 waiting on CI, Claude 40% left. Nothing needs you." | Built in code from the store, no model. On request, at a milestone, in the morning |
+
+**Never narrated:** a worker starting, finishing, asking its coordinator, a review round, a CI run, a retry, a rebase, a model switch, a restart that worked. In a factory project a code rule keyed on the task label silences all worker and reviewer speech and push. Only asks, alerts and digests get through. This is a code rule, not a chattiness prompt.
+
+**Alerts** (things that break the silence without being asked): the factory has stopped (no pool left, disk, a consent prompt suspected, main red for over an hour, a task waiting on CI over 90 minutes), and nothing else.
+
+**Still at the Mac**, collected by `doctor` and the start checklist before the owner leaves: agent CLI logins, `gh` login, Apple sign-in with two-factor, Apple agreements, macOS consent prompts (Files and Folders, removable volumes), typing a new secret value, pressing a Claude reset. The phone only says one is wanted (notes 7, 12, 36, 40).
+
+Without the app team's APNs key a self-hosted daemon cannot push to a locked phone. The first-run text must say so: asks then wait in the inbox and are spoken at the next voice session.
+
+Community check: every serious system converges on "humans at gates, not in the loop" [1][2][3][8]. I found nothing published on voice digests for a factory; this part is ours to prove.
+
+## 3. Architecture on herdr-core
+
+```
+owner ── voice / phone ── sheepdog daemon (Go) ── owner contract ── engine (Python, stdlib only)
+                           rail, proof, cards,      (JSON, fixture     store, tick, gate, graph,
+                           digest speech, rules      tested)           budgets, watchdog, rules
+                           read-back                                        │ hc
+                                                                 herdr-core terminals:
+                                                    coordinator (1 per project) · workers · reviewers
+```
+
+| Question | Answer | Why |
+|---|---|---|
+| Where does the engine live? | Its own process, owned by sheepdog. Source in the sheepdog repo under `factory/`; the release binary embeds it (`go:embed`, as `panel.go` already embeds the panel) and unpacks it per version | One install, one version, one update. A feature that touches both sides is one task and one PR |
+| Who runs the tick? | The daemon keeps one tick loop alive **as an hc terminal** (`hc run --keep`), as `scheduler.py` does today | A process started by launchd has no Documents access and hung on 11-08; hc terminals sit in the user session (note 10). The daemon replaces launchd-bun and `scheduler --ensure` as the thing that keeps it alive |
+| Language | Python first. No port now (section 8 has the triggers) | Section 1 |
+| What replaces a "space"? | A **project = a repo folder**. The store is already one file per folder (`tasks/<slug>.json`, with `project_id`). Settings layers become Everywhere → machine → project. Labels become `sheepdog.project`, `sheepdog.role`, `sheepdog.task` | 8 direct `herdr-app` calls in 5 modules and `APP_HOME` paths in 11 modules are all about spaces, tabs, chat and backups |
+| Coordinator | One Opus agent per project, in an hc terminal, no window. Plans the graph, writes briefs, answers workers, decides recaps. Woken by events and a long heartbeat (today's Autopilot, always on). The owner never types in its pane | It is the only place with enough context and model for judgement |
+| Brain | Routing only: which project; pass the words on unchanged; answer "what needs me" and "how is X" from code-built facts; read a rule back. Never ranks, accepts, judges or polls | 6 steps and 25 s are enough for that and for nothing more |
+| Owner contract | The shapes from the earlier doc: `projects`, `asks`, `digest`, `rules`, `graph` (new), and actions `answer`, `say`, `propose_rule`, `revoke_rule`. v1 binding is `engine owner … --json` | One producer, one consumer, one fixture |
+| Approval rail | Every owner decision is an ask record with a kind (`decision`, `gate`, `release`, `paid-key`, `delete`, `install`, `reset`, `rule`). For every gated kind the engine asks the daemon over loopback "did the owner's own tap or fresh words answer ask X?" and refuses without it. `--owner-approved "<text>"` is removed | Today any agent can write the approval. This stops shortcuts, not a same-user attacker; VMs do that |
+| Standing rules | One store, two classes, named in every read-back. **Typed** (enforced in code): merge policy, review rounds, auto-accept bar, design gate (`fable` or `owner`), delegation `{kinds, scope, until}`, notify level, project priority. **Text**: given to the coordinator at every start, compaction and handoff (`assistant_settings.py` does this today). Claude resets are never delegable | "Said once, kept": typed rules do not depend on a model remembering |
+
+## 4. Task graph
+
+**The problem today.** The data half exists: 73 of 130 WukongMind tasks and 23 of 101 factory tasks carry `--after`. What is missing is everything around it. Milestones live only in title text ("M4 5b: …", "10. Learn on ask acceptance and 1.5.0"). There is no view of order, no check of the plan as a whole, and merges go in task-list order whatever depends on what.
+
+**The model.** Project → milestones → tasks → dependencies.
+
+| Object | Fields added | Rule in code |
+|---|---|---|
+| Milestone | id, goal, order, exit test, gate (`auto`, `fable`, `owner`), state (planned, active, validating, done) | Ends with an acceptance task the engine adds itself, run by a fresh agent that did not write the code |
+| Task | `milestone`, `after[]` (exists), estimate (exists), kind (exists) | A task is *ready to start* when every blocker is done: the same rule as Beads' `bd ready` [4] |
+| Plan | A file the coordinator writes; `engine plan apply` checks it | No cycles or dangling ids; every task within the size limit; a design task before a UI milestone; a release ask placed before the merge (note 31) |
+
+**How it is planned.** The coordinator turns the goal into a plan file with milestones. A milestone plan is a judgement task: the Fable gate reviews it, or the owner does if their rule says so. Planner output stays at "what and why" [3].
+
+**How it stays current.** States are derived by the engine, never typed by a model. A split keeps the parent's place in the graph. A replan is `plan amend` with a reason in the log. The digest reports replans as one number.
+
+**Critical path.** Longest remaining chain in the active milestone, from task estimates and the workers' own `--left`. It drives three things: merge order (a task others wait on merges first), urgent priority, and the voice summary.
+
+**How it is shown.**
+
+| Surface | Content | Why |
+|---|---|---|
+| Voice | "Milestone 2 of 4. 7 of 12 merged. The path to done runs through CI speed-up, then the slow UI tests: about 5 hours. Nothing needs you." | A graph cannot be spoken; its critical path and its blockers can |
+| One read-only page, `/factory`, served by the daemon | Milestones left to right, tasks in dependency layers, critical path marked, one line of "why waiting" per task | Order and relations are the weakness the owner named, and they are visual. Plain JS in the daemon's web, reachable from the paired phone |
+| Terminal | `sheepdog factory graph` as a text tree | Free with the same data |
+
+No board, no drag and drop, no chat. A native iOS view only if the page gets used.
+
+Community: milestones as the unit of validation, with validators that have not seen the code, is Factory's Missions design [5, *search summary*]; planner, workers and judges after flat coordination failed is Cursor's [6, *search summary*]; Symphony keeps blockers out of its core and dispatches on a `dispatchable` flag [1]. Claude Code's agent teams share a dependency-aware task list [7, *search summary*].
+
+## 5. Autonomy defaults
+
+Shepherdr became usable after weeks of flipping settings. These are on from the first run; each exists in the engine today unless marked **new**.
+
+| Area | Shepherdr default | sheepdog-factory default |
+|---|---|---|
+| Accept | The person | The engine, at the evidence bar: 2 passing review rounds, CI green, proof present, no open owner ask (FAC-99) |
+| Designs and plans | Wait for the person (FAC-94) | A Fable round judges as the owner would, then accept (FAC-99). A typed rule can switch a project back to "wait for me" |
+| Autopilot | A switch, off | Not a switch. The coordinator is always event-woken |
+| Review | Rounds until told | 2 rounds, a different model than the worker, deltas from round 2, design and doc tasks 1 round, merge-only commits exempt, one extra round granted by code after a pass (notes 32, 46, 49) |
+| Releases | Ask | Ask, unless a delegation rule covers the scope ("patch tags after QA") |
+| Worker permissions | Allow-list prompts | Full permissions inside a VM or sandbox; worktrees pre-trusted per CLI; CLI auto-update off during runs (notes 13, 21, 40) |
+| Questions | CLI dialog | `ask` records only; a pane blocked on a dialog is flagged (note 51) |
+
+**CI** (from WUKO-130: 349 runs and 9,188 macOS minutes in 5 days; 89 of 162 PR-hours fell on one day; 26 runs existed only to re-test a branch after someone else's merge):
+
+| Rule | State |
+|---|---|
+| A behind, conflict-free PR merges after the cheap local checks, not a full CI run | FAC-111, in flight |
+| Never auto re-run a job that hit its own time limit | FAC-112, in flight |
+| Main red: hold merges and say so; say "merge main", never "rebase" | FAC-113, queued |
+| Count PRs in CI against the runner cap before pushing another | **new** |
+| Alert when a ready task has waited on CI for 90 minutes | **new** |
+| Docs-only commits exempt from new rounds; keep the first `ready_at` | **new** |
+| Project start writes the CI shape: one summary check, docs skip, at most 3 heavy jobs per PR, queue not cancel on main, base flakiness measured first (notes 23, 28) | **new**, as a start-checklist item |
+
+**Quota and models.** The owner's rule (11-13) is four lines and says "judged by the model, don't code a pool picker"; field note 43 and the earlier design say "put it in code". Both are right about different halves. Code supplies **facts and hard rails**: a fresh pool table (share left, time to reset, from `codexbar`) in every coordinator wake; never start on an empty pool; switch a running task only at 0%, with the handoff (FAC-104); Codex is a reviewer by default; the coordinator is Opus; at the 5-hour floor write handoffs and sleep to the reset; only the owner presses a reset. The **choice among pools with quota** stays the coordinator's.
+
+**Watchdog, recovery, identity.**
+
+| Failure | Rule |
+|---|---|
+| Coordinator "working" with no child process and no output for 20 minutes (note 53) | Esc once, then a fresh session with a handoff, then alert |
+| Coordinator on an API error or an old template (note 37) | Retry; fresh session with handoff (FAC-78) |
+| New agents start blank; a volume answers only old processes (notes 38 to 40) | One alert: "a macOS permission prompt may be waiting"; stop starting agents |
+| Crash, reboot, hc restart | At daemon start and every tick: every project with open tasks has **exactly one** live coordinator. None: start one from the store with a handoff. The store is the truth, as in Symphony, which re-polls after a restart rather than restoring state [1]. Workers come back through `revive.py` |
+| Coordinator identity | A lease in the project record (terminal, session, template hash). `say`, news and wakes go to the lease holder, not to "whatever terminal has the role label". A second claimant is refused. The restart path is engine code; today `watchdog.restart_assistant` runs `mods/coordinator/restart.sh` from the herdr-app folder, so it cannot work headless |
+
+*Not found in the repo:* the two bugs from today (an Assistant not restarted after a crash or disk event, and the assistant identity bugs) are not written in the field notes or the task store I read. The lease and the reconcile rule address the class; the exact cases must become tests before phase 2 closes.
+
+## 6. One install
+
+| Layer | How it arrives | Notes |
+|---|---|---|
+| sheepdog daemon, voice, phone pairing | The one-line installer or Homebrew, as today | One-action update already ships (v0.1.30) |
+| Engine, templates, reviewer sandbox profile | Embedded in the sheepdog binary | The engine imports only the standard library. Compressed it should be a few hundred KB (estimate) |
+| Python | The system `python3`. On a Mac, git comes with the Command Line Tools, which also bring `python3` (3.9) | The engine uses 3.8 syntax (86 walrus uses). *Unverified: the suite on 3.9; the exact floor.* Fallback if absent: `uv python install`, offered by `doctor`, never silent |
+| herdr-core | The installer fetches it if missing | `hc` has no plugin command; sheepdog's herdr plugin serves herdr-tui only, so it is not the route. *Unverified: whether today's installer fetches hc* |
+
+**Cannot be bundled**, so `sheepdog factory doctor` checks each with one plain fix line:
+
+| Thing | Needed for | Without it |
+|---|---|---|
+| At least one agent CLI, logged in (`claude`, `codex` or `agy`) | Everything | Stop. One CLI is enough: the reviewer is a fresh session on another model |
+| `gh`, logged in, default repo pinned (note 33) | PRs, CI, merge | Local-merge mode only |
+| `codexbar` | The pool table | Run without quota facts; switch only on a provider error |
+| A project volume that answers a timed probe from inside hc | Starting agents | Stop, and name the consent prompt |
+| Xcode, `asc`, Apple session, agreements, simulators | iOS projects only | The iOS checklist items stay red |
+| APNs relay | Push to a locked phone | Asks wait in the inbox; say so |
+
+**First run, for someone without our context:**
+
+1. Install; `sheepdog setup` (voice key, pairing) as today.
+2. `sheepdog factory start <folder>` or "start a project in …" by voice. Doctor runs first.
+3. At most five questions, spoken or typed: the goal or a requirements file; which gates you delegate; releases; notify level; confirm the pools found. Each answer is saved as a rule.
+4. The coordinator starts, plans, and the owner hears the plan summary. From here on: asks and digests only.
+
+`project.py` (621 lines) already has `project start` and `project checklist`; it loses its herdr-app step and gains the doctor.
+
+## 7. Extraction map
+
+Engine modules by fate (lines from `wc -l`; total 19,268):
+
+| Fate | Lines | Modules |
+|---|---|---|
+| **Keep** as is | 6,518 | `store`, `queues`, `tick`, `github`, `ghnews`, `budget`, `checks`, `proof`, `provider`, `sessions`, `takeover`, `handoff`, `revive`, `automations`, `simulators`, `devices`, `usage`, `machine`, `when`, `archive`, `output` |
+| **Adapt** (spaces → projects, no window, no chat, owner contract) | 10,703 | `commands` 2,119, `agents` 1,308, `launch` 999, `settings` 944, `autopilot` 912, `machines` 870, `project` 621, `news` 609, `cli` 554, `feedback` 473, `watchdog` 287, `base` 274, `assistant_settings` 263, `ask` 237, `templates` 194, `scheduler` 39 |
+| **Drop** | 1,152 | `backups` (the window's document), `home` (home-space Assistant; its health sample stays in `machine`), `reactions`, `star`, `browsers` (the Browser view) |
+| **Replace** | 895 | `layout` (the move from `~/.herdr`) becomes a one-time importer of a Shepherdr store |
+| **New, Python** | est. 800 | milestones and plan checks, graph and critical path, owner contract, coordinator lease, CI capacity rule |
+| **New, Go** | est. 1,200 | `internal/factory`: keep the tick alive, contract client, asks as cards, answer proof, quiet rule, rule read-back, digest speech, `/factory` page |
+
+Outside `herdr_task`, the templates and engine call helpers that also need a fate:
+
+| Helper | Size | Fate |
+|---|---|---|
+| `herdr-secret` | 984 lines Python | Keep the by-name store; the masked box becomes a terminal prompt at the Mac |
+| `herdr-artifact` and the recipe viewer | in the web app | Proof becomes files (Markdown, images, `recipe.json`) linked from the PR; `/factory` shows the summary only |
+| `reviewer.sb` | 43 lines | Keep |
+| `mods/coordinator/restart.sh` | — | Rewrite inside the engine (section 5) |
+| `service/` (bun), `web/`, every JS mod | 97k lines | Drop |
+
+**Field-note fixes that must survive, as named tests** (most exist in the Python suite; the extraction may not delete them):
+
+| Notes | Fix |
+|---|---|
+| 20, 24, 25 | A reviewer's verdict is recorded end to end per CLI; a pass tells the worker and starts the next round |
+| 27, 42 | Size limit in code, generated files excluded |
+| 28 | CI attempts count in the loop-breaker |
+| 31, 51 | An open ask outlives its worker; no blocking dialogs |
+| 33 | Every `gh` call pins the repo |
+| 38 | Ending an agent ends its process group |
+| 39, 40 | Timed volume probe |
+| 45, 46 | The reviewed commit is the PR's head; merge-only commits are exempt |
+| 48 to 50 | Design waits for its gate; out-of-rounds is visible and self-granting; a wake after ready keeps the merge |
+| 52 | Bring a PR up to date before merge (then FAC-111's cheap path) |
+| 53 | "Working" with no child is stuck |
+
+**Templates.** `assistant.md` (222 lines) carries the most value and the most Shepherdr:
+
+| Keep | Change | Drop |
+|---|---|---|
+| Plan, Start the workers, News and watching, Decide yourself / Ask only for, If you were restarted, the iOS and CI rules | Identity ("you coordinate project X; the owner does not read this pane; you reach them only through `ask`, `alert` and the digest"). Plans are a milestone graph through `plan apply`. Accept is policy, not "never accept". Autopilot becomes the only mode. A pool table arrives in each wake | Feedback for Shepherdr, Usage insights, the star, Home space, suggested next message, showing media in chat, the Tasks panel, `herdr-app ls`, the header switch |
+
+`worker.md` (33 lines): drop the two herdr-app mod rules, chat media, the Browser view, suggestions and feedback; keep status, review, `ask`, `ready`, device-wait and secrets. `reviewer.md` (16 lines): keep.
+
+Sheepdog's rule that prompt changes need eval evidence applies. The factory templates need a small replay set first: about ten scripted situations from the field notes run against the suite's `fake_cli`. Changes to the brain's routing go through `make eval` with no Safe regression.
+
+## 8. Roadmap
+
+Dogfooding: **today's Shepherdr factory builds phases 1 to 4** as ordinary FAC tasks. The new factory first runs a throwaway project in a VM, then itself (phase 5), then WukongMind.
+
+| # | Phase | Size | Exit test |
+|---|---|---|---|
+| 0 | Close out: land FAC-111 to 113; write today's two bugs as field notes; record the baseline (owner touches and outside interventions per day) | S, days | The three tasks merged; a baseline number exists |
+| 1 | **Extraction.** `factory/` in the sheepdog repo with history; spaces → projects; herdr-app calls removed; five modules dropped; Python 3.9 in CI | M, Python ~1,500 changed | The whole Python suite passes with no herdr-app installed. On a Linux VM and a clean Tart VM with only hc and one CLI, a task goes from `add` to a merged PR |
+| 2 | **One install and staying alive.** Embed and unpack; daemon keeps the tick; doctor; coordinator lease and reconcile; engine-owned restart | M, Go ~500, Python ~400 | A fresh VM: one install command plus logins, `factory start`, first PR merged. Reboot mid-task: work resumes within 5 minutes with no person and exactly one coordinator |
+| 3 | **Owner channel.** Ask kinds and proven answers; quiet rule; `say`; rules with read-back; digest | M, Python ~500, Go ~600, Swift small | One full day by voice and phone only: goal, rule, ask, release, digest. In tests a typed "owner approved" and agent keys into an ask are refused. Zero worker speech. `make eval` shows no Safe regression |
+| 4 | **Graph.** Milestones, `plan apply`, critical path, merge order, voice summary, `/factory` page; the new CI rules | M, Python ~600, Go and JS ~500 | "What is blocking milestone 2?" is answered by voice from code-built facts. A split or replan keeps dependencies. The page shows order without opening a terminal |
+| 5 | **Self-hosting.** The new factory builds itself and WukongMind; Shepherdr is uninstalled on the Mac; stores imported | S code, 1 week run | One week, two projects: no babysitter intervention, and owner touches are only the five in section 2 plus the at-the-Mac list |
+| 6 | **A stranger's first run.** Public docs; a QA agent in a fresh VM follows only the docs | S | It reaches a merged PR with no help |
+
+**When a Go port is justified.** Never as one move. Per module, when both are true: the module has had no rule change for 30 days, and the daemon needs it in process. Read paths (store, graph, digest) are the likely first. A second trigger: system Python becomes the top install failure in phase 6. Review at the end of phase 5; the default answer is "not yet". Anthropic's own advice points the same way: re-examine the harness when a model ships and delete parts that no longer carry weight [3], which is cheaper in Python.
+
+**Do not build:** a task board or chat UI; per-worker narration; a second model above the coordinators; an agent teams or MCP/A2A adapter; our own merge queue (use GitHub's where the plan allows it [9, *search summary*]); tasks of one project on several machines; VM provisioning; secret entry on the phone; a native iOS graph before the page is used; the Go port.
+
+## 9. Decisions for the owner, and risks
+
+| # | Decision | Recommendation | Why |
+|---|---|---|---|
+| 1 | Extract the Python engine now, port to Go only on the triggers above? | Yes | 14 rule changes in two days; 534 tests carry the pitfalls |
+| 2 | Where does the engine's source live? | In the sheepdog repo, `factory/`, embedded in the binary, off until `factory start` | One version and one PR per feature. Shepherdr is MIT, so its notice comes along. The other choice is a separate repo whose release sheepdog embeds |
+| 3 | Model choice: code or coordinator? | Facts and hard rails in code; the pick stays with the coordinator | Reconciles your 11-13 rule with field note 43 |
+| 4 | Designs and plans by default | Fable gate accepts; a per-project rule can make them wait for you | Your 11-15 practice; FAC-94 becomes the opt-in |
+| 5 | A visual surface? | One read-only `/factory` page. No board | Task order is the named weakness and cannot be spoken |
+| 6 | The fork | Stop upstream merges now; freeze Shepherdr's web and board; uninstall at phase 5 | Nothing we keep comes from upstream any more |
+
+| Risk | Containment |
+|---|---|
+| We own everything; the factory grows inside a 129k-line product | Section 8's "do not build" list; size limits per phase; the factory is off by default for sheepdog's existing users |
+| A same-user agent forges an owner answer over loopback | Every answer logged with its input; workers in VMs; this stops shortcuts, not attackers |
+| Voice-only is too thin: the brain routes a goal to the wrong project | Goals and rules are read back with the project name before they are sent |
+| The Go–Python contract drifts | One fixture both test suites run; unknown ask kinds are refused |
+| A CLI changes under us (agy's sign-in moved, Claude's updater triggered a consent prompt) | Doctor runs a canary start of each CLI before every unattended run; auto-update off during runs |
+| Two factories during the move | Shepherdr builds, the new one is the product under test; phase 5 is a single switch with an importer |
+| System Python is missing or old | Doctor says so; `uv` fallback; measured in phase 6 |
+
+**Unverified, in one place:** the suite on Python 3.9; that `hc exec` and hc terminals share the same file-access grants; that the installer fetches hc; a sheepdog daemon with voice off; ask → card → tap end to end (it has never run); today's two bugs; how Everywhere rules sync across machines; iOS behaviour of the `/factory` page.
+
+## Sources
+
+1. OpenAI Symphony, SPEC.md (read): https://github.com/openai/symphony/blob/main/SPEC.md
+2. Addy Osmani, "Software Factories, Light and Dark" (from the earlier doc): https://addyosmani.com/blog/software-factories/
+3. Anthropic, "Harness design for long-running application development", 2026-03-24 (read): https://www.anthropic.com/engineering/harness-design-long-running-apps
+4. Beads (*search summary*): https://github.com/steveyegge/beads
+5. Factory Missions (*search summary*): https://factory.ai/news/missions-architecture
+6. Cursor, "Scaling long-running autonomous coding" (*search summary*): https://cursor.com/blog/scaling-agents
+7. Claude Code agent teams (*search summary*): https://code.claude.com/docs/en/agent-teams
+8. Simon Willison on StrongDM's software factory (*search summary*): https://simonwillison.net/2026/Feb/7/software-factory/
+9. Merge queue batching (*vendor page, search summary*): https://mergify.com/learn/merge-queue/batching

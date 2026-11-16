@@ -814,8 +814,8 @@ def merge_policy(s, t):
 
 
 def merge_hold(s, t):
-    """A pending merge to drop: FAC-94's wait (design/doc, open asks) that auto-accept doesn't take over."""
-    return bool(merge_wait_why(s, t)) and not accept_bar(s, t)[0]
+    """A pending merge to drop: the task now waits for the person (FAC-94's waits, or auto-accept's bar no longer met)."""
+    return merge_policy(s, t) == "ask"
 
 
 def auto_accepter(s, t):

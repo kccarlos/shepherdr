@@ -860,7 +860,7 @@ class BackToWork(unittest.TestCase):
         head abc, and a Monitor of its agent's still listed from before it said ready. Returns the
         task, its repo ({head, dirty}) and the merges the tick made."""
         t = self.ready(mode="worktree", worktree=tempfile.mkdtemp(), branch="b", head=head, auto_merge="checks",
-                       pr={"number": 9, "repo": "o/r", "url": "u", "checked": 0})
+                       pr={"number": 9, "repo": "o/r", "url": "u", "checked": 0}, set={"merge": "checks"})
         repo, merged, self.jobs = {"head": head, "dirty": ""}, [], {"monitor1": 0}
         for mod, name, value in ((self.tick, "git", lambda cwd, *a: (True, repo["head"] if a[0] == "rev-parse" else repo["dirty"], "")),
                                  (self.tick, "pr_view", lambda t: {"state": "OPEN", "mergeable": "MERGEABLE", "headRefOid": head,
@@ -10638,7 +10638,28 @@ class AutoAccept(unittest.TestCase):
             self.task["ready_at"] -= self.commands.NO_CHECKS_MS
             self.task["pr"].pop("wait", None)
             self.assertEqual(self.commands.merge_now(self.store, self.task), "no CI checks ran on it, so it waits for your Accept")
-        self.assertEqual((self.merges, "auto_merge" in self.task, self.task["state"]), ([], False, "ready"))
+            self.assertEqual((self.merges, "auto_merge" in self.task, self.task["state"]), ([], False, "ready"))
+            self.env("HC_TERMINAL_ID", None)  # the person's Accept still merges it, and records no auto-accept
+            self.commands.cmd_accept(self.commands.argparse.Namespace(id="SHEP-13", json=True, space=None, agent=None, argv=None))
+        self.assertEqual((len(self.merges), self.task["accepted_by"], "auto_accepted" in self.task), (1, "person", False))
+
+    def test_turning_auto_accept_off_after_ready_stops_the_merge(self):
+        self.ready(); self.verdict("term-1"); self.verdict("term-2")
+        self.assertEqual(self.task.get("auto_merge"), "checks")
+        self.settings.set_task(self.task, "auto_accept", "off")
+        self.assertEqual((self.tick_green()["done"], self.merges, "auto_merge" in self.task), ([], [], False))
+
+    def test_fable_pass_counts_in_a_folder_without_a_review_gate(self):
+        with open(self.settings.SETTINGS, "w") as f:
+            json.dump({"spaces": {"sp1": {"folder": self.main, "tasks": {}}}}, f)
+        self.task["set"] = {}
+        self.ask.save({"id": "a2", "question": "Keep the old route?", "options": ["Yes", "No"], "recommend": "Yes", "task": "SHEP-13",
+                       "to": "w1", "at": 2})
+        self.ready()
+        cmd = self.runs[-1][self.runs[-1].index("--") + 1:]
+        self.assertEqual((self.settings.gate_min(self.store, self.task), cmd[cmd.index("--model") + 1]), (0, "claude-fable-5-2"))
+        self.verdict("term-1")
+        self.assertEqual((self.tick_green()["done"], self.task["accepted_by"]), ([13], "fable"))
 
     def test_code_task_meeting_the_bar_is_merged_by_the_engine_with_its_evidence(self):
         import herdr_task.news as news

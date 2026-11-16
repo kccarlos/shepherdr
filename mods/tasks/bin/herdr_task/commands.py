@@ -1081,7 +1081,7 @@ def cmd_review(args):
             text = f.read()
     with open_store(args) as s:
         t = s.find(args.id)
-        if gate_min(s, t):  # herdr-task's own reviewer in a gate folder (FAC-13)
+        if gate_need(s, t):  # herdr-task's own reviewer in a gate folder (FAC-13), or Fable's round (FAC-99)
             return gate_verdict(s, t, args, text)
         rv = t.pop("review", None) or {}
         cfg = settings_for(s, t.get("space"))["tasks"]
@@ -1656,11 +1656,12 @@ def uses_queue(s, base):
     return bool(q) and now() - q < QUEUE_DAY
 
 
-def merge_now(s, t):
+def merge_now(s, t, accepting=False):
     """Merges the task's pull request on GitHub (squash) and tidies up here. Returns why it
     couldn't, or None when it's merged (and the task done). A base branch with GitHub's merge
     queue (#742, #801, #802): the pull request joins the queue and the task stays Merging until
-    GitHub merged it (the tick finishes it then, and deletes its branch there)."""
+    GitHub merged it (the tick finishes it then, and deletes its branch there). accepting: the person's own
+    Accept or merge, never an auto-accept."""
     n, repo = str(t["pr"]["number"]), pr_repo(t, s, github)
     v = pr_view(t) if repo else None
     s.dirty = True
@@ -1715,7 +1716,7 @@ def merge_now(s, t):
                 return t["attention"]
             t["pr"]["wait"] = CHECKS_RUNNING
             return CHECKS_RUNNING
-        if not t.get("accepted_by") and (by := auto_accepter(s, t)):  # FAC-99: its evidence, on the head merged
+        if not accepting and not t.get("accepted_by") and (by := auto_accepter(s, t)):  # FAC-99: its evidence, on the head merged
             if not v.get("statusCheckRollup"):
                 if t["pr"].get("wait") or now() - (t.get("ready_at") or 0) < NO_CHECKS_MS:
                     return CHECKS_RUNNING  # its checks may not show yet
@@ -1772,7 +1773,7 @@ def cmd_merge(args):
         if t.get("pr"):
             # On GitHub: Herdr merges the pull request itself (squash), then tidies up here.
             how = "github"
-            error = merge_now(s, t)
+            error = merge_now(s, t, accepting=True)
             if error == IN_QUEUE:
                 how, error = "queue", None
             elif error == CHECKS_RUNNING:
@@ -1883,7 +1884,7 @@ def cmd_accept(args):
             finish(s, t)
         elif t.get("pr"):
             how = "github"
-            error = merge_now(s, t)
+            error = merge_now(s, t, accepting=True)
             if error == IN_QUEUE:
                 how, error = "queue", None
             elif error in (CHECKS_RUNNING, WAITS_APPROVAL):

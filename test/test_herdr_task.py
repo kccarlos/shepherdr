@@ -3130,55 +3130,84 @@ class CiStopped(PrLooks):
         with open(self.gh_log) as f:
             return [a for a in map(json.loads, f) if a[:2] == ["run", "rerun"]]
 
-    def test_a_stop_is_re_run_once_then_needs_you_as_a_ci_problem(self):
-        import herdr_task.github as github
+    def workflow(self, minutes=45):
         os.makedirs(os.path.join(self.dir, ".github", "workflows"))
         with open(os.path.join(self.dir, ".github", "workflows", "ci.yml"), "w") as f:
             f.write("name: Check\non: [pull_request]\njobs:\n  check:\n    name: check\n    runs-on: ubuntu-latest\n"
-                    "    timeout-minutes: 45\n    steps:\n      - name: test\n        run: make test\n")
+                    f"    timeout-minutes: {minutes}\n    steps:\n      - name: test\n        run: make test\n")
+
+    def test_an_outside_cancel_is_re_run_once_then_needs_you_as_a_ci_problem(self):
+        import herdr_task.github as github
+        self.workflow()
         t = self.said_ready()
-        # GitHub cancels a job that reached its timeout-minutes: re-run once, Working meanwhile, nothing for anyone
-        self.github_says(checks=[self.stop(conclusion="CANCELLED")])
+        # cancelled after 12m of a 45m limit (runner lost): re-run once, Working meanwhile, nothing for anyone
+        self.github_says(checks=[self.stop(conclusion="CANCELLED", end="10:12")])
         self.assertEqual(self.look(t, after=1000), ("working", "Checks running", None))
         self.assertEqual(self.reruns(), [["run", "rerun", "500", "--failed", "--repo", "o/r"]])
         self.assertNotIn("attention", t)
         self.assertEqual(self.sent, [])
         # the stop it re-ran still shows: still running (never merged past it), and never re-run again
         self.assertEqual(self.look(t), ("working", "Checks running", None))
-        v = {"state": "OPEN", "headRefOid": "abc", "statusCheckRollup": [self.stop(conclusion="CANCELLED")]}
+        v = {"state": "OPEN", "headRefOid": "abc", "statusCheckRollup": [self.stop(conclusion="CANCELLED", end="10:12")]}
         self.assertIsNone(github.task_problem(t, v, "o/r"))
         self.assertTrue(github.pr_pending(v))
         self.assertEqual(len(self.reruns()), 1)
-        # stopped again on the same head: the timeout reason, back to its agent as CI (not a test failure), no re-run
-        self.github_says(checks=[self.stop(job=2, conclusion="CANCELLED", start="11:00", end="11:46")])
+        # cancelled again on the same head: CI, not a test failure, no second re-run
+        self.github_says(checks=[self.stop(job=2, conclusion="CANCELLED", start="11:00", end="11:12")])
         self.assertEqual(self.look(t, after=1000), ("working", "Back to its agent to fix", None))
         self.assertEqual(len(self.reruns()), 1)
-        why = ('CI "check" timed out after 46m (its timeout-minutes is 45, so the job\'s timeout was reached), not a '
-               'failing test. Herdr re-ran it once and it stopped again: a CI-infrastructure problem in "check" (likely '
-               "the job's timeout), not a code failure. Add a fix task for the CI job instead of sending code back.")
+        why = ('CI "check" was cancelled after 12m (cancelled on GitHub or its runner was lost), not a failing test. '
+               'Herdr re-ran it once and it stopped again: a CI-infrastructure problem in "check", not a code failure. '
+               "Add a fix task for the CI job instead of sending code back.")
         self.assertEqual(t["attention"], why)
         self.assertFalse(any(e["failed"] for e in t.get("ci_runs") or []))  # no failed CI attempts toward a recap
         self.tick.pr_deliver(self.store, t, {})
         told = self.sent[-1][1]
-        self.assertIn('CI "check" timed out after 46m', told)
+        self.assertIn('CI "check" was cancelled after 12m', told)
         self.assertIn("not your code: don't chase a test failure", told)
         self.assertNotIn("failed:", told)
-        # its agent quiet: Needs you, and the Assistant's news says it's CI infrastructure, naming the job
         self.assertEqual(self.look(t, after=10 * 60_000), ("needs", why, "needs-you"))
         v, event, _ = self.news.news_state(self.store, t, None)  # the real view(), its why uncut
-        self.assertIn('a CI-infrastructure problem in "check" (likely the job', self.news.news_line(self.store, t, v, event))
+        self.assertIn('a CI-infrastructure problem in "check"', self.news.news_line(self.store, t, v, event))
         # a later green run clears it
         self.github_says(checks=[ChecksBeforeReady.PASSED])
         self.assertEqual(self.look(t), ("ready", None, "ready"))
         self.assertNotIn("attention", t)
 
-    def test_a_stop_that_cant_be_re_run_says_so_at_once(self):
+    def test_a_job_that_hit_its_own_time_limit_is_not_re_run(self):
+        # FAC-112: GitHub reports a job's own timeout as cancelled; 46m on a 45m limit is that, so no re-run at all
+        self.workflow()
         t = self.said_ready()
-        self.github_says(checks=[self.stop(url=False, end="10:12")])
+        self.github_says(checks=[self.stop(conclusion="CANCELLED")])
+        self.assertEqual(self.look(t, after=1000), ("working", "Back to its agent to fix", None))
+        self.assertEqual((self.reruns(), t["pr"].get("ci_rerun")), ([], None))
+        self.assertTrue(t["attention"].startswith('CI "check" timed out after 46m (its timeout-minutes is 45, so the '
+                                                  "job's timeout was reached), not a failing test."))
+        self.assertIn('Job "check" hit its 45-min limit: too long, not a hiccup', t["attention"])
+        self.tick.pr_deliver(self.store, t, {})
+        self.assertIn("its timeout-minutes is 45", self.sent[-1][1])
+
+    def test_a_job_with_no_timeout_minutes_counts_githubs_360_default(self):
+        t = self.said_ready()
+        self.github_says(checks=[self.stop(conclusion="CANCELLED", start="10:00", end="16:00")])
         self.look(t, after=1000)
         self.assertEqual(self.reruns(), [])
-        self.assertTrue(t["attention"].startswith('CI "check" timed out after 12m (likely the job\'s timeout), not a '
-                                                  "failing test. Herdr couldn't re-run it: a CI-infrastructure problem"))
+        self.assertIn("too long, not a hiccup", t["attention"])
+
+    def test_a_timed_out_conclusion_is_not_re_run_either(self):
+        t = self.said_ready()  # no workflow file to give a limit: the conclusion says it
+        self.github_says(checks=[self.stop(conclusion="TIMED_OUT", end="10:12")])
+        self.look(t, after=1000)
+        self.assertEqual(self.reruns(), [])
+        self.assertIn('Job "check" hit its time limit: too long, not a hiccup', t["attention"])
+
+    def test_a_stop_that_cant_be_re_run_says_so_at_once(self):
+        t = self.said_ready()
+        self.github_says(checks=[self.stop(url=False, conclusion="CANCELLED", end="10:12")])
+        self.look(t, after=1000)
+        self.assertEqual(self.reruns(), [])
+        self.assertTrue(t["attention"].startswith('CI "check" was cancelled after 12m (cancelled on GitHub or its runner '
+                                                  "was lost), not a failing test. Herdr couldn't re-run it: a CI-infrastructure problem"))
 
     def test_a_failure_is_unchanged_and_never_re_run(self):
         t = self.said_ready()
@@ -4684,6 +4713,91 @@ if sys.argv[1] == "kill" and alive:
                            ("✻ Cooked for 1m · 1 monitor still running\n", True), ("⏵⏵ auto mode on · 1 monitor · ↓ to manage\n", True), ("⏵⏵ auto mode on · 0 shells, 0 monitors · ↓\n", False),
                            ("⏺ The test reports 1 shell still running, which I reproduced as a false alarm.\n❯\n⏵⏵ auto mode on · ↓ to manage\n", False), ("2 shells still running\n" + "\n".join("l" for _ in range(6)), False), ("", False)):
             self.assertEqual(claude_bg_shells(text), want, text)
+
+
+class AmendBrief(unittest.TestCase):
+    """FAC-109: `edit --amend` keeps the brief, adds dated changes the reviewer and `show` see, and tells a running
+    task's agent (tell faked), never a todo one's. GateReview's setting, without rerunning its tests."""
+    setUp, env, git, change, ready = GateReview.setUp, GateReview.env, GateReview.git, GateReview.change, GateReview.ready
+
+    def edit(self, text):
+        import argparse
+        from unittest import mock
+        with mock.patch.object(self.commands, "view", lambda s, t, live=None: {**t, "status": t["state"]}), \
+                mock.patch.object(self.commands, "task_tabs", lambda *a: []), mock.patch.object(self.commands, "name_tabs", lambda *a: []):
+            self.commands.cmd_edit(argparse.Namespace(**{k: None for k in (
+                "folder", "title", "prompt", "prompt_file", "agent", "model", "effort", "reviewer", "reviewer_model",
+                "reviewer_effort", "set", "base", "start_notes", "finish_notes", "after", "at", "in_", "branch")},
+                id="SHEP-13", json=True, here=False, worktree=False, amend=text))
+
+    def show(self):
+        import argparse
+        from unittest import mock
+        out = []
+        with mock.patch.object(self.commands, "say", lambda args, v, text: out.append((v, text))), \
+                mock.patch.object(self.commands, "view", lambda s, t, live=None: {**t, "status": t["state"], "folder": self.main,
+                                                                                   "live": [], "worktree": None, "ref": "SHEP-13"}):
+            self.commands.cmd_show(argparse.Namespace(id="SHEP-13", json=False, folder=None, evidence=False))
+        return out[0]
+
+    def test_amend_stores_and_shows_keeping_the_brief(self):
+        self.edit("Only the login half; the signup half is WUKO-108.")
+        self.edit("Drop the dark-mode part.")
+        self.assertEqual(self.task["prompt"], "Make the gate.")
+        self.assertEqual([a["text"] for a in self.task["amendments"]],
+                         ["Only the login half; the signup half is WUKO-108.", "Drop the dark-mode part."])
+        self.assertTrue(all(isinstance(a["at"], int) for a in self.task["amendments"]))
+        v, text = self.show()
+        self.assertEqual([a["text"] for a in v["amendments"]], [a["text"] for a in self.task["amendments"]])  # --json
+        brief, head = text.index("Make the gate."), text.index("Brief changes (newest last, these win over the brief above):")
+        self.assertLess(brief, head)
+        self.assertLess(text.index("Only the login half"), text.index("Drop the dark-mode part."))
+        self.assertGreater(text.index("Only the login half"), head)
+        with self.assertRaises(self.commands.Fail):
+            self.edit("  ")
+
+    def test_the_reviewer_prompt_has_the_amendment_after_the_brief(self):
+        self.edit("Only the login half.")
+        self.ready()
+        cmd = self.runs[0][self.runs[0].index("--") + 1:]
+        prompt = cmd[cmd.index("-i") + 1]
+        brief = prompt.index("Make the gate.")
+        head = prompt.index("Brief changes (newest last, these win over the brief above):")
+        self.assertLess(brief, head)
+        self.assertLess(head, prompt.index("Only the login half."))
+        self.assertLess(prompt.index("Only the login half."), prompt.index(f"Review commit {self.head}"))
+
+    def test_a_running_tasks_agent_is_told(self):
+        self.edit("Only the login half.")
+        self.assertEqual(len(self.told), 1)
+        self.assertIn("The brief of SHEP-13 changed: Only the login half.", self.told[0])
+
+    def test_the_real_tell_sends_through_hc_without_starting_one(self):
+        from unittest import mock
+        import herdr_task.news as news
+        sent = []
+        with mock.patch.object(self.commands, "tell", self.real_tell), \
+                mock.patch.object(self.commands, "workers", lambda s, t: [{"address": "w1"}]), \
+                mock.patch.object(news, "send_or_hold", lambda to, msg: sent.append((to, msg)) or True), \
+                mock.patch.object(self.commands, "start_again", mock.Mock(side_effect=AssertionError("started"))):
+            self.edit("Only the login half.")
+        self.assertEqual(sent, [("w1", "The brief of SHEP-13 changed: Only the login half.\n"
+                                       "Work to it from now on; your reviewer judges by it too.")])
+
+    def test_a_failed_send_keeps_the_change(self):
+        from unittest import mock
+        with mock.patch.object(self.commands, "tell", mock.Mock(side_effect=self.commands.Fail("hc send failed"))):
+            self.edit("Only the login half.")
+        self.assertEqual([a["text"] for a in self.task["amendments"]], ["Only the login half."])
+
+    def test_amend_on_a_todo_task_sends_nothing(self):
+        self.task["state"] = "todo"
+        self.edit("Only the login half.")
+        self.assertEqual(self.told, [])
+        self.assertEqual(len(self.task["amendments"]), 1)
+        from herdr_task.launch import task_text
+        self.assertTrue(task_text(self.task).endswith("Only the login half."))  # the worker's brief at start has it
+
 
 
 class LoopBreaker(GateReview):
@@ -11033,6 +11147,153 @@ class HoldWhileMainIsRed(unittest.TestCase):
             self.assertEqual((w.get("red"), w.get("notice"), self.github_module_hold("main")), (None, None, None))
 
 
+class SyncBehindBase(unittest.TestCase):
+    """FAC-111 (WUKO-130 B1): tasks.sync. full: update-branch and a whole CI run, as FAC-98. cheap: the folder's
+    tasks.check runs here on the head merged with the base's tip, then merges; a conflict or a failing check goes
+    back to the worker. off: merged as it is. A real origin, clone and task branch; only gh and hc are faked."""
+
+    setUp, ready, github, go, updates = (UpToDateBeforeMerge.setUp, UpToDateBeforeMerge.ready, UpToDateBeforeMerge.github,
+                                         UpToDateBeforeMerge.go, UpToDateBeforeMerge.updates)
+
+    def sh(self, cwd, *a):
+        return subprocess.run(["git", "-C", cwd, *a], check=True, capture_output=True, text=True).stdout.strip()
+
+    def repo(self, sync, check, head_file=("a.txt", "task\n"),
+             base_file=("b.txt", "base\n"), move_base=True, origin_repo="o/r"):
+        """origin with main at m0; the task branch b one commit on (head_file); main then one more (base_file)."""
+        import herdr_task.checks as checks
+        import herdr_task.github as github
+        d = tempfile.mkdtemp(prefix="sync-")
+        self.addCleanup(shutil.rmtree, d, True)
+        origin, main, other = (os.path.join(d, x) for x in ("origin.git", "main", "other"))
+        subprocess.run(["git", "init", "-q", "--bare", "-b", "main", origin], check=True)
+        subprocess.run(["git", "clone", "-q", origin, main], check=True, capture_output=True)
+        self.sh(main, "config", "user.email", "t@t"), self.sh(main, "config", "user.name", "t")
+        with open(os.path.join(main, "README"), "w") as f:
+            f.write("x\n")
+        self.sh(main, "add", "."), self.sh(main, "commit", "-qm", "m0"), self.sh(main, "push", "-q", "origin", "main")
+        self.sh(main, "checkout", "-qb", "b")
+        with open(os.path.join(main, head_file[0]), "w") as f:
+            f.write(head_file[1])
+        self.sh(main, "add", "."), self.sh(main, "commit", "-qm", "task")
+        head = self.sh(main, "rev-parse", "HEAD")
+        self.sh(main, "checkout", "-q", "main")
+        subprocess.run(["git", "clone", "-q", origin, other], check=True, capture_output=True)
+        self.sh(other, "config", "user.email", "t@t"), self.sh(other, "config", "user.name", "t")
+        with open(os.path.join(other, base_file[0]), "w") as f:
+            f.write(base_file[1])
+        if move_base:
+            self.sh(other, "add", "."), self.sh(other, "commit", "-qm", "base moved"), self.sh(other, "push", "-q", "origin", "main")
+        self.store.loc = {**(getattr(self.store, "loc", None) or {}), "folder": main}
+        tasks = {"sync": sync, "check": check}
+        for mod, name, value in ((checks, "settings_for", lambda s, space=None: {"tasks": tasks}),
+                                 (github, "remote_repo", lambda main, remote: origin_repo)):
+            p = self.mock.patch.object(mod, name, value)
+            p.start()
+            self.addCleanup(p.stop)
+        t, gh = self.github()
+        gh["head"] = t["head"] = head
+        self.main, self.head = main, head
+        return t, gh
+
+    def leftovers(self):
+        """The folder untouched: one worktree, main checked out, the task branch still at its head."""
+        self.assertEqual(len(self.sh(self.main, "worktree", "list").splitlines()), 1)
+        self.assertEqual((self.sh(self.main, "rev-parse", "--abbrev-ref", "HEAD"), self.sh(self.main, "rev-parse", "b")),
+                         ("main", self.head))
+        self.assertEqual(self.sh(self.main, "status", "--porcelain"), "")
+
+    def test_full_is_the_default_and_updates_the_branch(self):
+        import herdr_task.checks as checks
+        self.assertEqual(self.commands.settings_for(self.store)["tasks"]["sync"], "full")
+        t, gh = self.repo("full", check="true")
+        self.go(gh)
+        self.assertEqual((t["state"], gh["merged"], len(self.updates(gh))), ("ready", None, 1))
+        self.assertEqual(checks.sync_mode(self.store, {**t, "space": None}), "full")
+
+    def test_cheap_checks_the_merge_here_and_merges_the_head(self):
+        t, gh = self.repo("cheap", check="test -f a.txt && test -f b.txt && touch made-by-check")
+        self.go(gh)
+        self.assertEqual((t["state"], gh["merged"], self.updates(gh), t.get("attention")), ("done", self.head, [], None))
+        self.leftovers()
+
+    def test_cheap_a_check_failing_only_on_the_merge_needs_attention(self):
+        """The check passes on the head alone and on the base alone; only their merge fails it."""
+        t, gh = self.repo("cheap", check="! { test -f a.txt && test -f b.txt; }")
+        self.go(gh)
+        self.assertEqual((t["state"], gh["merged"], self.updates(gh)), ("ready", None, []))
+        self.assertTrue(t["attention"].startswith(self.commands.SYNC_FAILED), t["attention"])
+        self.assertIn("exited 1 on " + self.head[:8] + " merged with main", t["attention"])
+        self.assertIn("Merge main into the branch (never rebase)", t["attention"])
+        self.assertEqual(self.agents.task_status(t, [])[0], "needs")
+        self.leftovers()
+        # the next tick neither checks again nor merges, nor clears it
+        with self.mock.patch.object(self.commands, "sync_check", lambda *a: self.fail("checked again")):
+            self.go(gh)
+        self.assertEqual((gh["merged"], t["attention"][:20]), (None, self.commands.SYNC_FAILED[:20]))
+
+    def test_cheap_a_conflict_needs_attention_as_an_update_conflict_does(self):
+        t, gh = self.repo("cheap", check="true", head_file=("a.txt", "task\n"), base_file=("a.txt", "base\n"))
+        self.go(gh)
+        self.assertEqual((t["state"], gh["merged"], self.updates(gh)), ("ready", None, []))
+        self.assertTrue(t["attention"].startswith(self.commands.UPDATE_CONFLICT + ": a conflict in a.txt"), t["attention"])
+        self.assertEqual(self.agents.task_status(t, [])[0], "needs")
+        self.leftovers()
+
+    def test_cheap_that_cant_check_falls_back_to_full(self):
+        t, gh = self.repo("cheap", check="true")
+        self.sh(self.main, "remote", "set-url", "origin", "/nonexistent/origin.git")
+        self.assert_full(t, gh)
+
+    def test_cheap_checks_a_committed_merge(self):
+        """A check reading git status (a drift check) sees a clean, committed merge, not one in progress."""
+        t, gh = self.repo("cheap", check='test -z "$(git status --porcelain)" && git rev-parse -q --verify HEAD^2')
+        self.go(gh)
+        self.assertEqual((gh["merged"], t.get("attention")), (self.head, None))
+        self.leftovers()
+
+    def assert_full(self, t, gh):
+        self.go(gh)
+        self.assertEqual((t["state"], gh["merged"], len(self.updates(gh)), t.get("attention")), ("ready", None, 1, None))
+        self.leftovers()
+
+    def test_cheap_never_merges_unchecked_on_a_stale_base(self):
+        """GitHub says behind but the base here isn't ahead (stale, or another repo's): full, never the head alone."""
+        t, gh = self.repo("cheap", check="true", move_base=False)
+        self.assert_full(t, gh)
+
+    def test_cheap_on_another_repos_remote_is_full(self):
+        t, gh = self.repo("cheap", check="true", origin_repo="fork/r")
+        self.assert_full(t, gh)
+
+    def test_cheap_a_slow_check_is_full(self):
+        import herdr_task.checks as checks
+        t, gh = self.repo("cheap", check="sleep 3")
+        with self.mock.patch.object(checks, "SYNC_LIMIT_S", 1):
+            self.assert_full(t, gh)
+
+    def test_cheap_a_check_that_cant_run_here_is_full(self):
+        t, gh = self.repo("cheap", check="no-such-program-here")
+        self.assert_full(t, gh)
+
+    def test_cheap_without_a_check_is_full(self):
+        t, gh = self.repo("cheap", check="  ")
+        self.go(gh)
+        self.assertEqual((gh["merged"], len(self.updates(gh))), (None, 1))
+
+    def test_off_merges_as_it_is_without_checking(self):
+        t, gh = self.repo("off", check="false")
+        self.go(gh)
+        self.assertEqual((t["state"], gh["merged"], self.updates(gh)), ("done", self.head, []))
+        self.assertFalse(any("/compare/" in str(x) for a in gh["calls"] for x in a))
+
+    def test_cheap_up_to_date_merges_without_checking(self):
+        t, gh = self.repo("cheap", check="false")
+        gh["behind"] = 0
+        with self.mock.patch.object(self.commands, "sync_check", lambda *a: self.fail("checked")):
+            self.go(gh)
+        self.assertEqual((t["state"], gh["merged"]), ("done", self.head))
+
 class MergeOnlyReviewRounds(unittest.TestCase):
     """FAC-89 (note 46): merges of the base branch after a passed round whose only extra changes are
     generated files get a delta review without using a review round or tripping the loop-breaker."""
@@ -11693,6 +11954,99 @@ class NoCIRunWithCISetUp(unittest.TestCase):
         runs = json.dumps([{"headSha": self.head}])
         with mock.patch.object(self.github, "gh", lambda *a: (True, runs, "") if a[:2] == ("run", "list") else (True, "o/r", "")):
             self.assertEqual((self.tick_green()["done"], self.task["pr"].get("wait"), "no_ci" in self.task["pr"]), ([], "Checks running", False))
+
+
+class CIRunOnTheHeadCounts(unittest.TestCase):
+    """FAC-115: a green run on the PR's head commit counts, whatever event started it; with none and a dispatchable
+    workflow, Herdr starts it once per head (never for a fork's head, Actions off or no workflow_dispatch)."""
+
+    setUp_fac94, tick_green = DesignDocAndOpenAskWaitForAccept.setUp, DesignDocAndOpenAskWaitForAccept.tick_green
+    workflow, age = NoCIRunWithCISetUp.workflow, NoCIRunWithCISetUp.age
+    setUp_gate, git, change, ready, verdict, env = (GateReview.setUp, GateReview.git, GateReview.change, GateReview.ready,
+                                                    GateReview.verdict, GateReview.env)
+    ON = "  pull_request:\n  workflow_dispatch:\n"
+
+    def setUp(self):
+        from unittest import mock
+        NoCIRunWithCISetUp.setUp(self)
+        self.calls, self.runs_on, self.actions, self.cross = [], {}, True, False
+
+    def live(self):
+        """After the PR is open and reviewed: the real pr_view over a fake gh with these checks."""
+        from unittest import mock
+        self.prev_gh = self.github.gh
+        for mod, name, val in ((self.commands, "pr_view", self.github.pr_view), (self.tick, "pr_view", self.github.pr_view),
+                               (self.github, "gh", self.gh)):
+            p = mock.patch.object(mod, name, val); p.start(); self.addCleanup(p.stop)
+
+    def gh(self, *a):
+        self.calls.append(a)
+        if a[:2] == ("pr", "view"):
+            return True, json.dumps({"state": "MERGED" if self.merges else "OPEN", "mergeable": "MERGEABLE",
+                                     "headRefOid": self.head, "isCrossRepository": self.cross, "statusCheckRollup": []}), ""
+        if a[0] == "api" and "/check-runs" in a[1]:
+            sha = a[1].split("/commits/")[1].split("/")[0]
+            return True, json.dumps({"check_runs": self.runs_on.get(sha, [])}), ""
+        if a[0] == "api" and a[1].endswith("/commits/" + self.head + "/status") or a[0] == "api" and "/status" in a[1]:
+            return True, json.dumps({"statuses": []}), ""
+        if a[0] == "api" and a[1].endswith("/actions/permissions"):
+            return True, json.dumps({"enabled": self.actions}), ""
+        if a[:2] == ("workflow", "run"):
+            return True, "", ""
+        if a[:2] == ("run", "list"):
+            return True, "[]", ""
+        return self.prev_gh(*a)
+
+    def dispatches(self):
+        return [c for c in self.calls if c[:2] == ("workflow", "run")]
+
+    def green(self, sha):
+        return [{"name": "check", "status": "completed", "conclusion": "success"}]
+
+    def wait_for_it(self):
+        self.ready(); self.verdict("term-1"); self.verdict("term-2"); self.live()
+        self.age(self.github.NO_CI_RUN_MS)
+
+    def test_a_dispatch_run_green_on_the_head_counts_and_merges(self):
+        self.workflow(self.ON)
+        self.ready(); self.verdict("term-1"); self.verdict("term-2"); self.live()
+        self.runs_on[self.head] = self.green(self.head)
+        self.assertEqual((self.tick_green()["done"], len(self.merges), self.dispatches()), ([13], 1, []))
+
+    def test_a_run_on_an_older_commit_doesnt_count(self):
+        self.workflow(self.ON)
+        self.runs_on["0" * 40] = self.green("0" * 40)
+        self.wait_for_it()
+        self.assertEqual((self.tick_green()["done"], self.merges), ([], []))
+
+    def test_no_run_starts_the_workflow_once_per_head(self):
+        self.workflow(self.ON)
+        self.wait_for_it()
+        for _ in range(3):
+            self.assertEqual((self.tick_green()["done"], self.task["pr"].get("wait")), ([], self.github.STARTED_CI))
+        self.assertEqual(len(self.dispatches()), 1)
+        self.assertEqual(self.dispatches()[0][:3], ("workflow", "run", "check.yml"))
+        self.assertEqual((self.dispatches()[0][-2:], "no_ci" in self.task["pr"]), (("--ref", self.task["branch"]), False))
+        self.assertEqual(self.task["pr"]["ci_dispatched"]["head"], self.head)
+        self.runs_on[self.head] = self.green(self.head)  # the run shows: it merges
+        self.assertEqual((self.tick_green()["done"], len(self.merges), len(self.dispatches())), ([13], 1, 1))
+
+    def test_actions_off_or_no_dispatch_keeps_the_no_ci_wait(self):
+        self.actions = False
+        self.workflow(self.ON)
+        self.wait_for_it()
+        self.assertEqual((self.tick_green()["done"], self.dispatches(), bool(self.task["pr"].get("no_ci"))), ([], [], True))
+
+    def test_a_workflow_without_workflow_dispatch_keeps_the_no_ci_wait(self):
+        self.workflow("  pull_request:\n")
+        self.wait_for_it()
+        self.assertEqual((self.tick_green()["done"], self.dispatches(), bool(self.task["pr"].get("no_ci"))), ([], [], True))
+
+    def test_a_fork_head_never_dispatches(self):
+        self.cross = True
+        self.workflow(self.ON)
+        self.wait_for_it()
+        self.assertEqual((self.tick_green()["done"], self.dispatches(), bool(self.task["pr"].get("no_ci"))), ([], [], True))
 
 
 class AgyStartNudge(unittest.TestCase):

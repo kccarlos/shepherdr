@@ -188,6 +188,7 @@ Evidence: an agy experiment ([agent-comm.md](agent-comm.md)). Contract-first agr
 | Cross-project work | A separate task in that repo, under the same gate |
 | Machine busy | Shepherdr's machine hold delays starts |
 | Too many workers | `max_running` per project, set to 3 (the default is 10), plus pools |
+| An urgent fix waits behind the queue | `--set priority=urgent` starts it before normal queued tasks, in one slot past the cap if it must (one per folder); `herdr-task config --set tasks.max_running=N` changes the cap from the CLI |
 | codexbar fails | Pool unknown: short jobs only, re-read in 5 minutes |
 | Orchestrator out of context or quota | It writes state to disk and sleeps to the reset. In the sheepdog version this role is code. |
 

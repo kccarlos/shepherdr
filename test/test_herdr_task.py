@@ -2914,12 +2914,13 @@ class CiStopped(PrLooks):
         self.assertEqual(len(self.reruns()), 1)
         # stopped again on the same head: the timeout reason, back to its agent as CI (not a test failure), no re-run
         self.github_says(checks=[self.stop(job=2, conclusion="CANCELLED", start="11:00", end="11:46")])
-        self.look(t, after=1000)
+        self.assertEqual(self.look(t, after=1000), ("working", "Back to its agent to fix", None))
         self.assertEqual(len(self.reruns()), 1)
         why = ('CI "check" timed out after 46m (its timeout-minutes is 45, so the job\'s timeout was reached), not a '
                'failing test. Herdr re-ran it once and it stopped again: a CI-infrastructure problem in "check" (likely '
                "the job's timeout), not a code failure. Add a fix task for the CI job instead of sending code back.")
         self.assertEqual(t["attention"], why)
+        self.assertFalse(any(e["failed"] for e in t.get("ci_runs") or []))  # no failed CI attempts toward a recap
         self.tick.pr_deliver(self.store, t, {})
         told = self.sent[-1][1]
         self.assertIn('CI "check" timed out after 46m', told)
@@ -2927,8 +2928,8 @@ class CiStopped(PrLooks):
         self.assertNotIn("failed:", told)
         # its agent quiet: Needs you, and the Assistant's news says it's CI infrastructure, naming the job
         self.assertEqual(self.look(t, after=10 * 60_000), ("needs", why, "needs-you"))
-        line = self.news.news_line(self.store, t, {"why": why}, "needs-you")
-        self.assertIn('a CI-infrastructure problem in "check" (likely the job', line)
+        v, event, _ = self.news.news_state(self.store, t, None)  # the real view(), its why uncut
+        self.assertIn('a CI-infrastructure problem in "check" (likely the job', self.news.news_line(self.store, t, v, event))
         # a later green run clears it
         self.github_says(checks=[ChecksBeforeReady.PASSED])
         self.assertEqual(self.look(t), ("ready", None, "ready"))
@@ -2946,7 +2947,10 @@ class CiStopped(PrLooks):
         t = self.said_ready()
         self.github_says(checks=[ChecksBeforeReady.FAILED, dict(self.stop(conclusion="CANCELLED"), name="lint")])
         self.assertEqual(self.look(t, after=1000), ("working", "Back to its agent to fix", None))
-        self.assertEqual((t["attention"], self.reruns(), t["pr"].get("ci_rerun")), ("Checks failing: check.", [], None))
+        self.assertEqual((t["attention"], self.reruns(), t["pr"].get("ci_rerun")), ("Checks failing: check, lint.", [], None))
+        self.tick.pr_deliver(self.store, t, {})
+        self.assertIn('Check "check" failed', self.sent[-1][1])
+        self.assertNotIn("CI infrastructure", self.sent[-1][1])
 
     def test_a_superseded_cancelled_run_is_still_ignored(self):
         t = self.said_ready()

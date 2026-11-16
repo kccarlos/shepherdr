@@ -469,8 +469,8 @@ def pr_problem(v):
     if v.get("mergeable") == "CONFLICTING":
         return "It conflicts with the base branch."
     checks = v.get("statusCheckRollup") or []
-    bad = [c.get("name") or c.get("context") or "a check" for c in checks if word(c) in BAD - STOPPED]
-    if bad:
+    bad = [c.get("name") or c.get("context") or "a check" for c in checks if word(c) in BAD]
+    if any(word(c) in BAD - STOPPED for c in checks):  # a real failure: as ever, stopped ones listed too
         return "Checks failing: " + ", ".join(bad[:3]) + (" and more." if len(bad) > 3 else ".")
     if stopped := stopped_checks(v):
         return stop_words({}, stopped[0])  # FAC-102: CI, not code (task_problem() re-runs it once)
@@ -532,7 +532,7 @@ def synced_head(task, repo, theirs):
 # FAC-102 (WukongMind): a check GitHub cancelled or timed out, not superseded (latest_checks()), is CI, not code: no
 # test failed. Re-run once per head; stopped again, it needs the person, its likely cause the job's timeout.
 STOPPED = {"CANCELLED", "TIMED_OUT"}
-CI_STOPPED = "CI "  # such a reason's start
+CI_STOPPED = 'CI "'  # such a reason's start
 RERUN_SHOW_MS = 10 * 60000  # a re-run whose jobs don't show by then won't
 
 
@@ -553,7 +553,9 @@ def _ms(text):
 
 def job_timeout(folder, job):
     """The timeout-minutes a workflow file in folder gives the job (by its key or name), or None. A line scan, no YAML."""
-    d = os.path.join(folder or "", ".github", "workflows")
+    if not folder:
+        return None
+    d = os.path.join(folder, ".github", "workflows")
     try:
         files = sorted(f for f in os.listdir(d) if f.endswith((".yml", ".yaml")))
     except OSError:
@@ -592,11 +594,12 @@ def stop_words(task, c):
     a, b = _ms(c.get("startedAt")), _ms(c.get("completedAt"))
     took = int(b - a) // 60000 if a and b and b >= a else None
     limit = job_timeout(task.get("worktree"), name)
-    timed = word(c) == "TIMED_OUT" or bool(limit and took is not None and took >= limit - 1)
+    reached = bool(limit and took is not None and took >= limit - 1)
+    timed = word(c) == "TIMED_OUT" or reached
     text = f'CI "{name}" ' + ("timed out" if timed else "was cancelled")
     if took is not None:
         text += " after " + (f"{took // 60}h {took % 60}m" if took >= 60 else f"{took}m")
-    why = (f"its timeout-minutes is {limit}, so the job's timeout was reached" if timed and limit
+    why = (f"its timeout-minutes is {limit}, so the job's timeout was reached" if reached
            else "likely the job's timeout" if timed else "cancelled on GitHub or its runner was lost")
     return f"{text} ({why}), not a failing test."
 

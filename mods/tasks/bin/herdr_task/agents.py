@@ -304,14 +304,14 @@ IDLE_COMPACTED = "Compacted while idle"
 def compaction_only(task, address):
     """Its Claude Code log since its last finished turn holds no message, or only an idle compaction's
     records (the boundary, its summary, the notice); False when its log doesn't say."""
-    tail = log_tail(agent_log(task, address), 131072)
-    ends = [i for i, d in enumerate(tail) if d.get("type") == "system" and d.get("subtype") == "turn_duration"]
-    if not ends:
-        return False
-    after = tail[ends[-1] + 1:]
-    if any(d.get("type") == "system" and str(d.get("content") or "").startswith(IDLE_COMPACTED) for d in after):
-        return True
-    return not any(d.get("type") == "assistant" or (from_person(d) is not None and not d.get("isCompactSummary")) for d in after)
+    # newest first: the compaction re-reads files into big attachments, so its turn's end can lie
+    # beyond the tail read; the notice says it alone
+    for d in reversed(log_tail(agent_log(task, address), 131072)):
+        if d.get("type") == "system" and (d.get("subtype") == "turn_duration" or str(d.get("content") or "").startswith(IDLE_COMPACTED)):
+            return True
+        if d.get("type") == "assistant" or (from_person(d) is not None and not d.get("isCompactSummary")):
+            return False
+    return False
 
 
 def real_turn(task, k):

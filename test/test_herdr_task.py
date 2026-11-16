@@ -750,6 +750,8 @@ class IdleCompaction(unittest.TestCase):
         # done compacting: FAC-101's records (the boundary says "auto"; the notice says idle)
         self.stamp(-5_000, {"type": "system", "subtype": "compact_boundary", "compactMetadata": {"trigger": "auto"}})
         self.stamp(-5_000, {"type": "user", "isCompactSummary": True, "message": {"role": "user", "content": "This session is being continued"}})
+        for _ in range(3):  # the files it re-reads: big enough to push its last turn's end out of the tail read
+            self.stamp(-5_000, {"type": "attachment", "attachment": {"content": "x" * 60_000}})
         self.stamp(-5_000, {"type": "system", "subtype": "informational", "content": "Compacted while idle, before the prompt cache expired"})
         self.assertEqual(self.agents.task_status(self.task, self.live)[0], "ready")
         report = {}

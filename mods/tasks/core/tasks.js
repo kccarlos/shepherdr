@@ -180,6 +180,9 @@ export function place(list, task, { live = [], helpers = [], loaded = true, now 
   // Claude Code's folder-trust dialog (#755): its agent reports no status while it shows; herdr-task's scheduler read
   // it off the screen (task.trust_ask: that agent's address).
   else if (task.trust_ask && live.some((a) => a.address === task.trust_ask && !a.status)) need("asks", task.waits ?? REASONS.trust);
+  // #995: its question or permission waits on the chat's card while its agent reads working (Codex, until its hook
+  // returns): herdr-task's scheduler saw the card's request (task.held_ask: that agent's address).
+  else if (task.held_ask && live.some((a) => a.address === task.held_ask)) need("asks", task.waits ?? REASONS.question);
   // Out of review rounds (FAC-95, herdr-task's task_status()): it waits on its Assistant whatever its agent does.
   else if (st === "running" && task.review_out) need("reply", task.waits ?? OUT_OF_ROUNDS);
   // Waits on the physical device (FAC-110, herdr-task device-wait): locked, untrusted or not connected.

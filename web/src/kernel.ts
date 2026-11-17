@@ -127,6 +127,8 @@ export interface Registry {
   /** pages a plugin adds to Settings' This device group, after Appearance (the keyboard shortcuts); `when` says if one shows;
    *  into: drawn on top of that server page instead (Notify's alerts on this device) */
   settingsPages: { name: string; about?: string; Icon: FC<{ className?: string }>; when: (ui: UI) => boolean; View: FC<{ phone: boolean }>; into?: string }[]
+  /** a wake word on this device (POST /api/voice/wake, SHEP-240): the voice plugin starts a call here */
+  voiceWake: (() => void) | null
 }
 
 export const registry: Registry = {
@@ -147,6 +149,7 @@ export const registry: Registry = {
   composerSettings: [],
   composerPlus: null,
   composerMic: null,
+  voiceWake: null,
   overlays: [],
   topBars: [],
   sideTop: [],
@@ -402,6 +405,8 @@ function saveSide(side: UI['side']) {
 }
 
 const params = new URLSearchParams(location.search)
+/** the address the page loaded at, before the app writes its own (SHEP-238: `voice=1` opens into a call) */
+export const launchHref = location.href
 // a reload for a new build draws at once what it showed: the last snapshot and the chats on screen, until the server's
 const { text: keptText, snap: keptSnap, chats: keptChats, ...keptUI } = kept()
 let state: State = {
@@ -794,6 +799,7 @@ export function connect() {
     const msg = JSON.parse(ev.data) as ServerEvent
     if (msg.type === 'pong') return
     if (msg.type === 'show') return openArtifact(msg.artifact)
+    if (msg.type === 'voice') return registry.voiceWake?.()
     if (msg.type === 'snapshot') {
       // an add-on switched on or off in Settings › Window: the page starts again with its plugins in or out (main.tsx)
       const booted = (window as { shepherdrOff?: string[] }).shepherdrOff

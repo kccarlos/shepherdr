@@ -118,9 +118,10 @@ NOREBASE_OLD = "(the reviewer of your own review is fine).\n"
 NOREBASE_RULE = ("(the reviewer of your own review is fine). Never rebase or force-push a branch that already has a pull request: "
                  "when it is behind or in conflict, merge main into it (a merge of main needs no force-push and no new review round).\n")
 WORKER_MD_BEFORE_ASK = WORKER_MD_BEFORE_NOREBASE.replace(NOREBASE_OLD, NOREBASE_RULE, 1)
-# Since a Ready worker woken by GitHub news asks with its question tool, so the person hears it (#1000).
+# Since a Ready worker woken by GitHub news asks with herdr-task ask, so the person hears it (#1000; never its CLI's
+# blocking question tool, FAC-70/97).
 ASK_OLD = "Anything else: ask the person in one short message. Then run ready again."
-ASK_RULE = ("Anything else: ask the person with your CLI's question tool, as below (a question in plain text reaches "
+ASK_RULE = ("Anything else: ask with `herdr-task ask`, as below (a question in plain text reaches "
             "nobody while the task is Ready). Then run ready again.")
 WORKER_MD = WORKER_MD_BEFORE_ASK.replace(ASK_OLD, ASK_RULE)
 

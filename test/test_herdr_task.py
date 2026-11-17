@@ -1474,7 +1474,7 @@ class BackToWork(unittest.TestCase):
         self.assertEqual((t["state"], report["working_again"]), ("running", ["SHEP-7"]))
         self.assertEqual(self.news.news_line(self.store, t, {}, "working-again"),
                          '<herdr-news task="SHEP-7" event="working-again">SHEP-7 is working again: its agent asked something (Web client)</herdr-news>')
-        # and the words: GitHub's news and the brief tell a woken Ready worker to ask with its question tool
+        # and the words: GitHub's news and the brief tell a woken Ready worker to ask with herdr-task ask (FAC-70/97)
         from herdr_task import ghnews, templates
         with open(os.path.join(ROOT, "templates", "worker.md")) as f:
             worker = f.read()
@@ -1483,7 +1483,10 @@ class BackToWork(unittest.TestCase):
             self.assertNotIn(templates.ASK_OLD, words)
         self.assertIn(templates.WORKER_MD_BEFORE_ASK, templates.OLD_WORKERS)  # an unedited old one gets today's
         with open(ghnews.__file__) as f:
-            self.assertIn("ask the person with your CLI's question tool", f.read())
+            said = f.read()
+        self.assertIn("Anything else: ask with `herdr-task ask`", said)
+        self.assertNotIn("ask the person with your CLI's question tool", said)
+        self.assertNotIn("CLI's question tool", worker)
 
     # A merge that failed once (t75: "GraphQL: Something went wrong") never blocks the next Accept, and a pull
     # request merged meanwhile (by hand) makes the task done.

@@ -14,22 +14,25 @@ import time
 from .base import Fail, git, guard, hc_json, now, PR_EVERY, run, SHELLS, STORE, stop_note
 from .settings import machine_name, merge_hold, remove_build_dir, worker_argv
 from .agents import (
-    agent_log, agent_running, busy_again, detail, fit, held_ask, last_question, live_agents, open_question, own_work,
-    ready_turns, REVIEWER_FAILED, status_word, task_status,
+    agent_log, agent_running, back_at_work, BG_ENDED_MSG, BG_NUDGE_MS, busy_again, detail, ended_jobs, fit, held_ask, last_question, live_agents,
+    mid_turn_agents, open_question, own_work, stray_since, ready_turns, REVIEWER_FAILED, status_word, task_status, WAITING_BG,
 )
 from .provider import NUDGE, provider_cut, provider_error, PROVIDER_WAITS
 from .sessions import find_lost_logs, refresh_sessions, session_of
-from .github import (already_merged, BEHIND, drop_branch, finish, github, merged_here, needs_approval, note_checks, pr_merged, pr_pending, pr_problem,
-                     pr_repo, pr_view, pr_wait, queue_entry, task_problem, task_github, tidy_done, tidy_due, update_main, watch_main)
+from .github import (already_merged, BEHIND, CHECKS_NEVER, CHECKS_RUNNING, checks_missing, checks_since, ci_awaited, ci_dispatch, ci_runs_on, drop_branch,
+                     expected_checks, finish, github, merged_here, needs_approval, note_checks, pr_merged, pr_pending, pr_problem, pr_repo, pr_view,
+                     pr_wait, CI_STOPPED, queue_entry, queue_merge, task_problem, task_github, tidy_done, tidy_due, update_main, watch_main,
+                     UNKNOWN_CHECKS_MS)
 from .launch import default_space, parent_for, sweep_sandboxes
 from .store import locate, read_list, Store, store_files
-from .queues import machine_hold, refresh_ext, running_count, set_hold, waiting_ext, waiting_for
+from .queues import cap_for, machine_hold, refresh_ext, running_count, set_hold, urgent, waiting_ext, waiting_for
 from .archive import archive_pass
 from .browsers import browser_pass
 from .simulators import simulator_pass
+from .devices import device_pass
 from .output import progress_clock, say
-from .commands import back_to_work, begin, gate_reads, merge_now, MERGE_FAILED
-from .news import news_pass, typing
+from .commands import back_to_work, begin, gate_reads, merge_now, MERGE_FAILED, start_nudge, START_WINDOW_MS
+from .news import news_pass, send_or_hold, typing
 from .takeover import cant_go_on, takeover
 from .ghnews import main_pass, pr_deliver, pr_news
 from .scheduler import SCHEDULER
@@ -45,7 +48,7 @@ PR_WAIT_EVERY = 20000  # how often a pull request whose checks still run is read
 def at_work(s, t):
     """Its agent is mid-turn (working, or asking): a task is never marked merged under it (SHEP-23);
     a later tick looks again."""
-    return any(status_word(k) in ("working", "blocked") for k in live_agents(s.key(t)))
+    return bool(mid_turn_agents(live_agents(s.key(t)), detail))
 
 
 def holds_open(s, t):
@@ -58,22 +61,51 @@ def holds_open(s, t):
 QUEUE_GRACE = 2 * 60000  # a pull request just queued may take a moment to show in GitHub's queue
 
 
+QUEUE_REMOVED = "GitHub's merge queue removed it"
+
+
 def queue_pass(s, t, v, report):
     """A pull request Herdr put in GitHub's merge queue that is still open: still in the queue (or set
     to join it), it stays Merging; the queue removed it (a check failed there, a conflict), it
-    needs attention, with the queue's reason (#742, #802)."""
+    needs attention, with the queue's reason (#742, #802). Removed only because its checks there
+    timed out (busy runners: #1041), it is queued again once by itself, at the same commit."""
     if v.get("state") != "OPEN":
         t.pop("merge_queued", None)
         return
     if now() - t["merge_queued"] < QUEUE_GRACE:
         return
     q = queue_entry(t)
+    if q and (q["in"] or q["auto"]):  # FAC-98: its base has a merge queue (commands.uses_queue())
+        s.data.setdefault("merge_queue", {})[t.get("base") or "main"] = now()
+        s.dirty = True
     if not q or q["in"] or q["auto"] or q.get("state") == "MERGED":
         return
     t.pop("merge_queued")
     why = (q.get("reason") or "").strip().rstrip(".")
-    t["attention"], t["attention_at"] = "GitHub's merge queue removed it" + (f": {why}." if why else "."), now()
+    head = v.get("headRefOid")
+    if "timed_out" in why.lower().replace(" ", "_") and head and t.get("requeued") != head and not pr_problem(v):
+        ok, err = queue_merge(t, head)
+        if ok:
+            t["requeued"], t["merge_queued"] = head, now()
+            report.setdefault("requeued", []).append(s.ref(t))
+            return
+        why += f"; queuing it again failed: {err}"
+    t["attention"], t["attention_at"] = QUEUE_REMOVED + (f": {why}." if why else "."), now()
     report["attention"].append(t["id"])
+
+
+def back_in_queue(s, t, report):
+    """#1041: a pull request the merge queue removed, queued again by hand (gh pr merge --auto, GitHub's
+    button): Merging again, its "removed" attention gone, once GitHub shows it in the queue."""
+    if t.get("merge_queued") or not (t.get("attention") or "").startswith(QUEUE_REMOVED):
+        return
+    q = queue_entry(t)
+    if q and (q["in"] or q["auto"]):
+        t.pop("attention", None)
+        t.pop("attention_at", None)
+        t["merge_queued"] = now()
+        s.dirty = True
+        report.setdefault("requeued", []).append(s.ref(t))
 
 
 def facts(s, t, report):
@@ -107,14 +139,36 @@ def facts(s, t, report):
         problem = task_problem(t, v, repo)
         if t.get("merge_queued"):
             queue_pass(s, t, v, report)
+        else:
+            back_in_queue(s, t, report)
         if needs_approval(v):
             pr["needs_approval"] = True
         else:
             pr.pop("needs_approval", None)
-        t["_pr_fresh"] = not problem and not pr_pending(v) and not needs_approval(v)
+        since, expect = checks_since(s, t, v), expected_checks(s, t, v.get("headRefOid"))
+        # #1044, #1018: no checks yet (at its newest commit) while some will come is never "all passed".
+        missing = checks_missing(v, since, expect)
+        t["_pr_fresh"] = not problem and not pr_pending(v) and not needs_approval(v) and not missing
         # Ready only once its checks are done and GitHub knows it can merge (SHEP-175): Working till then.
+        ci = False
         if t["state"] == "ready":
-            wait = pr_wait(v, t.get("ready_at"))
+            ci = v.get("state") == "OPEN" and ci_awaited(s, t, v)
+            # FAC-105: timed from its newest head Herdr made (FAC-98's update-branch), else from ready.
+            since_ci = max(t.get("ready_at") or 0, (pr.get("synced") or {}).get("at") or 0)
+            wait = pr_wait(v, since_ci if ci else since, expect, ci)
+            if ci and not wait and not pr.get("no_ci"):
+                # FAC-105: its base's workflows run on pull requests, yet none ran on it: Ready for the person, its
+                # pending merge set aside (kept in no_ci), the reason told; an Actions run for its head not shown yet waits.
+                if ci_runs_on(t, v) and now() - since_ci < UNKNOWN_CHECKS_MS:
+                    wait = CHECKS_RUNNING
+                elif started := ci_dispatch(s, t, v):  # FAC-115: none ran, so Herdr started its workflow once for this head
+                    wait = started
+                else:
+                    pr["no_ci"], s.dirty = t.pop("auto_merge", None) or True, True
+            elif not ci and (held := pr.pop("no_ci", None)):
+                s.dirty = True
+                if held is not True and not t.get("accepted_by"):
+                    t.setdefault("auto_merge", held)  # its checks showed after all: merges by itself as it would have
             if wait != pr.get("wait"):
                 if wait:
                     pr["wait"] = wait
@@ -134,9 +188,15 @@ def facts(s, t, report):
                 t["attention"], t["attention_at"] = problem, now()
                 t.pop("merge_queued", None)
                 report["attention"].append(t["id"])
-            elif t.get("attention", "").startswith(("Checks failing", "It conflicts", "The pull request was closed", MERGE_FAILED, BEHIND)):
+            elif t.get("attention", "").startswith(("Checks failing", CI_STOPPED, "It conflicts", "The pull request was closed", MERGE_FAILED, BEHIND)) \
+                    or (t.get("attention") == CHECKS_NEVER and missing != "never"):
                 t.pop("attention")
-    elif merged_here(s, t) and not at_work(s, t):
+        if t["state"] == "ready" and t.get("auto_merge") and missing == "never" and not t.get("attention") and not (ci and pr.get("wait")):
+            # Checks that should have started never did: it doesn't merge by itself (the person's Accept still can).
+            t["attention"], t["attention_at"] = CHECKS_NEVER, now()
+            report["attention"].append(t["id"])
+    elif merged_here(s, t) and not at_work(s, t) and not t.get("kept_open"):
+        # #989: reopened after its work merged (kept_open, until its agent says ready): its fix goes on.
         t["merged"] = True
         finish(s, t)
         report["done"].append(t["id"])
@@ -170,9 +230,37 @@ def back_pass(s, t, report):
     again until its next ready (busy_again()); its Assistant hears it (news: working-again)."""
     live = live_agents(s.key(t))
     # Cheap while nothing works: hc ls alone; its records in full (roles) only then.
-    if any(status_word(k) == "working" for k in live) and busy_again(t, [detail(k) for k in live]):
-        back_to_work(s, t, "its agent is at work again", auto=True)
+    if any(status_word(k) == "working" for k in live):
+        mid = mid_turn_agents(live, detail)
+        if back_at_work(t, mid):
+            back_to_work(s, t, "its agent is at work again", auto=True)
+            report.setdefault("working_again", []).append(s.ref(t))
+            return
+        # FAC-107: a turn that is only an idle compaction, kept for the window's busyAgain()
+        stray = {**(t.get("stray_since") or {}), **stray_since(t, mid)}
+        if stray and stray != t.get("stray_since"):
+            t["stray_since"] = stray
+            s.dirty = True
+    # #1000: a whole turn between two passes (GitHub news woke it, it listed options and asked "pick
+    # one" in its own terminal): never seen working, so the task stayed Ready and nobody heard. A
+    # turn that asked or changed its branch takes it back to work: Needs you once it stays quiet
+    # (settle_back() keeps it there). One that left nothing behind only moves its turns on.
+    seen = t.get("ready_turns")
+    if not isinstance(seen, dict) or t.get("merge_requested"):
+        return
+    turned = [k for k in live if status_word(k) in ("idle", "done") and k.get("address") in seen
+              and (k.get("labels") or {}).get("herdr.role") != "reviewer" and (k.get("turn") or 0) > seen[k["address"]]]
+    if not turned:
+        return
+    wt = t.get("worktree") if t.get("mode") == "worktree" else None
+    moved = bool(wt and t.get("head") and os.path.isdir(wt)
+                 and (git(wt, "rev-parse", "HEAD")[1] != t["head"] or git(wt, "status", "--porcelain", "--untracked-files=no")[1]))
+    if moved or any(last_question(t, k["address"]) for k in turned):
+        back_to_work(s, t, "its agent asked something" if not moved else "its agent changed its work", auto=True)
         report.setdefault("working_again", []).append(s.ref(t))
+        return
+    t["ready_turns"] = {**seen, **{k["address"]: k.get("turn") or 0 for k in turned}}
+    s.dirty = True
 
 
 def settle_back(s, t, report):
@@ -240,6 +328,11 @@ def tick_store(s, report):
             back_pass(s, t, report)
         elif t["state"] == "running" and (t.get("back") or {}).get("auto"):
             settle_back(s, t, report)
+        if t["state"] == "running" and t.get("agents"):
+            try:
+                start_nudge(s, t)  # FAC-100: an agy worker idle at turn 0 gets one nudge
+            except Exception as e:  # never stops the tick
+                report.setdefault("start_nudge_error", []).append(f"{s.ref(t)}: {e}")
         if t.get("worktree") and t["state"] in ("running", "ready"):
             facts(s, t, report)
             try:
@@ -254,7 +347,8 @@ def tick_store(s, report):
             if t.get("auto_merge") and not t.get("accepted_by") and merge_hold(s, t):
                 t.pop("auto_merge", None)
                 s.dirty = True
-            if t["state"] == "ready" and t.get("auto_merge") and t.get("pr") and not t.get("attention") and t.get("_pr_fresh"):
+            if t["state"] == "ready" and t.get("auto_merge") and t.get("pr") and not t.get("attention") and t.get("_pr_fresh") \
+                    and not busy_again(t, [detail(k) for k in live_agents(s.key(t))]):  # FAC-107: not under a turn just begun
                 if not merge_now(s, t):
                     report["done"].append(t["id"])
             t.pop("_pr_fresh", None)
@@ -273,7 +367,8 @@ def tick_store(s, report):
             if t.get("attention") and t.get("attention") != had:
                 report.setdefault("attention", []).append(t["id"])
     due_pass(s, report)
-    queued = sorted((t for t in s.data["tasks"] if t["state"] == "queued"), key=lambda t: t.get("queued_at") or 0)
+    # Urgent ones first (FAC-103), then oldest first.
+    queued = sorted((t for t in s.data["tasks"] if t["state"] == "queued"), key=lambda t: (not urgent(t), t.get("queued_at") or 0))
     n = running_count(s) if queued else 0
     budget = [3]  # other machines asked this pass, at most
     for t in queued:
@@ -281,7 +376,7 @@ def tick_store(s, report):
         if not waits:
             refresh_ext(s, t, budget=budget)
             waits = bool(waiting_ext(t))
-        if waits or n >= s.max_running():
+        if waits or n >= cap_for(s, t):
             if t.pop("held", None):  # waits for something else now
                 s.dirty = True
             continue
@@ -309,6 +404,13 @@ def tick_store(s, report):
             main_pass(s, report)
         except Exception as e:  # never stops the tick
             report["main_error"] = str(e)
+
+
+def starts_now(t):
+    """A running task whose agy worker started within START_WINDOW_MS and wasn't nudged yet (start_nudge)."""
+    a = (t.get("agents") or [{}])[-1]
+    return (t.get("state") == "running" and a.get("agent") == "agy" and not a.get("start_nudged") and not a.get("ended")
+            and now() - (a.get("at") or 0) < START_WINDOW_MS)
 
 
 def lost_log(t, a):
@@ -343,6 +445,7 @@ DONE_WORKING_MS = 15 * 60000   # an agent still working this long after Done end
 GUARD_MEMORY = 85              # memory in use (%) past which the guard acts (memory_guard())
 GUARD_FILE = os.path.join(STORE, ".memory-guard.json")
 GUARD_ALERT_EVERY_MS = 30 * 60000
+GUARD_BACK_UNDER = 75          # memory (%) the guard's alert time is forgotten under: dips around GUARD_MEMORY keep it (#1047)
 
 
 def rescue_question(s, t, k, q, report):
@@ -467,8 +570,13 @@ def memory_guard(report):
     except (OSError, ValueError):
         g = {}
     if h["memory"] <= GUARD_MEMORY:
-        if g:
-            os.remove(GUARD_FILE)
+        # #1047: removed at every dip to 85%, memory hovering at 85-86% alerted each tick (every 15 s); the alert
+        # time stays until memory is well under, so one toast per GUARD_ALERT_EVERY_MS while it stays near the limit
+        if g and h["memory"] <= GUARD_BACK_UNDER:
+            try:
+                os.remove(GUARD_FILE)
+            except OSError:
+                pass
         return
     ended = end_done_pass(report, pressed=True)
     if ended:
@@ -526,6 +634,26 @@ def retry_one(row, k, log, report):
             row = {**row, "nudged": now()}
             row.pop("due")
     return row
+
+
+def bg_ended_pass(s, t, live):
+    """FAC-106: a worker Waiting on a background job whose jobs all ended, quiet for BG_NUDGE_MS since, is told
+    once per job (agents.ended_jobs()); task_status() shows Needs you if no turn follows."""
+    if not live or task_status(t, live) != ("working", None, WAITING_BG):
+        return
+    told = (t.get("bg_told") or {}).get("ids") or []
+    for k in live:
+        if (k.get("labels") or {}).get("herdr.role") == "reviewer" or status_word(k) not in ("idle", "done"):
+            continue
+        quiet = k.get("status_ms") or 0
+        jobs = {i: j for i, j in ended_jobs(t, k).items() if i not in told}
+        if not jobs or not quiet or now() - quiet < BG_NUDGE_MS:
+            continue
+        msg = BG_ENDED_MSG[len(jobs) > 1].format(", ".join(jobs.values()))
+        if send_or_hold(k["address"], msg):
+            t["bg_told"] = {"ids": told + list(jobs), "at": now(), "address": k["address"], "turn": k.get("turn") or 0}
+            s.dirty = True
+        return
 
 
 def retry_pass(report):
@@ -610,6 +738,7 @@ def retry_pass(report):
                     else:
                         t.pop("retry", None)
                     s.dirty = True
+                bg_ended_pass(s, t, [k for k in mine if agent_running(k)])
                 progress_clock(s, t, task_status(t, [k for k in mine if agent_running(k)])[0])
     if rows != old:
         tmp = f"{RETRIES}.{os.getpid()}.tmp"
@@ -651,7 +780,7 @@ def cmd_tick(args):
         d = read_list(p)
         tasks = (d or {}).get("tasks") or []
         if not d or not os.path.isdir(d.get("folder") or "") or not (d.get("main_watch") or any(
-                t.get("state") in ("queued", "scheduled", "ready") or t.get("check_run") or (t.get("worktree") and t.get("state") == "running") for t in tasks)):
+                t.get("state") in ("queued", "scheduled", "ready") or t.get("check_run") or (t.get("worktree") and t.get("state") == "running") or starts_now(t) for t in tasks)):
             continue
         try:
             with Store(locate(d["folder"])) as s:
@@ -679,6 +808,7 @@ def cmd_tick(args):
         sweep_sandboxes()  # temp dirs of sandboxed reviewers that ended without their trap
         browser_pass(report)
         simulator_pass(report, args.folder)
+        device_pass(report, args.folder)
     except Exception as e:  # never stops the queue
         report["browser_error"] = str(e)
     say(args, report, "; ".join(f"{k}: {v}" for k, v in report.items() if v) or "Nothing to do.")

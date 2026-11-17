@@ -1,6 +1,6 @@
 # Install
 
-Shepherdr 3.1.33 is a layout for the Herdr app plus its mods, helpers and role instructions, and a web app for your tailnet ([Web](web.md)). One script puts them in
+Shepherdr 3.1.37 is a layout for the Herdr app plus its mods, helpers and role instructions, and a web app for your tailnet ([Web](web.md)). One script puts them in
 place, never overwrites what you made yourself, and keeps a backup of anything it replaces.
 
 ## Requirements
@@ -109,6 +109,8 @@ shepherdr doctor      [--root DIR]: checks files, links, shared copies, herdr-ta
 
 `--port N` moves the service off `127.0.0.1:7788`; `--https-port N` shares the web app on the tailnet's port N instead
 of 443, when something else here holds 443 (`shepherdr web https-port N` changes it later; [Web](web.md)). Updates keep both.
+On a tagged Tailscale machine (`tag:mac`…), say who may open the web app once: `shepherdr web owners
+<your Tailscale login>` ([Web](web.md)).
 
 `--root DIR` installs under another folder instead of your home (it mirrors `.config/herdr-app`, `.local/bin`,
 `.config/herdr-core/templates`, `.claude`, `.codex`): a scratch try you can look through and diff. It never starts
@@ -123,6 +125,29 @@ finds the install whole: the scheduler's sync, `herdr-task machines sync` (it sa
 herdr-artifact's own copy when they run a command there (the copy already there runs instead), and
 `herdr-secret install --on`. So a half-done copy never reaches every machine. Turning the Other machines add-on off stops the
 sync too.
+
+## What Shepherdr contacts
+
+Shepherdr only talks to what you set up yourself. In the background it contacts:
+
+- **Machines you linked** in Herdr (herdr-core's links, `hc machine ls`), over that same link: their spaces, tasks,
+  health and artifacts for the sidebar and the web app, the task tick, the tools sync above, and the map of which
+  Assistants each machine reaches (`herdr-task machines reach`). It opens no new connection for any of it.
+- **GitHub**, through `gh` and git, for your tasks' own repos: their branches, pull requests, checks and merges.
+- **ElevenLabs**, with your key only (Voice add-on): dictation and calls when you use them, its credits now and then.
+- **Your devices' push services** (the browser's), when an alert goes to a device you turned alerts on for.
+- **This machine's own Tailscale**, to share the web app privately on your tailnet. Never your other peers.
+
+It never tries ssh to the hosts in your `~/.ssh/config`, nor your Tailscale peers, on its own (the reach map used to,
+every 5 minutes: GitHub #967). Only two things do, and only when you ask: **Add machine** reads your ssh config
+to list its hosts and connects to the one you pick, and **Find machines** (Settings › Machines, or `herdr-task machines
+find`) lists the hosts it would try, then tries each once (an ssh login in batch mode, no new host keys) when you press
+the button, at most once every 10 minutes. It says which have Herdr and aren't linked; it contacts none of them again
+unless you link it.
+
+Turning the Other machines add-on off stops the sync, keeps the reach map to this machine (no link followed) and turns
+Find machines off. The sidebar, the web app and the task tick still use the machines you linked: to stop those too,
+remove the machine in Herdr.
 
 ## Where your data lives
 

@@ -6,7 +6,9 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { DATA, MOUNT } from "./paths.ts";
 
-export type Me = { login: string; name: string; dns: string; host: string };
+// tagged: the machine carries Tailscale tags (tag:mac…), so it has no user owner: login is "" and who may use the board
+// comes from the service.owners setting alone (owners.ts).
+export type Me = { login: string; name: string; dns: string; host: string; tagged: boolean };
 
 export const DEFAULT_HTTPS = 443;
 export const HTTPS_PORT_FILE = join(DATA, "https-port");
@@ -43,14 +45,18 @@ async function serveStatus(): Promise<any> {
 
 /** The machine owner's login and the machine's tailnet name from `tailscale status --json`'s output, or null.
  *  User ids can pass 2^53 (#845): JSON.parse would round them and miss their exact key in User, so they are read as
- *  strings. */
+ *  strings. A tagged machine (Self.Tags) has no user owner: its UserID leads to a placeholder (the machine's own name or
+ *  "tagged-devices"), never a person, so its login is "" whatever User says. */
 export function meOf(out: string): Me | null {
   try {
     const s = JSON.parse(out.replace(/"UserID"\s*:\s*(\d+)/g, '"UserID":"$1"'));
-    const user = s.User?.[String(s.Self?.UserID)];
     const dns = String(s.Self?.DNSName ?? "").replace(/\.$/, "");
-    if (!user?.LoginName || !dns) return null;
-    return { login: user.LoginName, name: user.DisplayName ?? user.LoginName, dns, host: s.Self?.HostName ?? dns.split(".")[0] };
+    const host = s.Self?.HostName ?? dns.split(".")[0];
+    if (!dns) return null;
+    if (Array.isArray(s.Self?.Tags) && s.Self.Tags.length) return { login: "", name: host, dns, host, tagged: true };
+    const user = s.User?.[String(s.Self?.UserID)];
+    if (!user?.LoginName) return null;
+    return { login: user.LoginName, name: user.DisplayName ?? user.LoginName, dns, host, tagged: false };
   } catch {
     return null;
   }
@@ -61,6 +67,23 @@ export async function whoami(): Promise<Me | null> {
   const r = await run(["status", "--json"]);
   return r.ok ? meOf(r.out) : null;
 }
+
+/** The tailnet device a request came through tailscale serve from (SHEP-240): its node's id, by `tailscale whois` of the
+ *  address tailscaled puts in X-Forwarded-For (it sets that header itself, replacing any the caller sent). One device
+ *  comes from its IPv4 or its IPv6 address; whois gives both the same id. No whois answer: the address itself. */
+export async function deviceOf(ip: string, whois = (a: string) => run(["whois", "--json", a])): Promise<string> {
+  const hit = devices.get(ip);
+  if (hit && Date.now() - hit.at < 10 * 60_000) return hit.id;
+  const r = await whois(ip);
+  let id = ip;
+  try { id = r.ok ? String(JSON.parse(r.out)?.Node?.StableID || ip) : ip; } catch {}
+  // a passing failure isn't kept: the next connection asks again
+  if (id !== ip || r.ok) devices.set(ip, { id, at: Date.now() });
+  return id;
+}
+const devices = new Map<string, { id: string; at: number }>();
+/** The address tailscale serve says a request came from, or null (not through it). */
+export const forwardedFrom = (req: Request) => req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || null;
 
 export type Served = { proxy: string | null; port: string | null; funnel: boolean };
 

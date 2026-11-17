@@ -96,7 +96,7 @@ Shepherdr's states: todo, scheduled, queued, working, needs, ready, merging, don
 | Stalled (30 min quiet) | Assistant | — | Read the screen. Interrupt and "continue from git diff". A second hang gets a fresh agent with a handoff. |
 | Provider cut or empty pool | herdr-task | — | Section 7 |
 | Gate incomplete | herdr-task | — | Start what is missing (review round, verifier, checks) |
-| Base moved | herdr-task | — | Back to the implementer to rebase. Rounds are re-recorded on the new head. |
+| Base moved | herdr-task | — | Back to the implementer to merge the base in. Rounds are re-recorded on the new head. |
 | Open ask | person | none | The task is Needs you and the others go on. The morning digest repeats open asks. |
 | Needs a person's check (device, login, live voice) | Assistant | next digest | Marked "needs your check". The Assistant never puts `--after` on such a task. The digest lists it with the exact steps. |
 
@@ -114,7 +114,7 @@ herdr-task merges only after it has checked all of these itself, against the SHA
 - PRs: `gh pr merge --match-head-commit <SHA>`, then the gate re-reads the PR state.
 - Local branches: `git merge --ff-only <SHA>` run by herdr-task, then a check that base now equals that SHA.
 
-The implementer never merges. This replaces Shepherdr's current local path, where the worker rebases, checks and merges itself (commands.py:897).
+The implementer never merges. This replaces Shepherdr's current local path, where the worker merges the base in, checks and merges itself (commands.py:897).
 
 Factory projects set `review_rounds` to at least 2 (the default is 0) and `merge` to auto. Auto stays off until phase 3's sandbox exists. Until then, the orchestrator presses Accept, which runs the same checks.
 
@@ -188,6 +188,7 @@ Evidence: an agy experiment ([agent-comm.md](agent-comm.md)). Contract-first agr
 | Cross-project work | A separate task in that repo, under the same gate |
 | Machine busy | Shepherdr's machine hold delays starts |
 | Too many workers | `max_running` per project, set to 3 (the default is 10), plus pools |
+| An urgent fix waits behind the queue | `--set priority=urgent` starts it before normal queued tasks, in one slot past the cap if it must (one per folder); `herdr-task config --set tasks.max_running=N` changes the cap from the CLI |
 | codexbar fails | Pool unknown: short jobs only, re-read in 5 minutes |
 | Orchestrator out of context or quota | It writes state to disk and sleeps to the reset. In the sheepdog version this role is code. |
 
@@ -265,6 +266,7 @@ watchdog (no model): the tick restarts a stuck Assistant with a handoff, or aler
 1. **The Assistant owns more** (template, `Decide yourself`):
    - answer workers' cards and approve prompts that stay inside the task's worktree and read-only commands; anything outside the worktree, touching credentials or settings, goes to the person;
    - own CI: re-run a failed job once when the failure is outside the task's change; after 3 failed CI runs or 1 hour on CI, apply the loop-breaker (recap, new approach) instead of another attempt;
+     - Stopped checks (FAC-112): a check cancelled from outside (runner lost, superseded) is re-run once per head. A job that hit its own time limit is not re-run: its conclusion is TIMED_OUT, or CANCELLED (GitHub reports a job's own timeout as cancelled) with a run time within a minute of the `timeout-minutes` in its workflow file (`github.hit_limit`). That goes to its agent at once as a CI problem, and to the Assistant like any CI problem once the agent is quiet and the task needs the person; a job with no `timeout-minutes` counts GitHub's 360-minute default ("job X hit its N-min limit: too long, not a hiccup").
    - nudge workers that wait on nothing.
 2. **The loop-breaker counts CI attempts**, not only review rounds (note 28).
 3. **Shepherdr fixes** (notes 13–16, 20, 22, 24–26):

@@ -1,16 +1,43 @@
 // Who may use the service. Two ways in, nothing else:
 // - through tailscale serve: Tailscale's login header must be the machine owner's, on the machine's own name, on a
-//   connection tailscaled (or the owner) opened (peer.ts: another user here can't just send the header);
+//   connection tailscaled (or the owner) opened (peer.ts: another user here can't just send the header). A machine
+//   with Tailscale tags (tag:mac…) has no user owner: there only the logins in the service.owners setting get in, and
+//   with none set nobody does (503, saying how to set it);
 // - on this machine (the Herdr window, the CLI): the token in ~/.local/state/shepherdr/service/token, on 127.0.0.1.
 // Writes and sockets also need the page's own origin, and writes a header no plain form or link can send.
 // The service listens on 127.0.0.1 only, so the tailnet reaches it through tailscale serve alone.
 
 // httpsPort: the tailnet HTTPS port the web app is shared on (none: 443); the page's host and origin carry it when it
 // isn't 443, and only that port gets in.
-export type Gate = { owner: string | null; dns: string | null; port: number; token: string; httpsPort?: number };
+// owner: the machine owner's login (none: Tailscale isn't up, or the web app is closed, as with Funnel); tagged: the
+// machine has Tailscale tags, so owner is ignored and only owners (the service.owners setting) get in; untagged, owners
+// are let in beside the owner.
+export type Gate = { owner: string | null; dns: string | null; port: number; token: string; httpsPort?: number; tagged?: boolean; owners?: string[] };
 export type Pass = { ok: true; who: string; via: "tailnet" | "local" } | { ok: false; status: number; why: string };
 
 const READS = new Set(["GET", "HEAD"]);
+
+/** The setting that names who may open the board (settings.json's everywhere.service.owners), and the command that
+ *  sets it (bin/shepherdr web owners). */
+export const OWNERS_SETTING = "service.owners";
+export const OWNERS_COMMAND = "shepherdr web owners <your Tailscale login>";
+/** Why a tagged machine with no service.owners lets nobody in (the 503's words, the Web page's state line). */
+export const OWNERS_UNSET = `This machine is a tagged Tailscale device, so it has no owner to let in. Say who may open the board: \`${OWNERS_COMMAND}\` (the ${OWNERS_SETTING} setting).`;
+
+/** The logins in a settings file's service.owners (a list, or one string; commas or spaces between): trimmed, none
+ *  empty. */
+export function ownersIn(settings: any): string[] {
+  const v = settings?.everywhere?.service?.owners;
+  const all = Array.isArray(v) ? v : typeof v === "string" ? [v] : [];
+  return [...new Set(all.flatMap((x) => (typeof x === "string" ? x.split(/[\s,]+/) : [])).map((x) => x.trim()).filter(Boolean))];
+}
+
+/** Who may use the board through tailscale serve: on a tagged machine its owners alone, else the owner and them. */
+export function allowed(g: Gate): string[] {
+  const extra = (g.owners ?? []).map((x) => x.trim()).filter(Boolean);
+  if (g.tagged) return extra;
+  return g.owner ? [g.owner, ...extra] : [];
+}
 
 // A link from another site (Slack, a page, a bookmark) opens the entry page: a GET top-level navigation to a page, not
 // the API or a socket (GitHub #913). Browsers mark a page inside a frame, a script or a fetch with other Sec-Fetch
@@ -32,9 +59,11 @@ export function gate(req: Request, g: Gate, socket = false, peerTrusted = false)
   if (h.get("sec-fetch-site") === "cross-site" && !pageLink(req, socket)) return { ok: false, status: 403, why: "cross-site" };
 
   if (login !== null) {
-    if (!g.owner || !g.dns) return { ok: false, status: 503, why: "Tailscale isn't running here" };
+    if ((!g.owner && !g.tagged) || !g.dns) return { ok: false, status: 503, why: "Tailscale isn't running here" };
     if (!peerTrusted) return { ok: false, status: 403, why: "not from Tailscale" };
-    if (login !== g.owner) return { ok: false, status: 403, why: "only this machine's owner" };
+    const may = allowed(g);
+    if (!may.length) return { ok: false, status: 503, why: OWNERS_UNSET };
+    if (!may.includes(login)) return { ok: false, status: 403, why: "only this machine's owner" };
     const hp = g.httpsPort ?? 443;
     if (hp === 443 ? host !== g.dns && host !== `${g.dns}:443` : host !== `${g.dns}:${hp}`) return { ok: false, status: 421, why: "wrong host" };
     if (write) {

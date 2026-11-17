@@ -4,7 +4,7 @@
 // Levels as the window's scopes: Everywhere ("everywhere"), a space ("spaces"[its id], with its repo folder, which is
 // how herdr-task finds it), and for the Machines page each machine ("machines"[its name, "local" here]).
 import { existsSync, readFileSync, renameSync, watch, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { HOME, settingsFile, where, writableSettings } from "./paths.ts";
 import * as C from "../core/settings.js";
 import { SH } from "../core/paths.js";
@@ -13,8 +13,8 @@ import * as HC from "../core/host.js";
 import * as APc from "../core/autopilot.js";
 import type { SettingRow, SettingSection } from "../web/shared/types.ts";
 
-const { TASK_ROWS, DEFAULTS, wordFor, valueFor, ROLES: CORE_ROLES, NOTES: CORE_NOTES, ABOUT, BACKUP, REACTIONS, SUGGESTIONS, STAR, starState, FEEDBACK, feedbackRepo, upgradeReactions, BASE, BRANCH, branchPattern, MACHINES, OLD_NAMES, SECTIONS,
-  WEB, modelLabel, roleSel, otherCli, otherCliWords, backupProblem, homeAbout, webState, fromWord, LOADING_AGENTS, RESET, machineLabel } = C as any;
+const { TASK_ROWS, DEFAULTS, wordFor, valueFor, ROLES: CORE_ROLES, NOTES: CORE_NOTES, ABOUT, BACKUP, REACTIONS, SUGGESTIONS, FEEDBACK, feedbackRepo, upgradeReactions, BASE, BRANCH, branchPattern, MACHINES, OLD_NAMES, SECTIONS,
+  WEB, ownersValue, ownersAbout, modelLabel, roleSel, otherCli, otherCliWords, backupProblem, homeAbout, webState, fromWord, LOADING_AGENTS, RESET, machineLabel } = C as any;
 const AP = APc as any;
 /** Autopilot as Everywhere has it now (herdr-task's view: what Settings keeps, else what it kept before, else the
  *  defaults): its schedule's words, events, heartbeat words and what wakes it in plain words */
@@ -95,7 +95,9 @@ export class Settings {
 
   start() {
     this.read();
-    if (existsSync(dirname(settingsFile()))) watch(dirname(settingsFile()), (_e, name) => { if (name === "shepherdr.json") this.read(); });
+    // the file by its own name (settings.json since the data move; shepherdr.json before): a write replaces it, so the
+    // folder is watched
+    if (existsSync(dirname(settingsFile()))) watch(dirname(settingsFile()), (_e, name) => { if (name === basename(settingsFile())) this.read(); });
   }
 
   private read() {
@@ -118,6 +120,13 @@ export class Settings {
     return { value: scope ? own ?? parent : every ?? dflt, own: own !== undefined, parent, level: mach !== undefined ? "machine" : "everywhere", machine: m };
   }
 
+  /** The agent a role runs in a space (null: Everywhere's), as the window's chat starts it (lib/coordinator.js
+   *  shepherdrFor): { agent, model, effort, fast, perm }, or null when none is set (the template's own command). */
+  role(scope: string | null, role: string): any {
+    const v = this.pick(scope, role, null).value;
+    return v && typeof v === "object" && v.agent ? v : null;
+  }
+
   /** What the agents offer (core/settings.js choicesFrom: menus, permission defaults, what an unset role runs), set by
    *  the service from each CLI's own settings; null until read. */
   choices: any = null;
@@ -128,7 +137,7 @@ export class Settings {
 
   /** Every page at every level: Agents and Tasks (Everywhere and each space), Machines (all and each machine), Web.
    *  web: what the service last said of the web app (web.json: on, link, why, its QR picture's SVG). */
-  sections(web: { on: boolean; link: string | null; why: string | null; qr?: string | null; serve?: Serve } | string | null, spaces: Scope[] = [], machines: string[] = [], host = LOCAL,
+  sections(web: { on: boolean; link: string | null; why: string | null; qr?: string | null; serve?: Serve; owners?: string[]; tagged?: boolean } | string | null, spaces: Scope[] = [], machines: string[] = [], host = LOCAL,
     pilot: { everywhere: PilotEverywhere; trigger?: (space: string) => string | undefined } | null = null): SettingSection[] {
     this.host = host;
     this.scopes = spaces;
@@ -151,7 +160,7 @@ export class Settings {
   private homes: Record<string, any> | null = null;
 
   /** Web, as the window's page: the web app's state, then its link (Copy) and its QR code to open it on a phone. */
-  private web(w: { on: boolean; link: string | null; why: string | null; qr?: string | null; serve?: Serve }): SettingSection {
+  private web(w: { on: boolean; link: string | null; why: string | null; qr?: string | null; serve?: Serve; owners?: string[]; tagged?: boolean }): SettingSection {
     const rows: SettingRow[] = [{ label: WEB.title, key: "", value: "", hint: webState(!w.on, true, w), fixed: true }];
     // Serve from (core/host.js): the machine serving it now, and every connected one to move it to
     const sv = w.serve;
@@ -162,6 +171,8 @@ export class Settings {
     }
     const shown = w.on && w.link && !w.why;
     if (shown) rows.push({ label: WEB.link, key: "web.link", value: "", hint: w.link!, copy: w.link!, fixed: true });
+    // who may open it (service.owners): shown, set on the machine itself (core/settings.js ownersAbout)
+    if (w.on && w.owners) rows.push({ label: WEB.owners, key: "web.owners", value: ownersValue(w.owners, !!w.tagged), hint: ownersAbout(w.owners, !!w.tagged), fixed: true });
     return { name: title("web"), global: true, rows, ...(shown && w.qr ? { qr: w.qr, qrTitle: WEB.phone } : {}) };
   }
 
@@ -222,12 +233,6 @@ export class Settings {
       const repo = this.pick(null, "agents", "feedback_repo");
       rows.push({ label: FEEDBACK.repoTitle, key: "agents.feedback_repo", value: String(repo.value ?? ""), text: true, hint: FEEDBACK.repoAbout,
         placeholder: FEEDBACK.repo } as SettingRow);
-    }
-    // Ask for a star (herdr-task's star.py), Everywhere only: a switch until it has asked, then just when it did
-    if (!s) {
-      const st = starState(this.file);
-      rows.push(st.asked ? { label: STAR.title, key: "star_prompt", value: "Asked", fixed: true, hint: st.about }
-        : { label: STAR.title, key: "star_prompt", value: ON(st.on), options: ["on", "off"], hint: st.about });
     }
     return { name: title("agents"), level: scope ?? "all", rows };
   }
@@ -474,15 +479,6 @@ export class Settings {
       if (word !== null && word !== "on" && word !== "off") throw new Error("Not one of its choices.");
       const parent = space ? file.everywhere?.agents?.suggestions ?? DEFAULTS.agents.suggestions : DEFAULTS.agents.suggestions;
       put("agents", "suggestions", word === null || (word === "on") === parent ? null : word === "on");
-    } else if (key === "star_prompt") {
-      // Everywhere only; once asked it stays asked, whatever the switch (never a second ask)
-      if (space) throw new Error("This one is the same for every space.");
-      if (word !== null && word !== "on" && word !== "off") throw new Error("Not one of its choices.");
-      const was = file.everywhere?.star_prompt;
-      if (was?.asked) throw new Error("It already asked once, and won't ask again.");
-      next.everywhere ??= {};
-      if (word === "off") next.everywhere.star_prompt = { off: true };
-      else delete next.everywhere.star_prompt;
     } else if (key === "agents.feedback") {
       // on or off; the same as what this level would inherit unsets it, so it follows again (as Reactions)
       if (word !== null && word !== "on" && word !== "off") throw new Error("Not one of its choices.");

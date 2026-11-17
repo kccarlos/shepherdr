@@ -4,7 +4,8 @@ import json
 
 from .base import now
 from .agents import (
-    agent_running, detail, live_helpers, out_of_rounds_why, ask_reason, blocking_dialog, held_ask, last_words, own_line, own_work, status_word, STATUSES, task_status,
+    agent_running, asking, BG_ENDED_WHY, detail, device_why, live_helpers, out_of_rounds_why, ask_reason, blocking_dialog, held_ask,
+    last_words, own_line, own_work, OUT_OF_ROUNDS, status_word, STATUSES, task_status,
 )
 from .queues import waiting_ext, waiting_for
 
@@ -20,13 +21,18 @@ def view(s, task, live=None):
     v["status"], v["needs"], v["why"] = task_status(task, running)
     if v["needs"] == "asks":
         # Why it waits, at most LINE_MAX characters: a standard reason or its own question.
-        k = next((k for k in running if status_word(k) == "blocked"), None)
+        k = next((k for k in running if status_word(k) == "blocked"), None) or next((k for k in running if asking(k)), None)
         st = k.get("status") if k and isinstance(k.get("status"), dict) else {}
         # Blocked in its CLI's question dialog: every question, before its own status line (field note 51).
         v["why"] = (k and blocking_dialog(task, k["address"], held_ask(k["address"]))) or own_line(task, k and k["address"]) or (ask_reason(task, k["address"], held_ask(k["address"]), st.get("kind"), st.get("msg")) if k else v["why"])
     if v["needs"] == "reply":
         # Refused ready with its rounds used up (review_refusal): the Assistant can add one.
-        v["why"] = (out_of_rounds_why(task) if task.get("review_out") else None) or own_line(task) or last_words(task)
+        v["why"] = (out_of_rounds_why(task) if task.get("review_out") else None) or (v["why"] if v["why"] == BG_ENDED_WHY else None) \
+            or (v["why"] if task.get("device_wait") and v["why"] == device_why(task) else None) \
+            or own_line(task) or last_words(task)
+    if v["needs"] in ("asks", "reply") and task["state"] == "running" and running:
+        from .commands import start_stuck  # FAC-100: an agy worker that never started, not "Signed out"
+        v["why"] = next(filter(None, (start_stuck(task, k) for k in running)), None) or v["why"]
     # Quiet but on its own background work (SHEP-53), or said ready but not at rest yet (SHEP-148):
     # Working; kept on the task for the Tasks panel (core/tasks.js place()).
     v["own_work"] = (v["status"] == "working" and task["state"] in ("running", "ready") and bool(running)

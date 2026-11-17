@@ -7,15 +7,15 @@
 //   SHEPHERDR_WEB=on|off           serve the web app and share it on the tailnet (default on)
 // Serve from (service/host.ts): one machine serves the web app and holds the shared data; on the others the service
 // reads and writes it there, keeps their settings in step (service/sync.ts) and doesn't share /shepherdr.
-import { refusedPage } from "./refused.ts";
+import { refusedPage, NO_OWNERS } from "./refused.ts";
 import { existsSync, readFileSync, writeFileSync, mkdirSync, statSync, rmSync, watchFile } from "node:fs";
 import { join, normalize } from "node:path";
 import { randomBytes } from "node:crypto";
 import { DATA, SOCK, TOKEN, PORT, HOME, ensureData, settingsFile, where } from "./paths.ts";
 import { holdLock } from "./lock.ts";
-import { gate, localCaller, type Gate } from "./auth.ts";
+import { gate, localCaller, ownersIn, OWNERS_UNSET, type Gate } from "./auth.ts";
 import { refusedWhy, trustedPeer } from "./peer.ts";
-import { whoami, share, served, unshare, restoreShare, httpsPort, webLink, webOrigin, HTTPS_PORT_FILE, type Me } from "./tailscale.ts";
+import { whoami, share, served, unshare, restoreShare, httpsPort, webLink, webOrigin, deviceOf, forwardedFrom, HTTPS_PORT_FILE, type Me } from "./tailscale.ts";
 import { qrFile } from "./qr.ts";
 import { Hub } from "./hub.ts";
 import { Store } from "./store.ts";
@@ -28,7 +28,7 @@ import { windowSection, setWindow, offList, offPlugins } from "./window.ts";
 import { record, deleteAll, note as noteUsage, followSwitch, isOn as insightsOn, logLines } from "./usage.ts";
 import { insightsSummary } from "./voice-data.ts";
 import { Chats } from "./chats.ts";
-import { act, hc as hcRun } from "./actions.ts";
+import { act, findMachines, hc as hcRun } from "./actions.ts";
 import { AgentWatch } from "./watch.ts";
 import { Compat, activity, newsKey, placeKey } from "./compat.ts";
 import { keep, served as fileResponse, smaller } from "./media.ts";
@@ -120,7 +120,10 @@ await Promise.race([host.start(), Bun.sleep(10_000)]);
 const store = new Store(hub, host);
 new Sync(hub, host).start();
 let me: Me | null = await whoami();
-const g: Gate = { owner: me?.login ?? null, dns: me?.dns ?? null, port: PORT, token };
+// service.owners (auth.ts): who may open the board beside the owner, or instead of one on a tagged machine; read with
+// the rest of the tailnet, and again whenever the settings file changes
+const owners = () => { try { return ownersIn(JSON.parse(readFileSync(settingsFile(), "utf8"))); } catch { return []; } };
+const g: Gate = { owner: me?.login || null, dns: me?.dns ?? null, port: PORT, token, tagged: !!me?.tagged, owners: owners() };
 // the 403 reason last logged for a Mac that can't see who connected (peer.ts refusedWhy), said once
 let saidPeer = "";
 // the tailnet HTTPS port the web app is shared on (tailscale.ts httpsPort: 443 unless this machine set another),
@@ -225,6 +228,8 @@ setInterval(() => {
   void moveSecrets(null).catch(() => {});
 }, 30_000);
 const settings = new Settings();
+// a space's Assistant started from the web runs the agent Settings › Agents chooses for it, as the window's (#1051)
+compat.assistantPick = (space) => settings.role(space, "coordinator");
 // Settings › Agents' model menu and buttons (core/settings.js choicesFrom), from each CLI's own settings here, read
 // again every ten minutes; a CLI herdr-task's check finds missing here isn't offered
 const readDefaults = async () => {
@@ -236,7 +241,7 @@ const readDefaults = async () => {
   } catch {}
 };
 // Settings › Web: what the service last said of the web app (tailnet() below), its QR code as a picture
-let webNow: { on: boolean; link: string | null; why: string | null; qr: string | null; serve?: any } | null = null;
+let webNow: { on: boolean; link: string | null; why: string | null; qr: string | null; serve?: any; owners?: string[]; tagged?: boolean } | null = null;
 // Settings › Secrets, as the window's: each kept secret with where it is, and each agent's waiting ask with its name and
 // its narrowest scope (its space, else its machine), which Give it fills in
 function secretsPage(spaces: any[]) {
@@ -350,7 +355,9 @@ let wasOn: boolean | null = null;
 let moving: { to: string; at: number; error?: string } | null = null;
 async function tailnet() {
   me = await whoami();
-  g.owner = me?.login ?? null;
+  g.owner = me?.login || null;
+  g.tagged = !!me?.tagged;
+  g.owners = owners();
   g.dns = me?.dns ?? null;
   g.httpsPort = hp = httpsPort();
   const on = webOn(), serving = host.serving();
@@ -363,8 +370,10 @@ async function tailnet() {
   let shareWhy: string | null = null;
   if (me && on && serving) {
     const s = await served(me.dns);
-    if (s.funnel) { why = "Funnel is on for this machine: the web app stays off until it's off"; g.owner = null; }
+    if (s.funnel) { why = "Funnel is on for this machine: the web app stays off until it's off"; g.owner = null; g.tagged = false; }
     else why = shareWhy = await share(me.dns, PORT, hp);
+    // shared, but a tagged machine with no service.owners lets nobody in: the Web page says how to fix it
+    if (!why && g.tagged && !g.owners?.length) why = OWNERS_UNSET;
   } else if (me && (!on || !serving) && wasOn !== false) {
     await unshare(me.dns, PORT);
     // moved away: what the move here set aside is shared again (shepherdr web serve-from --take-link)
@@ -375,11 +384,11 @@ async function tailnet() {
   let qr: string | null = null;
   try { if (link && on && !why) qr = qrFile(existsSync(join(APP_DATA, "..")) ? APP_DATA : DATA, link); } catch {}
   const serve = serveNow();
-  writeFileSync(join(DATA, "web.json"), JSON.stringify({ on, link, qr, why, share_error: shareWhy, https_port: hp, serve, at: Date.now() }) + "\n");
+  writeFileSync(join(DATA, "web.json"), JSON.stringify({ on, link, qr, why, share_error: shareWhy, owners_unset: why === OWNERS_UNSET, owners: g.owners ?? [], tagged: !!me?.tagged, https_port: hp, serve, at: Date.now() }) + "\n");
   let picture: string | null = null;
   try { if (qr) picture = `data:image/svg+xml;base64,${Buffer.from(readFileSync(qr)).toString("base64")}`; } catch {}
   const was = JSON.stringify(webNow);
-  webNow = { on, link, why, qr: picture, serve };
+  webNow = { on, link, why, qr: picture, serve, owners: g.owners ?? [], tagged: !!me?.tagged };
   if (JSON.stringify(webNow) !== was) model.rebuild();
   if (why) console.error(why);
 }
@@ -646,7 +655,7 @@ async function doAction(body: any): Promise<Response> {
   if (body?.type === "limits-check") { await machines.checkNow(); return json({ ok: true }); }
   if (body?.type === "secrets-move") {
     // Settings › Secrets › Kept on: the vault moves (shepherdr secrets move-to); the page sees it as it goes
-    const m = typeof body.machine === "string" && body.machine && body.machine !== home.me?.name ? body.machine : null;
+    const m = HCORE.pickedMachine(body.machine, home.me?.name);
     if (m !== null && !home.machines.has(m)) return json({ ok: false, error: "That machine isn't linked." });
     if (secretsMoving && !secretsMoving.error) return json({ ok: false, error: `Already moving them to ${secretsMoving.to}.` });
     void moveSecrets(m).catch(() => {});
@@ -654,7 +663,7 @@ async function doAction(body: any): Promise<Response> {
   }
   if (body?.type === "serve-from") {
     // Settings › Web's Serve from: the move runs on (the page sees it in Settings › Web as it goes)
-    const m = typeof body.machine === "string" && body.machine && body.machine !== host.me?.name ? body.machine : null;
+    const m = HCORE.pickedMachine(body.machine, host.me?.name);
     if (m !== null && !host.machines.has(m)) return json({ ok: false, error: "That machine isn't linked." });
     if (moving && !moving.error) return json({ ok: false, error: `Already moving it to ${moving.to}.` });
     void serveFrom(m).catch(() => {});
@@ -672,6 +681,13 @@ async function doAction(body: any): Promise<Response> {
     if (body?.type === "mode" && typeof body.place === "string") await model.readPilot(body.place);
     return json(r);
   } catch (err) { return new Response((err as Error).message, { status: 400 }); }
+}
+
+/** The tailnet device a request came from (tailscale serve's forwarded address, as its node's id), or null: this
+ *  machine's own callers (the window, the CLI) aren't a device of the tailnet. */
+async function deviceFrom(req: Request, via: "tailnet" | "local") {
+  const ip = via === "tailnet" ? forwardedFrom(req) : null;
+  return ip ? await deviceOf(ip) : null;
 }
 
 const server = Bun.serve<{ who: string }>({
@@ -700,7 +716,9 @@ const server = Bun.serve<{ who: string }>({
     if (!pass.ok) {
       const why = refusedWhy(pass.why);
       if (why !== pass.why && why !== saidPeer) console.error(`web: ${(saidPeer = why)}`);
-      return pass.status === 403 && viaTailnet && req.method === "GET" && (req.headers.get("accept") ?? "").includes("text/html") ? refusedPage(pass.status, why, WEB) : new Response(why, { status: pass.status });
+      const page = viaTailnet && req.method === "GET" && (req.headers.get("accept") ?? "").includes("text/html");
+      if (page && pass.status === 503 && pass.why === OWNERS_UNSET) return refusedPage(pass.status, why, WEB, NO_OWNERS);
+      return pass.status === 403 && page ? refusedPage(pass.status, why, WEB) : new Response(why, { status: pass.status });
     }
     if (path === "/api/browser") {
       // a task's browser (2.1's Browser panel): this machine's tasks
@@ -724,7 +742,11 @@ const server = Bun.serve<{ who: string }>({
       const resume = (url.searchParams.get("resume") ?? "").slice(0, 64);
       return srv.upgrade(req, { data: { who: pass.who, voice: { key, resume } } as any }) ? undefined : new Response("upgrade failed", { status: 400 });
     }
-    if (socket) return srv.upgrade(req, { data: { who: pass.who } }) ? undefined : new Response("upgrade failed", { status: 400 });
+    if (socket) {
+      // the device a page is on (a wake word reaches only its own device's pages, SHEP-240)
+      const from = await deviceFrom(req, pass.via);
+      return srv.upgrade(req, { data: { who: pass.who, from } as any }) ? undefined : new Response("upgrade failed", { status: 400 });
+    }
     if (path === "/api/me") return json({ login: pass.who, via: pass.via, machine: me?.host ?? null, link: ownLink(), version: VERSION, off: offPlugins() });
     if (path === "/api/state" && req.method === "GET") return json(store.doc.version ? store.doc : await store.load());
     if (path === "/api/state" && req.method === "POST") {
@@ -814,6 +836,7 @@ const server = Bun.serve<{ who: string }>({
       const machine = a ? (a.includes("/") ? a.split("/")[0] : null) : sp?.machine ?? null;
       return json(await reachOf(machine));
     }
+    if (path === "/api/machines/find") return json(await findMachines(req.method === "POST"));
     if (path === "/api/folders") {
       const m = url.searchParams.get("machine"), machine = !m || m === me?.host ? null : m;
       const home = (await exec(hub, ["sh", "-c", 'printf %s "$HOME"'], machine).catch(() => ({ stdout: "" }))).stdout;
@@ -830,7 +853,7 @@ const server = Bun.serve<{ who: string }>({
       try {
         const machine = !b?.machine || b.machine === me?.host ? null : String(b.machine);
         const icon = typeof b?.icon === "string" && b.icon ? b.icon.slice(0, 16) : null;
-        const place = await newSpace(hub, { machine, path: String(b?.path ?? ""), makeRepo: !!b?.makeRepo, icon, store: compat.shared! });
+        const place = await newSpace(hub, { machine, path: String(b?.path ?? ""), makeRepo: !!b?.makeRepo, icon, store: compat.shared!, pick: compat.assistantPick });
         // the page opens it once the sidebar has it: in the snapshot before the answer, not at the next 10 s read
         await model.waitSpace(place);
         return json({ place });
@@ -884,6 +907,14 @@ const server = Bun.serve<{ who: string }>({
       return json(await activity(r, id));
     }
     if (path === "/api/action" && req.method === "POST") return doAction(await req.json().catch(() => null));
+    if (path === "/api/voice/wake" && req.method === "POST") {
+      // a wake word heard on a phone (Shepherdr Wake, SHEP-240): its Shepherdr page already open starts a call, as
+      // ?voice=1 would, without the phone opening a second page. shown: false, it waits 15 s for that page to show up.
+      if (offList().includes("voice")) return json({ error: "voice is off" }, 409);
+      const from = await deviceFrom(req, pass.via);
+      if (!from) return json({ error: "only from a device on the tailnet" }, 400);
+      return json({ ok: true, shown: live.voiceWake(from) });
+    }
     if (path === "/api/voice/tool" && req.method === "POST") {
       // the window's voice call (mods/chat/voice.ts) asks its tools here, from this machine only
       if (pass.via !== "local") return json({ error: "not here" }, 403);

@@ -1,5 +1,8 @@
 """GitHub and merging: pull requests, checks, and finishing a merged task."""
 
+import contextlib
+import datetime
+import fnmatch
 import json
 import os
 import re
@@ -7,7 +10,7 @@ import shutil
 import tempfile
 
 from .base import Fail, GH, git, hc_json, now, run, STORE
-from .agents import agent_running, live_agents, live_helpers, open_question, status_word
+from .agents import agent_running, detail, live_agents, live_helpers, mid_turn_agents, open_question, status_word
 
 
 # ---- GitHub ---------------------------------------------------------------------------------
@@ -123,7 +126,12 @@ def github(s, task=None):
     g = s.data.get("github") or {}
     if g and (g.get("from") or g.get("repo") or "").lower() == slug.lower() and now() - g.get("at", 0) < 3600000:
         return g.get("repo")
-    ok, out, _ = gh("repo", "view", slug, "--json", "nameWithOwner", "-q", ".nameWithOwner")
+    ok, out, err = gh("repo", "view", slug, "--json", "nameWithOwner", "-q", ".nameWithOwner")
+    if not ok and not settled(err):
+        # #988: gh failing on a GitHub remote (a network blip, its sign-in lapsed) is never remembered as "not on
+        # GitHub": None, with why in github_unreachable(s).
+        s.github_error = err or "gh couldn't read the repo"
+        return None
     try:
         repo = (json.loads(out).get("nameWithOwner") or slug) if ok and out.startswith("{") else (out.splitlines()[0].strip() if ok and out.strip() else (slug if ok else None))
     except ValueError:
@@ -134,6 +142,31 @@ def github(s, task=None):
 
 
 _github = github
+# gh's answers that say for sure it won't work here (never signed in, no such repo or no access): tasks
+# merge locally, as before; anything else (the network, GitHub's own errors) may pass.
+SETTLED = ("auth login", "not logged in", "could not resolve to a repository", "none of the git remotes",
+           "no git remotes", "not a git repository", "isn't installed")
+
+
+def settled(err):
+    return any(x in (err or "").lower() for x in SETTLED)
+
+
+def on_github(folder):
+    """A remote of the repo at folder points at github.com."""
+    ok, out, _ = git(folder, "remote", "-v")
+    return ok and bool(re.search(r"github\.com[:/]", out))
+
+
+def github_unreachable(s):
+    """Why GitHub couldn't be asked about a repo whose remote is there (github() said None), else None."""
+    return getattr(s, "github_error", None) if s.loc["kind"] == "repo" and shutil.which(GH) else None
+
+
+def released(s):
+    """The task list's lock let go around slow git work (Store.released(), #1007); a no-op elsewhere."""
+    let_go = getattr(s, "released", None)
+    return let_go() if let_go else contextlib.nullcontext()
 
 
 def task_github(fn, s, task=None):
@@ -161,10 +194,12 @@ def push_branch(s, task):
     # FAC-98: GitHub's update-branch merged its base into it there: nothing of its own to push (a push would
     # drop that merge).
     if not (has and tip and seen and (there.split()[:1] == [tip] or tip == task.get("head") and synced_head(task, pr_repo(task), there.split()[0] if there.split() else ""))):
-        ok, _, err = git(wt, "push", "--force-with-lease", "-u", remote, br) if to == br else \
-            git(wt, "push", remote, f"{br}:refs/heads/{to}")
+        # #1007: the task list's lock let go meanwhile (a pre-push hook can run for many minutes).
+        with released(s):
+            ok, out, err = git(wt, "push", "--force-with-lease", "-u", remote, br) if to == br else \
+                git(wt, "push", remote, f"{br}:refs/heads/{to}")
         if not ok:
-            raise Fail(f"Couldn't push {br}" + (f" to {to}" if to != br else "") + f": {err}")
+            raise Fail(f"Couldn't push {br}" + (f" to {to}" if to != br else "") + f": {push_error(out, err)}")
 
 
 def pr_head_problem(s, task, repo, head, theirs=None):
@@ -198,14 +233,15 @@ def pr_head_problem(s, task, repo, head, theirs=None):
 
 def pr_open(s, task, repo, summary=None):
     """Pushes the task's branch and opens its pull request (or keeps the open one, also one opened
-    by hand or by its agent for the branch: SHEP-13's "already exists")."""
-    wt, br = task["worktree"], task["branch"]
+    by hand or by its agent for the branch: SHEP-13's "already exists"). Its description follows
+    each ready (#1004) when Herdr wrote it."""
+    br = task["branch"]
     repo = pr_repo(task) or repo
     # Continuing a pull request already open on another branch, its work pushed there (#828): that
     # one is the task's, never a second with the same commits.
     if not (task.get("pr") or {}).get("number") and pr_at_tip(task, repo):
         if summary:
-            gh("pr", "comment", str(task["pr"]["number"]), "--repo", task["pr"]["repo"], "--body", summary)
+            pr_note(task, task["pr"].get("repo") or repo, summary)
         return task["pr"]
     push_branch(s, task)
     pr = task.get("pr") or {}
@@ -213,16 +249,18 @@ def pr_open(s, task, repo, summary=None):
         pr["repo"] = repo
         ok, out, _ = gh("pr", "view", str(pr["number"]), "--repo", repo, "--json", "state", "-q", ".state")
         if ok and out == "OPEN":
+            pr_describe(s, task, summary)
             if summary:
-                gh("pr", "comment", str(pr["number"]), "--repo", repo, "--body", summary)
+                pr_note(task, repo, summary)
             return pr
         if pr.get("branch"):
             # The other branch's pull request it continued was closed or merged: its own branch from here.
             task.pop("pr")
             return pr_open(s, task, repo, summary)
     if pr_adopt(task, repo):
+        pr_describe(s, task, summary)
         if summary:
-            gh("pr", "comment", str(task["pr"]["number"]), "--repo", task["pr"]["repo"], "--body", summary)
+            pr_note(task, task["pr"].get("repo") or repo, summary)
         return task["pr"]
     # SHEP-59: never a second pull request for a branch that already had one merged (one at its tip
     # is done before this: already_merged()); commits made since go on a new branch.
@@ -236,7 +274,52 @@ def pr_open(s, task, repo, summary=None):
         raise Fail(f"Couldn't open a pull request: {err}")
     url = out.split()[-1]
     task["pr"] = {"number": int(url.rstrip("/").split("/")[-1]), "url": url, "repo": repo}
+    if summary and summary.strip():
+        task["pr_note"] = {"number": task["pr"]["number"], "said": summary.strip()}  # its body says it already
     return task["pr"]
+
+
+def push_error(out, err, lines=15):
+    """What a failed push said, for ready's refusal (#963): a pre-push hook's own words (what failed,
+    where its log is) often go to stdout, which git leaves there; both, its last lines only."""
+    said = [x for x in (out + "\n" + err).splitlines() if x.strip()]
+    return "\n".join(said[-lines:]) or "git push failed"
+
+
+def pr_note(task, repo, summary):
+    """Ready's summary on the task's open pull request: one comment, edited in place on a later ready, and
+    nothing when it says the same as last time (#1058: each ready posted another copy under the person's
+    name). task["pr_note"] = {number, id (the comment's), said}, for the pull request it was on."""
+    summary = (summary or "").strip()
+    number = task["pr"]["number"]
+    note = task.get("pr_note") or {}
+    if note.get("number") != number:
+        note = {"number": number}
+    if not summary or note.get("said") == summary:
+        return
+    if note.get("id"):
+        ok, _, _ = gh("api", "-X", "PATCH", f"repos/{repo}/issues/comments/{note['id']}", "-f", f"body={summary}")
+        if ok:
+            task["pr_note"] = {**note, "said": summary}
+            return
+    # none yet, or it was deleted: a new one, its id (gh prints the comment's link, …#issuecomment-<id>) kept
+    ok, out, _ = gh("pr", "comment", str(number), "--repo", repo, "--body", summary)
+    if ok:
+        m = re.search(r"#issuecomment-(\d+)", out or "")
+        task["pr_note"] = {"number": number, "id": int(m.group(1)) if m else None, "said": summary}
+
+
+def pr_describe(s, task, summary=None):
+    """#1004: an open pull request whose description Herdr wrote (pr_body(), "Task: SHEP-n" first)
+    gets the one this ready says (its summary, details and proof); one written by a person or an
+    agent, or another branch's it continues (#828), is left as it is."""
+    pr = task.get("pr") or {}
+    if not pr.get("number") or pr.get("branch"):
+        return
+    ok, body, _ = gh("pr", "view", str(pr["number"]), "--repo", pr["repo"], "--json", "body", "-q", ".body")
+    want = pr_body(s, task, summary)
+    if ok and body.strip().splitlines()[:1] == [f"Task: {s.ref(task)}"] and body.strip() != want.strip():
+        gh("pr", "edit", str(pr["number"]), "--repo", pr["repo"], "--body", want)
 
 
 def pr_title(s, task):
@@ -281,6 +364,18 @@ def pr_adopt(task, repo):
     if found:
         task["pr"] = {"number": found["number"], "url": found["url"], "repo": repo}
     return task.get("pr") if found else None
+
+
+def pr_for_branch(task, repo):
+    """The open pull request from this repo for the task's branch into its base, whatever its head
+    (opened by its agent, ready never knowing: #988), as gh lists it, or None."""
+    ok, out, _ = gh("pr", "list", "--repo", repo, "--head", task["branch"], "--state", "open",
+                    "--json", "number,url,isCrossRepository,baseRefName,headRefOid")
+    try:
+        return next((p for p in json.loads(out) if not p.get("isCrossRepository")
+                     and p.get("baseRefName") == (task.get("base") or "main")), None) if ok and out else None
+    except (ValueError, TypeError, AttributeError):
+        return None
 
 
 def pr_at_tip(task, repo):
@@ -363,7 +458,7 @@ BAD = {"FAILURE", "ERROR", "CANCELLED", "TIMED_OUT", "ACTION_REQUIRED", "STARTUP
 PENDING = {"QUEUED", "IN_PROGRESS", "PENDING", "WAITING", "REQUESTED", "EXPECTED"}
 
 
-VIEW = "state,mergeable,headRefOid,mergeCommit,reviewDecision,mergeStateStatus"
+VIEW = "state,mergeable,headRefOid,mergeCommit,reviewDecision,mergeStateStatus,isCrossRepository"
 # SHEP-179: a token that may read a pull request but not its checks (a fine-grained one without Checks: read, as
 # the exe.dev GitHub integration's) gets GitHub's "Resource not accessible" for them: a permission, never a blip.
 DENIED = ("resource not accessible", "http 403", "must have", "not have permission", "insufficient scope")
@@ -399,9 +494,29 @@ def pr_view(task):
         v["statusCheckRollup"] = rows
         if not whole:
             v["checks_unknown"] = True
+    if not rest and not v.get("statusCheckRollup") and v.get("headRefOid"):
+        # FAC-115: no rollup row, yet a run of any event (push, workflow_dispatch) may sit on the head commit
+        v["statusCheckRollup"] = check_rows(repo, v["headRefOid"])[0]
     if v.get("statusCheckRollup"):
         v["statusCheckRollup"] = latest_checks(v["statusCheckRollup"])
+    if v.get("state") == "OPEN" and not pr_pending(v) and runs_pending(pr["repo"], v.get("headRefOid")):
+        # #1044: a workflow run at its head not finished, its jobs not all shown as checks yet (a job
+        # that waits on another's needs, a run waiting for a runner): its checks still run.
+        v["runs_pending"] = True
     return v
+
+
+def runs_pending(repo, sha):
+    """GitHub Actions has a run at commit sha not finished yet (queued, waiting, in progress). False
+    when none, or GitHub couldn't say."""
+    if not sha:
+        return False
+    ok, out, _ = gh("api", f"repos/{repo}/actions/runs?head_sha={sha}&per_page=50", "-q", "[.workflow_runs[].status]")
+    try:
+        states = json.loads(out) if ok else []
+    except ValueError:
+        return False
+    return any(st != "completed" for st in states if isinstance(st, str))
 
 
 def check_rows(repo, sha):
@@ -468,10 +583,11 @@ def pr_problem(v):
     if v.get("mergeable") == "CONFLICTING":
         return "It conflicts with the base branch."
     checks = v.get("statusCheckRollup") or []
-    bad = [c.get("name") or c.get("context") or "a check" for c in checks
-           if (c.get("conclusion") or c.get("state") or "").upper() in BAD]
-    if bad:
+    bad = [c.get("name") or c.get("context") or "a check" for c in checks if word(c) in BAD]
+    if any(word(c) in BAD - STOPPED for c in checks):  # a real failure: as ever, stopped ones listed too
         return "Checks failing: " + ", ".join(bad[:3]) + (" and more." if len(bad) > 3 else ".")
+    if stopped := stopped_checks(v):
+        return stop_words({}, stopped[0])  # FAC-102: CI, not code (task_problem() re-runs it once)
     # #743: the base requires it up to date with itself (GitHub says BEHIND only under that rule).
     if v.get("mergeStateStatus") == "BEHIND":
         return BEHIND
@@ -486,6 +602,13 @@ SYNC_CHECKS_MS = 5 * 60000  # the updated head's checks may take this long to sh
 DRIFTED = (" They failed after Herdr brought the branch up to date with its base (the base moved on since): "
            "pull the branch first (git pull), fix, then say ready again.")
 UPDATE_CONFLICT = "Herdr couldn't bring it up to date with its base branch (a conflict?)"
+
+
+def main_red_hold(s, base):
+    """FAC-113: why merges (and update-branch) into `base` are held while its newest finished GitHub run is red
+    (the watch main_check keeps: ghnews.py), else None. Resumes by itself once main_check sees it green."""
+    red = ((s.data.get("main_watch") or {}).get(base) or {}).get("red")
+    return f"{base} is red since {red[:7]}: merges held until it's green." if red else None
 
 
 def pr_behind(task, repo, head):
@@ -527,15 +650,140 @@ def synced_head(task, repo, theirs):
     return None
 
 
+# FAC-102 (WukongMind): a check GitHub cancelled or timed out, not superseded (latest_checks()), is CI, not code: no
+# test failed. Re-run once per head, but only a check cancelled from outside (runner lost, superseded). FAC-112: one that
+# ran to its own timeout-minutes (conclusion TIMED_OUT, or CANCELLED after about the workflow file's timeout-minutes:
+# GitHub reports a job's own timeout as cancelled) mostly hits it again, so it goes to the Assistant at once, no re-run.
+STOPPED = {"CANCELLED", "TIMED_OUT"}
+CI_STOPPED = 'CI "'  # such a reason's start
+RERUN_SHOW_MS = 10 * 60000  # a re-run whose jobs don't show by then won't
+
+
+def word(c):
+    return (c.get("conclusion") or c.get("state") or "").upper()
+
+
+def stopped_checks(v):
+    return [c for c in v.get("statusCheckRollup") or [] if word(c) in STOPPED]
+
+
+def _ms(text):
+    try:
+        return datetime.datetime.strptime(str(text), "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=datetime.timezone.utc).timestamp() * 1000
+    except ValueError:
+        return None
+
+
+def job_timeout(folder, job):
+    """The timeout-minutes a workflow file in folder gives the job (by its key or name), or None. A line scan, no YAML."""
+    if not folder:
+        return None
+    d = os.path.join(folder, ".github", "workflows")
+    try:
+        files = sorted(f for f in os.listdir(d) if f.endswith((".yml", ".yaml")))
+    except OSError:
+        return None
+    job = re.sub(r" \(.*\)$", "", job or "")  # a matrix job: "test (ubuntu)"
+    for f in files:
+        try:
+            with open(os.path.join(d, f)) as fh:
+                lines = fh.read().splitlines()
+        except OSError:
+            continue
+        jobs, on, ind, cur = [], False, None, None
+        for line in lines:
+            text = line.strip()
+            if not text or text.startswith("#"):
+                continue
+            at = len(line) - len(line.lstrip())
+            if at == 0:
+                on, cur = text.startswith("jobs:"), None
+            elif on and at == (ind := ind or at):
+                cur = {"key": text.rstrip(":").strip()}
+                jobs.append(cur)
+            elif on and cur is not None and at == cur.setdefault("at", at):
+                m = re.match(r"(name|timeout-minutes):\s*['\"]?([^'\"#]*?)['\"]?\s*(#.*)?$", text)
+                if m:
+                    cur[m.group(1)] = m.group(2)
+        for j in jobs:
+            if job in (j["key"], j.get("name")) and str(j.get("timeout-minutes", "")).isdigit():
+                return int(j["timeout-minutes"])
+    return None
+
+
+def hit_limit(task, c):
+    """(hit its own time limit, minutes it ran, the job's timeout-minutes or None): TIMED_OUT, or it ran to within a
+    minute of the timeout-minutes its workflow file (in the task's worktree) gives it."""
+    name = c.get("name") or c.get("context") or "a check"
+    a, b = _ms(c.get("startedAt")), _ms(c.get("completedAt"))
+    took = int(b - a) // 60000 if a and b and b >= a else None
+    limit = job_timeout(task.get("worktree"), name)
+    reached = bool((limit or 360) and took is not None and took >= (limit or 360) - 1)  # GitHub's default is 360
+    return word(c) == "TIMED_OUT" or reached, took, limit
+
+
+def stop_words(task, c):
+    """'CI "check" timed out after 46m: …', with the job's timeout when its workflow file (in the task's worktree) says."""
+    name = c.get("name") or c.get("context") or "a check"
+    timed, took, limit = hit_limit(task, c)
+    reached = bool(timed and limit and took is not None and took >= limit - 1)
+    text = f'CI "{name}" ' + ("timed out" if timed else "was cancelled")
+    if took is not None:
+        text += " after " + (f"{took // 60}h {took % 60}m" if took >= 60 else f"{took}m")
+    why = (f"its timeout-minutes is {limit}, so the job's timeout was reached" if reached
+           else "likely the job's timeout" if timed else "cancelled on GitHub or its runner was lost")
+    return f"{text} ({why}), not a failing test."
+
+
+def ci_stopped(task, v, repo):
+    """FAC-102: its stopped checks re-run once per head (gh run rerun --failed), shown as still running while that
+    shows; a stop again on that head (or no re-run possible): the CI-infrastructure reason. None while it waits."""
+    stopped, pr, head = stopped_checks(v), task.setdefault("pr", {}), v.get("headRefOid") or ""
+    sig = lambda c: f"{c.get('detailsUrl') or c.get('targetUrl') or ''}|{c.get('completedAt') or ''}"
+
+    def hold():
+        for c in stopped:
+            c.update(status="IN_PROGRESS", conclusion="")
+    slow = [c for c in stopped if hit_limit(task, c)[0]]
+    if slow:  # FAC-112: its own time limit, not a hiccup: a re-run would mostly take as long again
+        name, _, limit = (slow[0].get("name") or slow[0].get("context") or "a check"), 0, hit_limit(task, slow[0])[2]
+        return (f"{stop_words(task, slow[0])} Job \"{name}\" hit its {limit}-min limit: too long, not a hiccup, so Herdr "
+                "did not re-run it. A CI problem in " + ", ".join(f'"{c.get("name") or c.get("context")}"' for c in slow[:3]) +
+                ": add a fix task to speed up or split the job (or raise its timeout-minutes) instead of sending code back."
+                if limit else
+                f"{stop_words(task, slow[0])} Job \"{name}\" hit its time limit: too long, not a hiccup, so Herdr did not "
+                "re-run it. A CI problem: add a fix task to speed up or split the job instead of sending code back.")
+    rr = pr.get("ci_rerun") or {}
+    if rr.get("head") != head:
+        if pr_pending(v):  # gh refuses a run still in progress: the one re-run waits for it
+            return hold()
+        runs = sorted({m.group(1) for c in stopped if (m := re.search(r"/actions/runs/(\d+)", c.get("detailsUrl") or ""))})
+        ok = bool(runs) and all(gh("run", "rerun", r, "--failed", "--repo", repo)[0] for r in runs)
+        rr = pr["ci_rerun"] = {"head": head, "runs": runs, "rows": [sig(c) for c in stopped], "at": now(), "ok": ok}
+        if ok:
+            return hold()
+    elif rr.get("ok") and now() - (rr.get("at") or 0) < RERUN_SHOW_MS and all(sig(c) in rr.get("rows", []) for c in stopped):
+        return hold()  # the stop the re-run was asked for still shows
+    names = ", ".join(f'"{c.get("name") or c.get("context")}"' for c in stopped[:3])
+    again = "Herdr re-ran it once and it stopped again" if rr.get("ok") else "Herdr couldn't re-run it"
+    return (f"{stop_words(task, stopped[0])} {again}: a CI-infrastructure problem in {names}, "
+            "not a code failure. Add a fix task for the CI job instead of sending code back.")
+
+
 def task_problem(task, v, repo):
-    """pr_problem(), saying when its checks failed on the head Herdr brought up to date with its base (FAC-98)."""
+    """pr_problem(), saying when its checks failed on the head Herdr brought up to date with its base (FAC-98); a
+    cancelled or timed-out check re-run once (FAC-102)."""
     p = pr_problem(v)
+    if p and p.startswith(CI_STOPPED):
+        p = ci_stopped(task, v, repo)
     if p and p.startswith("Checks failing") and synced_head(task, repo, v.get("headRefOid")):
         p += DRIFTED
     return p
 
 
 def pr_pending(v):
+    if v.get("runs_pending"):
+        return True
     return any((c.get("status") or c.get("state") or "").upper() in PENDING and not (c.get("conclusion") or "")
                for c in v.get("statusCheckRollup") or [])
 
@@ -578,21 +826,281 @@ def drop_branch(s, task):
     (gh refuses that flag on a queue, #801). Already gone (the repo deletes merged branches): fine."""
     if task.get("branch"):
         main = s.loc["folder"]
-        git(main, "push", "--quiet", remote_of(main, task["branch"]), "--delete", task["branch"])
+        # --no-verify: a pre-push hook (a typecheck) checks what is pushed; a deletion has nothing to
+        # check, and the hook would hold the task list's lock for minutes (#1007).
+        git(main, "push", "--quiet", "--no-verify", remote_of(main, task["branch"]), "--delete", task["branch"])
 
 
-# A pull request just pushed can show no checks for a few seconds before GitHub starts them: none
-# for this long after ready means none are set up (Ready then, SHEP-175).
-NO_CHECKS_MS = 30000
+def queue_merge(task, head):
+    """Asks GitHub to merge its pull request (squash) at exactly head: merged now, or queued in its
+    merge queue. Never --delete-branch (#1045: drop_branch() once it merged). (ok, err)."""
+    pr = task["pr"]
+    ok, _, err = gh("pr", "merge", str(pr["number"]), "--repo", pr["repo"], "--squash", "--match-head-commit", head or "")
+    return ok, err
+
+
+# #1044, #1018: a pull request just pushed shows no checks until GitHub starts them, which can take
+# minutes. No checks yet is never "none set up" while its repo says some will come: its workflows at
+# its head run on pull requests, or GitHub blocks the merge with none there (a required check).
+NO_CHECKS_MS = 30000  # no workflow of its own: this long for checks from elsewhere (another CI's statuses)
+MAYBE_CHECKS_MS = 5 * 60000  # a workflow whose filters (paths, branches, a push) may leave it out: this long
+CHECKS_START_MS = 20 * 60000  # one that runs on it: this long, then "they never started" (no merge by itself)
 # SHEP-179: checks that can't be read here, while GitHub blocks the merge: Working this long at most, then Ready.
 UNKNOWN_CHECKS_MS = 20 * 60000
 CHECKS_RUNNING, GITHUB_LOOKS, BACK_TO_AGENT = "Checks running", "Waiting for GitHub", "Back to its agent to fix"
+# FAC-105: a base whose workflows run on its pull requests, yet none ran on this one this long after ready:
+# never read as passing (Actions disabled on the repo, or not triggered); it waits for the person.
+NO_CI_RUN_MS = 5 * 60000
+NO_CI_RUN = "No CI run appeared for this PR; GitHub Actions may be disabled or not triggered"
+_ON = re.compile(r"""^(?:on|"on"|'on'|true)\s*:\s*(.*)$""")
+_CI_SEEN = {}  # "<base commit>:<base>" -> whether its workflows run on a pull request to it
 
 
-def pr_wait(v, since):
+def _indent(line):
+    return len(line) - len(line.lstrip())
+CHECKS_NEVER = "Its checks never started on GitHub."
+WORKFLOWS = ".github/workflows"
+PR_EVENTS = ("pull_request", "pull_request_target")
+
+
+def _block(lines, i):
+    """The lines nested under lines[i] (more indented), and where they end."""
+    ind = len(lines[i]) - len(lines[i].lstrip())
+    j = i + 1
+    while j < len(lines) and len(lines[j]) - len(lines[j].lstrip()) > ind:
+        j += 1
+    return lines[i + 1:j], j
+
+
+def _key(line):
+    k, colon, rest = line.strip().partition(":")
+    return (k.strip().strip("'\""), rest.strip()) if colon else (None, line.strip())
+
+
+def workflow_checks(text, base="main"):
+    """One workflow file's say on a task's pull request into base: "yes" (it runs on pull requests,
+    unfiltered or for base), "maybe" (only on a push, or filtered by paths or other branches), or None
+    (never on one). Its "on:" read by indentation (no YAML parser here)."""
+    lines = [ln.split(" #")[0].rstrip() for ln in text.splitlines()]
+    lines = [ln for ln in lines if ln.strip() and not ln.lstrip().startswith("#")]
+    for i, ln in enumerate(lines):
+        if ln[:1].isspace() or _key(ln)[0] not in ("on", "true"):
+            continue
+        inline = _key(ln)[1]
+        words = set(re.findall(r"[\w-]+", inline))
+        if inline:
+            return "yes" if words & set(PR_EVENTS) else "maybe" if "push" in words else None
+        body, _ = _block(lines, i)
+        say = None
+        j = 0
+        while j < len(body):
+            k, rest = _key(body[j].lstrip("- ").rstrip()) if body[j].lstrip().startswith("-") else _key(body[j])
+            sub, end = _block(body, j)
+            j = end if end > j else j + 1
+            if k in PR_EVENTS or rest in PR_EVENTS:
+                keys = {}
+                m = 0
+                while m < len(sub):
+                    sk, sv = _key(sub[m])
+                    inner, e = _block(sub, m)
+                    keys[sk] = sv + " " + " ".join(x.strip() for x in inner)
+                    m = e
+                if keys.keys() & {"paths", "paths-ignore", "branches-ignore"}:
+                    say = say or "maybe"
+                elif "branches" in keys and not re.search(rf"(?<![\w/.-]){re.escape(base)}(?![\w/.-])|\*", keys["branches"]):
+                    say = say or "maybe"
+                else:
+                    return "yes"
+            elif k == "push" or rest == "push":
+                say = say or "maybe"
+        return say
+    return None
+
+
+def expected_checks(s, task, sha):
+    """Whether checks will come for its pull request at commit sha, from its repo's workflows there:
+    "yes", "maybe" or None (workflow_checks()). Kept on the pull request per commit."""
+    pr = task.get("pr") or {}
+    seen = pr.get("expects") or {}
+    if sha and seen.get("sha") == sha:
+        return seen.get("is")
+    main = s.loc["folder"]
+    ref = sha if sha and git(main, "cat-file", "-e", f"{sha}^{{commit}}")[0] else (task.get("branch") or task.get("head"))
+    ok, out, _ = git(main, "ls-tree", "--name-only", f"{ref}:{WORKFLOWS}") if ref else (False, "", "")
+    found = None
+    for name in out.split() if ok else []:
+        if name.endswith((".yml", ".yaml")):
+            said = workflow_checks(git(main, "show", f"{ref}:{WORKFLOWS}/{name}")[1], task.get("base") or "main")
+            found = "yes" if "yes" in (found, said) else said or found
+    if sha:
+        pr["expects"] = {"sha": sha, "is": found}
+        s.dirty = True
+    return found
+
+
+def checks_since(s, task, v):
+    """Since when its pull request's head has been what it is (ms): when it said ready, or when a newer
+    commit was first seen there (#1018: a push after ready, its checks start again)."""
+    pr = task.get("pr") or {}
+    sha = v.get("headRefOid")
+    if sha and pr.get("head_sha") != sha:
+        pr["head_at"] = now() if pr.get("head_sha") else (task.get("ready_at") or now())
+        pr["head_sha"] = sha
+        s.dirty = True
+    return max(task.get("ready_at") or 0, pr.get("head_at") or 0)
+
+
+def checks_missing(v, since, expect=None):
+    """No checks on its pull request yet (#1044): None when it has some or none are coming; "waiting"
+    while they may still start; "never" when they should have and didn't (CHECKS_START_MS)."""
+    if v.get("statusCheckRollup"):
+        return None
+    gone = now() - (since or 0)
+    if v.get("checks_unknown"):
+        # Checks that can't be read here (SHEP-179): a moment for GitHub, then pr_wait() decides.
+        return "waiting" if gone < NO_CHECKS_MS else None
+    blocked = v.get("mergeStateStatus") == "BLOCKED" and not needs_approval(v)
+    if expect == "yes" or blocked:
+        return "waiting" if gone < CHECKS_START_MS else "never"
+    return "waiting" if gone < (MAYBE_CHECKS_MS if expect == "maybe" else NO_CHECKS_MS) else None
+
+
+def _items(lines, i):
+    """The list a `key:` at lines[i] holds: inline ([a, b] or a) or the `- a` lines under it (or at its own indent)."""
+    rest = lines[i].split(":", 1)[1].strip()
+    if rest:
+        return [x.strip(" '\"") for x in rest.strip("[]").split(",") if x.strip()]
+    out = []
+    for line in lines[i + 1:]:
+        if _indent(line) < _indent(lines[i]) or _indent(line) == _indent(lines[i]) and not line.lstrip().startswith("-"):
+            break
+        if line.strip().startswith("-"):
+            out.append(line.strip()[1:].strip(" '\""))
+    return out
+
+
+def runs_on_pr(text, base):
+    """Whether a workflow file's `on:` runs it on a pull request to `base`: pull_request present, its branches
+    absent or matching base, branches-ignore not. A small reader of the usual forms, no YAML library."""
+    lines = [x for x in (re.sub(r"\s+#.*$", "", x).rstrip() for x in text.splitlines()) if x.strip() and not x.lstrip().startswith("#")]
+    for i, line in enumerate(lines):
+        m = _indent(line) == 0 and _ON.match(line)
+        if not m:
+            continue
+        if m.group(1):  # on: pull_request · on: [push, pull_request]
+            return "pull_request" in re.findall(r"[\w-]+", m.group(1))
+        block = []
+        for x in lines[i + 1:]:
+            if _indent(x) == 0 and not x.startswith("-"):  # on:\n- pull_request: a list at on's own indent
+                break
+            block.append(x)
+        for j, b in enumerate(block):
+            if b.strip().lstrip("-").strip().split(":")[0].strip(" '\"") != "pull_request":
+                continue
+            sub = []
+            for x in block[j + 1:]:
+                if _indent(x) <= _indent(b):
+                    break
+                sub.append(x)
+            keys = {x.strip().split(":")[0]: k for k, x in enumerate(sub) if ":" in x}
+            match = lambda key: any(fnmatch.fnmatchcase(base, p) for p in _items(sub, keys[key]) if not p.startswith("!"))
+            if "branches-ignore" in keys and match("branches-ignore"):
+                return False
+            return "branches" not in keys or match("branches")
+        return False
+    return False
+
+
+def base_commit(s, task):
+    """The task's base branch as fetched here (its remote's copy, else the local branch): (commit, base) or (None, base)."""
+    main, base = s.loc["folder"], task.get("base") or "main"
+    for ref in (f"{remote_of(main, task.get('branch'))}/{base}", base):
+        ok, sha, _ = git(main, "rev-parse", "--verify", "-q", f"{ref}^{{commit}}")
+        if ok and sha:
+            return sha, base
+    return None, base
+
+
+def ci_expected(s, task):
+    """FAC-105: the task's base branch (as fetched here: its remote's copy, else the local branch) has a workflow
+    in .github/workflows that runs on a pull request to it. Cached per base commit."""
+    main = s.loc["folder"]
+    sha, base = base_commit(s, task)
+    if not sha:
+        return False
+    key = f"{sha}:{base}"
+    if key not in _CI_SEEN:
+        ok, names, _ = git(main, "ls-tree", "--name-only", sha, ".github/workflows/")
+        _CI_SEEN[key] = ok and any(runs_on_pr(git(main, "show", f"{sha}:{n}")[1], base)
+                                   for n in names.splitlines() if n.endswith((".yml", ".yaml")))
+    return _CI_SEEN[key]
+
+
+STARTED_CI = "Started CI by hand: no run appeared"
+_DISPATCH = re.compile(r"(?m)^\s*(?:-\s*)?workflow_dispatch\b|^(?:on|true)\s*:.*\bworkflow_dispatch\b")
+
+
+def dispatch_file(s, task):
+    """FAC-115: a workflow file (name) on the base that has workflow_dispatch and runs on pull requests to it."""
+    main = s.loc["folder"]
+    sha, base = base_commit(s, task)
+    if not sha:
+        return None
+    ok, names, _ = git(main, "ls-tree", "--name-only", sha, ".github/workflows/")
+    for n in names.splitlines() if ok else []:
+        if n.endswith((".yml", ".yaml")):
+            text = git(main, "show", f"{sha}:{n}")[1]
+            if _DISPATCH.search(text) and runs_on_pr(text, base):
+                return os.path.basename(n)
+    return None
+
+
+def ci_dispatch(s, task, v):
+    """FAC-115: no run appeared on the head: start its workflow once per head commit (gh workflow run <file> --ref
+    <head branch>) when the repo has one with workflow_dispatch that runs on pull requests to the base and Actions
+    are enabled. Never for a fork's head. Returns STARTED_CI while that run is awaited, else None (FAC-105's wait)."""
+    pr, head = task.setdefault("pr", {}), v.get("headRefOid") or ""
+    done = pr.get("ci_dispatched") or {}
+    if done.get("head") == head:
+        return STARTED_CI if done.get("ok") and now() - (done.get("at") or 0) < UNKNOWN_CHECKS_MS else None
+    branch, repo = pr.get("branch") or task.get("branch") or "", pr_repo(task)
+    if not (head and branch and repo) or v.get("isCrossRepository"):
+        return None
+    ok, out, _ = gh("api", f"repos/{repo}/actions/permissions")
+    try:
+        enabled = ok and bool(json.loads(out).get("enabled"))
+    except (ValueError, AttributeError):
+        enabled = False
+    name = dispatch_file(s, task) if enabled else None
+    if not name:
+        return None
+    ok = gh("workflow", "run", name, "--repo", repo, "--ref", branch)[0]
+    pr["ci_dispatched"] = {"head": head, "file": name, "at": now(), "ok": ok}
+    s.dirty = True
+    return STARTED_CI if ok else None
+
+
+def ci_awaited(s, task, v):
+    """FAC-105: no check on its pull request (v) yet, and its base's workflows say one should run."""
+    return not v.get("statusCheckRollup") and not v.get("checks_unknown") and ci_expected(s, task)
+
+
+def ci_runs_on(task, v):
+    """FAC-105: GitHub Actions has a run for its pull request's head commit (its checks just don't show yet)."""
+    ok, out, _ = gh("run", "list", "--repo", pr_repo(task), "--branch", (task["pr"].get("branch") or task.get("branch") or ""),
+                    "--json", "headSha", "--limit", "20")
+    try:
+        return ok and any(r.get("headSha") == v.get("headRefOid") for r in json.loads(out))
+    except (ValueError, TypeError, AttributeError):
+        return False
+
+
+def pr_wait(v, since, expect=None, ci=False):
     """SHEP-175: what a Ready task's pull request (v: pr_view's answer) still waits on before the
     person has anything to do, in a few words, or None once its checks are done and GitHub knows it
-    can merge. A problem (pr_problem()) goes back to its agent: Working still, never Ready first."""
+    can merge. A problem (pr_problem()) goes back to its agent: Working still, never Ready first.
+    expect: expected_checks(); since: checks_since(). ci: a check is expected from its base's workflows
+    (ci_awaited()), so none waits NO_CI_RUN_MS and the tick takes over after (FAC-105)."""
     if v.get("state") != "OPEN":
         return None
     if pr_problem(v):
@@ -601,7 +1109,7 @@ def pr_wait(v, since):
         return CHECKS_RUNNING
     if (v.get("mergeable") or "").upper() not in ("MERGEABLE",):
         return GITHUB_LOOKS
-    if not v.get("statusCheckRollup") and now() - (since or 0) < NO_CHECKS_MS:
+    if (not v.get("statusCheckRollup") and now() - (since or 0) < NO_CI_RUN_MS) if ci else checks_missing(v, since, expect) == "waiting":
         return CHECKS_RUNNING
     if v.get("checks_unknown") and v.get("mergeStateStatus") == "BLOCKED" and not needs_approval(v) \
             and now() - (since or 0) < UNKNOWN_CHECKS_MS:
@@ -677,7 +1185,7 @@ def mid_turn(s, task):
     merge came from Herdr itself (even_if_busy)."""
     key = s.key(task)
     agents = live_agents(key)
-    return any(status_word(k) in ("working", "blocked") for k in agents + live_helpers(key)) or any(open_question(task, k) for k in agents)
+    return bool(mid_turn_agents(agents + live_helpers(key), detail)) or any(open_question(task, k) for k in agents)
 
 
 def finish(s, task, even_if_busy=False):

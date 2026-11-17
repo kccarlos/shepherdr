@@ -12,13 +12,14 @@ from contextlib import contextmanager
 from .base import guard, hc_json, now, run, STORE
 from .settings import bare
 from .agents import (
-    agent_log, agent_running, cli_of, detail, from_person, live_agents, log_tail, REVIEWER_FAILED, said, starting, status_word,
-    STATUSES, trust_asked,
+    agent_log, agent_running, asking, cli_of, detail, from_person, live_agents, log_tail, REVIEWER_FAILED, said, starting,
+    status_word, STATUSES, trust_asked, WORKING_AGAIN,
 )
 from .sessions import session_of
 from .launch import coordinator_in
 from .store import locate, read_list, Store, store_files
 from .output import line, minutes, view
+from .github import NO_CI_RUN
 from .takeover import backup_news
 
 
@@ -34,6 +35,10 @@ NEWS = os.path.join(STORE, ".news.json")
 NEWS_SETTLE_MS = 5000          # a line waits this long for others of the same moment
 NEWS_KEEP_MS = 6 * 3600000     # undelivered (no Assistant to tell) this long: dropped
 QUIET_MS = 20 * 60000          # Working with nothing happening this long: stalled
+# A Ready task its agent's own turn took back to work (back_pass(): auto) told only once that lasts
+# this long (FAC-107): a turn that ends with nothing new sooner is Ready again with no news at all,
+# not a working-again and a ready line.
+BACK_HOLD_MS = 3 * 60000
 
 
 def activity(task, live):
@@ -72,7 +77,8 @@ def news_line(s, t, v, event, words=None):
     attr = lambda x: str(x).replace("&", "&amp;").replace('"', "&quot;").replace("<", "&lt;").replace(">", "&gt;")
     note = " ".join(str(t.get("agents_md") or "").split())
     said = " ".join(str(t.get("summary") or "").split())
-    text = {"ready": f"{ref} is ready: {title}" + (f" · {said}" if said else "") + (f" · For AGENTS.md: {note}" if note else ""),
+    no_ci = f" · Waits for the person's Accept: {NO_CI_RUN}" if (t.get("pr") or {}).get("no_ci") else ""  # FAC-105
+    text = {"ready": f"{ref} is ready: {title}" + (f" · {said}" if said else "") + (f" · For AGENTS.md: {note}" if note else "") + no_ci,
             "needs-you": f"{ref} needs you: {v.get('why') or 'Needs you'} ({title})",
             "failed": f"{ref} failed: {v.get('why') or 'Agent stopped'} ({title})",
             "stalled": f"{ref} {words} ({title})",
@@ -140,6 +146,16 @@ def news_pass(report, folder=None):
                     else:
                         t.pop("trust_ask", None)
                     s.dirty = True
+                # #995: its question or permission held on the chat's card while its agent reads
+                # working (Codex, until its hook returns): Needs you in the Tasks panel too.
+                held = next((k["address"] for k in live if status_word(k) != "blocked" and asking(k)), None) \
+                    if v.get("needs") == "asks" else None
+                if s.write and t.get("held_ask") != held:
+                    if held:
+                        t["held_ask"] = held
+                    else:
+                        t.pop("held_ask", None)
+                    s.dirty = True
                 # Quiet on its own background work (SHEP-53): Working in the Tasks panel too.
                 if s.write and bool(t.get("own_work")) != bool(v.get("own_work")):
                     if v.get("own_work"):
@@ -151,7 +167,15 @@ def news_pass(report, folder=None):
                 current[key] = cur
                 rf = (t.get("attention") or "").startswith(REVIEWER_FAILED)
                 prev = mine.get(str(t["id"]))
-                mine[str(t["id"])] = {"status": cur["status"], "stall": cur["stall"] or (prev or {}).get("stall"),
+                b = t.get("back") or {}
+                hold = (v["status"] == "working" and (prev or {}).get("status") in ("ready", "merging")
+                        and (t["state"] == "ready" and v.get("why") == WORKING_AGAIN and not t.get("attention")
+                             or t["state"] == "running" and b.get("auto") and now() - (b.get("at") or 0) < BACK_HOLD_MS))
+                # held, then Ready: the same ready (settle_back()) is no news; a new one (its fix, then ready) is
+                held_at = (prev or {}).get("held_ready_at")
+                fresh = not hold and held_at is not None and v["status"] == "ready" and t.get("ready_at") != held_at
+                mine[str(t["id"])] = {"status": prev["status"] if hold else cur["status"], "stall": cur["stall"] or (prev or {}).get("stall"),
+                                      **({"held_ready_at": held_at or t.get("ready_at") or 0} if hold else {}),
                                       **({"needs": v["needs"]} if v.get("needs") else {}), **({"recap": True} if t.get("recap") else {}),
                                       **({"reviewer_failed": True} if rf else {})}
                 # Its backup took over (takeover()): told once; on a first look, old news.
@@ -165,10 +189,12 @@ def news_pass(report, folder=None):
                 lines = [("backup", news_line(s, t, v, "backup", backup_news(t)))] if backup else []
                 # Taken back to work after it said ready (back_to_work(), busy_again()): told as it happens.
                 # Its agent took up what needed the person (failing checks: on_it()) too.
-                if v["status"] == "working" and ((prev or {}).get("status") in ("ready", "merging")
+                if hold:
+                    event = None  # FAC-107: still told as it was until its turn lasts (BACK_HOLD_MS)
+                elif v["status"] == "working" and ((prev or {}).get("status") in ("ready", "merging")
                                                  or (prev or {}).get("needs") == "attention" and t.get("attention")):
                     event = "working-again"
-                if event and ((prev or {}).get("status") != v["status"] or t.get("recap") and not (prev or {}).get("recap")
+                if event and ((prev or {}).get("status") != v["status"] or fresh or t.get("recap") and not (prev or {}).get("recap")
                               or rf and not (prev or {}).get("reviewer_failed")):
                     lines.append((event, news_line(s, t, v, event)))
                 if stall and stall[0] != (prev or {}).get("stall"):

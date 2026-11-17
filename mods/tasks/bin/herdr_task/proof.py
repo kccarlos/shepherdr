@@ -8,7 +8,7 @@ import os
 import re
 
 from .base import Fail, HOME, git, WHERE
-from .github import BAD, CANT_READ_CHECKS, PENDING, pr_view
+from .github import BAD, CANT_READ_CHECKS, NO_CI_RUN, PENDING, pr_view
 
 ARTIFACTS = WHERE.path("artifacts")
 # Files named on the card, and commits.
@@ -91,6 +91,8 @@ def checks_of(t):
     if v.get("checks_unknown"):
         # SHEP-179: this machine's GitHub token can't read its checks: never said to pass
         return {"state": "unknown", "text": CANT_READ_CHECKS}
+    if not rows and t["pr"].get("no_ci"):
+        return {"state": "unknown", "text": NO_CI_RUN}  # FAC-105: CI is set up, but nothing ran
     if not rows:
         return {"state": "none", "text": "No checks on its pull request"}
     return {"state": "passed", "text": f"All {len(rows)} passed"}
@@ -98,13 +100,14 @@ def checks_of(t):
 
 def evidence(s, t):
     """What an Accept card shows: {summary, details, commits: {count, list}, diff: {files, added, removed,
-    list} or None, git (False: not a git folder), scope, checks, proof, artifacts (its others)}."""
+    list} or None, git (False: not a git folder), scope, checks, proof, artifacts (its others), merges (Accept
+    merges its branch first: an open pull request or commits past its base; the button says so)}."""
     main, out = s.loc["folder"], {"summary": t.get("summary"), "details": t.get("details"), "proof": t.get("proof") or find_proof(s, t)}
     out["artifacts"] = task_artifacts(s, t, out["proof"])
     commits, files = [], {}
     fmt = "--format=%h%x09%s"
     if s.loc["kind"] != "repo":
-        out.update(git=False, commits={"count": 0, "list": []}, diff=None, checks=checks_of(t))
+        out.update(git=False, commits={"count": 0, "list": []}, diff=None, checks=checks_of(t), merges=False)
         return out
     if t.get("mode") == "worktree" and t.get("branch"):
         # Its branch past where it meets its base: exactly what Accept merges.
@@ -140,4 +143,6 @@ def evidence(s, t):
         "files": len(files), "added": sum(v[0] for v in files.values()), "removed": sum(v[1] for v in files.values()),
         "list": [{"path": p, "added": v[0], "removed": v[1]} for p, v in sorted(files.items(), key=lambda x: -(x[1][0] + x[1][1]))[:FEW]]}
     out["checks"] = checks_of(t)
+    # What Accept does (cmd_accept): a worktree task's branch with work of its own is merged first; else only done.
+    out["merges"] = bool(t.get("mode") == "worktree" and t.get("branch") and (t.get("pr") or commits))
     return out

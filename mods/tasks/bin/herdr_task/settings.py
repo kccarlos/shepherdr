@@ -7,6 +7,7 @@ import re
 import shlex
 import tempfile
 import shutil
+import subprocess
 
 from .base import Fail, git, HOME, MAX_RUNNING, WHERE
 
@@ -26,7 +27,7 @@ ASSISTANT_TEMPLATES = ("assistant", "coordinator")  # "coordinator": Assistants 
 DEFAULTS = {"tasks": {"merge": "ask", "review_rounds": 0, "review_min": 0, "must_fix": "major", "max_running": MAX_RUNNING, "worktrees": True,
                       "start_notes": "", "finish_notes": "", "archive_after": 7, "proof": True, "base": "", "branch": "",
                       "worktree_root": "", "check": "", "simulators": [], "reviewer_sandbox": True,
-                      "auto_accept": True},
+                      "auto_accept": True, "sync": "full"},
             "automations": {"enabled": True}, "worker": {}, "reviewer": {}, "coordinator": {}, "backup": {}, "project": {},
             "agents": {"reactions": True, "suggestions": True, "feedback": True, "feedback_repo": "eliasstravik/shepherdr"}}
 LEVELS = ["blocker", "major", "minor"]
@@ -90,6 +91,44 @@ def write_autopilot(space, values):
     os.replace(tmp, SETTINGS)
 
 
+def write_max_running(s, space, value):
+    """FAC-103: `config --set tasks.max_running=N`, the folder's "Tasks at once" as the window writes it:
+    in the space layer of the space working in this folder (--space's when given). None unsets it
+    there. Returns the space id. Refused on a pushed copy, as write_autopilot, and on a file that
+    is there but unreadable (writing would lose every other setting in it)."""
+    try:
+        with open(SETTINGS) as f:
+            d = json.load(f)
+    except FileNotFoundError:
+        d = {}
+    except (OSError, ValueError) as e:
+        raise Fail(f"Can't read {SETTINGS} ({e}): not changing it.")
+    if not isinstance(d, dict):
+        raise Fail(f"{SETTINGS} isn't a settings object: not changing it.")
+    if d.get("pushed_from"):
+        raise Fail("This machine's Shepherdr settings are a copy from the machine whose window sets them: change Tasks at once in Settings there.")
+    spaces = d.setdefault("spaces", {})
+    folder = s.loc["folder"]
+    sid = bare(space) if space else next((k for k, v in spaces.items() if isinstance(v, dict) and v.get("folder") == folder), None)
+    if not sid:
+        raise Fail(f"No space works in {folder} in Shepherdr settings: pass --space <id>.")
+    layer = spaces.setdefault(sid, {})
+    if layer.get("folder") not in (None, folder):
+        raise Fail(f"Space {sid} works in {layer['folder']}, not {folder}.")
+    layer["folder"] = folder
+    tasks = dict(layer.get("tasks") or {})
+    tasks.pop("max_running", None) if value is None else tasks.update(max_running=value)
+    layer.update(tasks=tasks) if tasks else layer.pop("tasks", None)
+    d["version"] = 1
+    os.makedirs(os.path.dirname(SETTINGS), exist_ok=True)
+    tmp = f"{SETTINGS}.{os.getpid()}.tmp"
+    with open(tmp, "w") as f:
+        json.dump(d, f, indent=2)
+        f.write("\n")
+    os.replace(tmp, SETTINGS)
+    return sid
+
+
 def reactions_on(space=None, d=None):
     """Settings › Agents › Reactions in a space, for every agent there (reactions.py): the space's
     own, else Everywhere's, else on. A layer's agents.reactions, else what SHEP-42 kept as
@@ -124,8 +163,8 @@ def settings_for(s, space=None):
     """The settings for this folder's tasks: Shepherdr settings' Everywhere, then this machine's,
     then the override of the space working in this folder (--space's when several do): the most
     specific wins. The window no longer writes agent or task values for a machine (only its
-    machine-only rows, read by machine_limits/machine_option); ones set before still apply here. Written by the settings window (~/.config/shepherdr/settings.json); herdr-task only
-    reads them."""
+    machine-only rows, read by machine_limits/machine_option); ones set before still apply here. Written by the settings window (~/.config/shepherdr/settings.json); herdr-task
+    writes only Autopilot (write_autopilot) and a folder's "Tasks at once" (write_max_running)."""
     everywhere, machine, pick = settings_layers(s, space)
     out = {k: {kk: list(vv) if isinstance(vv, list) else vv for kk, vv in v.items()} for k, v in DEFAULTS.items()}
 
@@ -303,7 +342,10 @@ SET_KEYS = {"review": "review", "brief.review": "review", "merge": "merge", "bri
             "reviewer_model": "reviewer_model", "reviewer-model": "reviewer_model",
             "reviewer_effort": "reviewer_effort", "reviewer-effort": "reviewer_effort",
             "proof": "proof", "brief.proof": "proof", "auto_accept": "auto_accept", "auto-accept": "auto_accept", "autoaccept": "auto_accept",
-            "estimate.time": "estimate_time", "estimate.tokens": "estimate_tokens", "estimate.lines": "estimate_lines"}
+            "estimate.time": "estimate_time", "estimate.tokens": "estimate_tokens", "estimate.lines": "estimate_lines",
+            "priority": "priority", "task.priority": "priority"}
+# FAC-103: an urgent task starts before normal queued ones, one slot past the folder's cap if it must.
+PRIORITY_WORDS = "urgent: starts before normal queued tasks, in one slot past this folder's \"Tasks at once\" cap if it must"
 # The Reviewer sandbox line: whether an agy reviewer here runs sandboxed (tasks.reviewer_sandbox, or the flag file).
 REVIEWER_BOX_WORDS = {"on": "on: the agy reviewer runs in a sandbox; agy's keychain sign-in isn't there, so it can stop at \"Sign in required\" (turn it off in Settings)",
                       "off": "off: the agy reviewer runs as the person's own agy, outside the sandbox"}
@@ -334,7 +376,7 @@ def set_task(t, key, value):
     """One --set key=value (or flag) on task t; an empty value or "default" goes back to Settings'."""
     field = SET_KEYS.get(key.strip().lower())
     if not field:
-        raise Fail(f"--set takes review, review.kind, review.rounds, review.min, review.mustFix, merge, proof, auto_accept, estimate.time, estimate.tokens, estimate.lines, agent, model, effort or reviewer settings, not {key!r}.")
+        raise Fail(f"--set takes review, review.kind, review.rounds, review.min, review.mustFix, merge, proof, auto_accept, priority, estimate.time, estimate.tokens, estimate.lines, agent, model, effort or reviewer settings, not {key!r}.")
     v = value.strip().strip("\"'").strip()
     sets = t.setdefault("set", {})
     if not v or v.lower() == "default":
@@ -344,7 +386,11 @@ def set_task(t, key, value):
             t.pop("set", None)
         return
     low = v.lower()
-    if field in ("review", "proof", "auto_accept"):
+    if field == "priority":
+        if low not in ("urgent", "normal"):
+            raise Fail("priority is urgent or normal.")
+        sets.pop(field, None) if low == "normal" else sets.update(priority="urgent")  # normal: no setting at all
+    elif field in ("review", "proof", "auto_accept"):
         if low not in ONOFF:
             raise Fail(f"{field} is on or off.")
         sets[field] = ONOFF[low]
@@ -395,6 +441,9 @@ def set_opts(t, args):
             raise Fail(f"--set takes key=value, not {pair!r}.")
         k, v = pair.split("=", 1)
         set_task(t, k, v)
+    if getattr(args, "reviewer_model", None) or getattr(args, "reviewer", None) or any(
+            SET_KEYS.get(p.split("=", 1)[0].strip().lower()) in ("reviewer", "reviewer_model") for p in getattr(args, "set", None) or []):
+        check_reviewer_model(t)
 
 
 def by_layer(s, space, section, key, value, default):
@@ -422,6 +471,55 @@ def cli_here(kind):
 
 CLI_NAMES = {"claude": "Claude Code", "codex": "Codex"}
 LOGIN = {"claude": "claude auth login", "codex": "codex login"}
+
+
+def codex_models():
+    """The model ids Codex offers here: its models_cache.json, which Codex fetches for the account it is signed in
+    with (a ChatGPT account gets fewer than an API key, #948); None when there is none to read."""
+    home = os.environ.get("CODEX_HOME") or os.path.join(os.path.expanduser("~"), ".codex")
+    try:
+        with open(os.path.join(home, "models_cache.json")) as f:
+            d = json.load(f)
+    except (OSError, ValueError):
+        return None
+    ids = [m.get("slug") for m in (d.get("models") or [] if isinstance(d, dict) else []) if isinstance(m, dict) and m.get("slug")]
+    return ids or None
+
+
+def codex_lacks(model):
+    """The models Codex offers here when `model` isn't one of them (it would refuse to start on it), else None."""
+    ids = codex_models()
+    return ids if model and ids and model not in ids else None
+
+
+CLAUDE_MODEL = re.compile(r"^(claude-|opus|sonnet|haiku|fable)", re.I)
+
+
+def check_reviewer_model(t):
+    """add/edit: a reviewer model Codex here can't use is refused when it is set (#948), not found at review time."""
+    m = t.get("reviewer_model")
+    if not m or t.get("reviewer") == "claude" or (not t.get("reviewer") and CLAUDE_MODEL.match(m)):
+        return
+    ids = codex_lacks(m)
+    if ids:
+        raise Fail(f"Codex here doesn't offer {m} for the account it is signed in with: pick one of {', '.join(ids)} "
+                   "(or leave the reviewer model unset for Codex's own default).")
+
+
+def codex_login_now():
+    """Codex's own word on its sign-in here, asked now (#947): (True, "") signed in, (False, what it said) when not
+    (an unreadable auth file says an error, and Codex then opens its sign-in screen), (None, "") when unknown."""
+    if not shutil.which("codex"):
+        return None, ""
+    try:
+        r = subprocess.run(["codex", "login", "status"], stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return None, ""
+    out = f"{r.stdout}\n{r.stderr}"
+    if re.search(r"^\s*logged in", out, re.I | re.M):
+        return True, ""
+    said = next((ln.strip() for ln in out.splitlines() if ln.strip()), "")
+    return False, said[:160]
 
 
 def trust_roots(folder):
@@ -465,8 +563,9 @@ def reviewer_command(who, model=None, effort=None, folder=None):
     return shlex.join(a)
 
 
-def task_settings(s, t, space=None, argv=None):
-    """The settings that shape this task's work, each {label, text, value, by}."""
+def task_settings(s, t, space=None, argv=None, live=False):
+    """The settings that shape this task's work, each {label, text, value, by}. live: for a brief, so its Reviewer
+    line is checked against what Codex says now (sign-in and models), not only the last periodic check."""
     space = space or t.get("space")
     cfg = settings_for(s, space)
     k, sets = cfg["tasks"], t.get("set") or {}
@@ -513,19 +612,34 @@ def task_settings(s, t, space=None, argv=None):
             if t.get(f"reviewer_{f}"):
                 rv[f] = t[f"reviewer_{f}"]
         want = rv.get("agent") or other_cli(agent)
-        who = want
-        dropped = None
+        who, said = want, ""
+        foreign = None
         if want == "codex" and FOREIGN_MODEL.match(rv.get("model") or ""):
-            dropped, rv = rv["model"], {**rv, "model": None}
+            foreign, rv = rv["model"], {**rv, "model": None}
         if want != agent and cli_here(want) == "signed-out":
             # Signed out here, it would sit at its sign-in screen and never review (#745): the task's own CLI does.
             who, rv = agent, {}
+        elif want == "codex" and want != agent and live:
+            # #947: the periodic check can't read every answer (an unreadable auth file says an error, not "Not logged
+            # in"), so a brief asks Codex now; anything but signed in would leave the reviewer on its sign-in screen
+            ok, said = codex_login_now()
+            if ok is False:
+                who, rv = agent, {}
+        # #948: a model Codex here doesn't offer this account stops it at once: its own default instead, said
+        lacks = codex_lacks(rv.get("model")) if who == "codex" else None
+        dropped = rv.get("model")
+        if lacks:
+            rv = {k: v for k, v in rv.items() if k != "model"}
         text = who + (f", model {rv['model']}" if rv.get("model") else "") + (f", effort {rv['effort']}" if rv.get("effort") else "")
-        if dropped and who == "codex":
-            text += f" (model {dropped} is another CLI's, not passed to Codex)"
+        if foreign and who == "codex":
+            text += f" (model {foreign} is another CLI's, not passed to Codex)"
+        if lacks:
+            text += (f" (Codex's own default model: Codex here doesn't offer {dropped} "
+                     "for the account it is signed in with)")
         if who != want:
-            text += (f" (your own CLI: {CLI_NAMES.get(want, want)} isn't signed in here; the person runs "
-                     f"`{LOGIN.get(want, want + ' login')}` on this machine, then asks for the review again)")
+            text += (f" (your own CLI: {CLI_NAMES.get(want, want)} isn't signed in here"
+                     + (f", `{LOGIN.get(want, want + ' login')} status` says \"{said}\"" if said and not re.match(r"not logged in", said, re.I) else "")
+                     + f"; the person runs `{LOGIN.get(want, want + ' login')}` on this machine, then asks for the review again)")
         elif not rv.get("agent"):
             text += " (the other CLI)" if who != agent else " (your own CLI: no other is installed)"
         folder = t.get("worktree") or getattr(s, "loc", {}).get("folder")
@@ -574,6 +688,8 @@ def task_settings(s, t, space=None, argv=None):
     a_by = "task" if any(t.get(f) for f in ("agent", "model", "effort")) else \
         by_layer(s, space, "worker", None, bool(cfg.get("worker")), False)
     add("Agent", text, {"agent": agent, "model": model, "effort": effort}, a_by)
+    if sets.get("priority") == "urgent":
+        add("Priority", PRIORITY_WORDS, "urgent", "task")
     # Suggested next message (SHEP-186): the reply ends with the words the person would likely send next (templates/worker.md)
     sug = (cfg.get("agents") or {}).get("suggestions") is not False
     add("Suggested next message", "on (your reply ends with the message you'd likely send next, shown greyed out in the box)" if sug
@@ -581,8 +697,13 @@ def task_settings(s, t, space=None, argv=None):
     return lines
 
 
-def settings_block(s, t, space=None, argv=None):
-    rows = [f"- {x['label']}: {x['text']}" + (f" ({SET_BY[x['by']]})" if x["by"] else "") for x in task_settings(s, t, space, argv)]
+def settings_block(s, t, space=None, argv=None, live=False):
+    lines = task_settings(s, t, space, argv, live)
+    rows = [f"- {x['label']}: {x['text']}" + (f" ({SET_BY[x['by']]})" if x["by"] else "") for x in lines]
+    # Codex's sandbox can't start here (SHEP-227, #998): the worker hears it in its brief and tells the person.
+    word = sandbox_word(lines, argv or (t["agents"][-1].get("argv") if t.get("agents") else None) or worker_argv(s, t, space))
+    if word:
+        rows.append(f"- Sandbox: {word}")
     return "\n".join([SETTINGS_HEAD, *rows])
 
 
@@ -597,6 +718,17 @@ def gate_min(s, t, space=None):
     if review_kind(t):
         return 0 if sets.get("review") == "off" or sets.get("review_rounds") == 0 else 1
     return int(settings_for(s, space or t.get("space"))["tasks"].get("review_min") or 0)
+
+
+def sandbox_word(lines, argv):
+    """The Settings block's Sandbox line when this task's worker or reviewer runs Codex in its
+    sandbox and that sandbox can't start on this machine (sandbox.check), else None."""
+    from . import sandbox
+    rv = next((x["value"] for x in lines if x["label"] == "Reviewer"), None) or {}
+    if not (sandbox.sandboxed(argv) or rv.get("agent") == "codex"):
+        return None
+    broken = sandbox.check()
+    return sandbox.notice(broken, short=True) if broken else None
 
 
 def keep_review(s, t, space=None):

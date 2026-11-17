@@ -40,11 +40,11 @@ b. **Delivery at turn boundaries.** `herdr-task tell` (and any Assistant-to-work
    - `working` puts the message in the existing held queue (`news.py` `.held.json`).
    - `held_pass` needs the same check. Today it waits only while the person is typing, not while the agent works. With the check it sends on the next tick where the agent is `idle` or `done`.
    - Don't use `hc send --if idle` for this. It matches the status exactly (`input.rs`: `word != want` returns `status_mismatch`), and agy reports `done`, not `idle`, between turns, so every message to a finished agent would be held until `NEWS_KEEP_MS` drops it.
-   - Checking with `hc get` and then sending leaves a short race. A small herdr-core ask, `hc send --unless working` (or `--if` accepting several words), would close it. Messages are pointers ("contract changed in <sha>, see contracts/x.md; rebase onto base"), never pasted content.
+   - Checking with `hc get` and then sending leaves a short race. A small herdr-core ask, `hc send --unless working` (or `--if` accepting several words), would close it. Messages are pointers ("contract changed in <sha>, see contracts/x.md; merge base in"), never pasted content.
    - Urgent ("your current work is now wrong"): `tell --now` = `hc interrupt`, then the same send. It's uniform across CLIs.
    - Don't build mid-turn injection per CLI. It exists (Claude Ctrl+Enter, already in `news_send`; agy `alt+m`, verified below), but it depends on keys and screen text that each CLI may change. Codex is unverified.
 
-c. **Contract amendments.** When a worker stops with "the contract is wrong", the Assistant opens a small contract-amendment task. When it merges, the Assistant runs `tell --now` on each affected task with "rebase onto base, contract changed in <sha>". Limit: two amendments per contract. After that, the idea is wrong (the two-failed-fixes rule), so the Assistant asks the person with a recommendation.
+c. **Contract amendments.** When a worker stops with "the contract is wrong", the Assistant opens a small contract-amendment task. When it merges, the Assistant runs `tell --now` on each affected task with "merge base in, contract changed in <sha>". Limit: two amendments per contract. After that, the idea is wrong (the two-failed-fixes rule), so the Assistant asks the person with a recommendation.
 
 ### 1.4 Failure modes and how this design handles them
 

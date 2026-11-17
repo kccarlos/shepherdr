@@ -40,7 +40,7 @@ import { dirs } from "./dirs.js";
 // herdr-task's merge policy (MERGE): "ask" waits for the person's Accept (which merges), the others merge without it.
 // NOTES: what a task's agent is told to do first and last (tasks.start_notes / finish_notes): herdr-task puts them
 // into its starting prompt; Herdr runs nothing itself.
-import { SECTIONS, ROLES, NOTES, MERGE, MUST_FIX, ROUNDS, ARCHIVE, ABOUT, BACKUP, REACTIONS, STAR, starState, upgradeReactions, NOTIFY_ABOUT, TITLE, SPACE_TITLE,
+import { SECTIONS, ROLES, NOTES, MERGE, MUST_FIX, SYNC, ROUNDS, ARCHIVE, ABOUT, BACKUP, REACTIONS, STAR, starState, upgradeReactions, NOTIFY_ABOUT, TITLE, SPACE_TITLE,
   EVERYWHERE, CHANGED_HERE, RESET, EDIT_INSTRUCTIONS, USE_OTHER_CLI, LOADING_AGENTS, SAVED, sameAs as sameAsWords,
   spacesOwn, otherCliWords, backupProblem, notifyMachineAbout, machineLabel, TASK_ROWS, LEVEL } from "./core/settings.js";
 
@@ -575,6 +575,9 @@ export default class ShepherdrSettings extends View {
       .child(this.row(t, rowTitle("tasks.auto_accept"), ABOUT["tasks.auto_accept"],
         toggleSwitch("autoaccept", k.auto_accept !== false, (next, _e, cx) => this.set("tasks", "auto_accept", next, cx)),
         this.scoped("tasks", "auto_accept")))
+      // FAC-111: a green task behind its base: a full CI run after update-branch, the folder's check here, or none.
+      .child(this.row(t, rowTitle("tasks.sync"), ABOUT["tasks.sync"],
+        segmented("sync", SYNC, k.sync ?? "full", (v, _e, cx) => this.set("tasks", "sync", v, cx)), this.scoped("tasks", "sync")))
       .child(this.row(t, rowTitle("tasks.max_running"), ABOUT["tasks.max_running"],
         this.stepper(t, "running", k.max_running, step("max_running", -1, 1, 10), step("max_running", 1, 1, 10)),
         this.scoped("tasks", "max_running")))

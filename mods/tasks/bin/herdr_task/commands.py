@@ -11,7 +11,7 @@ import subprocess
 import sys
 import time
 
-from .checks import checks_line
+from .checks import checks_line, sync_check, sync_mode, SYNC_FAILED
 from .base import Fail, git, guard, hc_json, kill_agent, now, run, STORE, stop_note, VERSION
 from .settings import (write_max_running, 
     accept_bar, accepted_word, auto_accepter, agent_argv, fable_said, agent_key, argv_for, bare, build_dir_of, codex_review_argv, ensure_build_dir, FABLE,
@@ -25,11 +25,11 @@ from .agents import (
 )
 from .sessions import refresh_sessions
 from .github import (already_merged, pr_head_problem, push_branch, drop_branch, finish, gh, github, merged_here, needs_approval, note_checks, own_work, pr_adopt, pr_open,
-                     pr_pending, pr_problem, pr_repo, pr_behind, pr_update_branch, synced_head, task_problem, SYNC_CHECKS_MS, SYNC_GRACE_MS, UPDATE_CONFLICT, pr_view, remote_of, task_github, update_main, watch_main)
+                     pr_pending, pr_problem, pr_repo, pr_behind, main_red_hold, pr_update_branch, synced_head, task_problem, SYNC_CHECKS_MS, SYNC_GRACE_MS, UPDATE_CONFLICT, pr_view, remote_of, task_github, update_main, watch_main)
 from .github import CHECKS_RUNNING as PR_CHECKS_RUNNING, ci_awaited, NO_CHECKS_MS, NO_CI_RUN
 from .launch import (
     base_ref, brief, caller_labels, caller_space, current_base, default_space, folder_for, handoff, is_coordinator, launch, name_tabs,
-    own_path, parent_for, resume_argv, REVIEW_READS, review_reads, retag_tabs, reviewer_sandbox, sandboxes, set_branch, tab_title, task_tabs,
+    own_path, parent_for, resume_argv, stamp, task_text, REVIEW_READS, review_reads, retag_tabs, reviewer_sandbox, sandboxes, set_branch, tab_title, task_tabs,
 )
 from .store import is_task_list, locate, open_store, prefixes_in_use, read_list, Store, store_files
 from .queues import after_refs, parse_after, queue_reason, running_count, set_after, urgent
@@ -240,6 +240,8 @@ def cmd_show(args):
         elif urgent(t) and t["state"] == "running" and running_count(s) > s.max_running():
             v["urgent_past_cap"] = True  # FAC-103: it took the folder's one extra slot
         v["settings"] = task_settings(s, t)
+        if t.get("amendments"):
+            v["amendments"] = t["amendments"]
         kind = review_kind(t)
         if kind:
             v["review_kind"] = kind
@@ -306,6 +308,9 @@ def cmd_show(args):
         text.append(f"log: {entry['text'] if isinstance(entry, dict) else entry}")
     if v.get("prompt"):
         text.append("\n" + v["prompt"].strip())
+    if v.get("amendments"):
+        text.append("\nBrief changes (newest last, these win over the brief above):")
+        text += [f"- {stamp(a['at'])}: {a['text']}" for a in v["amendments"]]
     text.append("\n" + block)
     say(args, v, "\n".join(text))
 
@@ -702,7 +707,7 @@ def gate_step(s, t):
     cmd = f"{ht} review {ref} --folder {folder}"
     check = (settings_for(s, t.get("space"))["tasks"].get("check") or "").strip()
     prompt = "\n\n".join([
-        instructions("reviewer"), f"The task, {ref}:\n" + ((t.get("prompt") or "").strip() or t["title"]),
+        instructions("reviewer"), f"The task, {ref}:\n" + task_text(t),
         f"Review commit {head} in {wt}. {shown}" + (", cut: run it for the rest" if len(diff) > 20000 else "")
         + f":\n{diff[:20000]}",
         *([FABLE_WORDS] if fable else []),
@@ -1493,13 +1498,37 @@ def cmd_edit(args):
         if t["mode"] != "worktree" and not t.get("worktree"):
             t.pop("branch", None)
         set_branch(s, t, getattr(args, "branch", None))
+        sent = amend(s, t, args)  # last: its agent is told only of an edit that saves
         s.dirty = True
         tabs = task_tabs(s, t) if t["title"] != old else []
         v = view(s, t)
     left = name_tabs([(tab, tab_title(s, t)) for tab in tabs])
     if at:
         ensure_scheduler_quietly()
-    say(args, {**v, "rename": left}, f"{s.ref(t)} saved" + (f": {v['why']}." if v["status"] == "scheduled" else "."))
+    say(args, {**v, "rename": left, **({"sent": sent} if sent is not None else {})},
+        f"{s.ref(t)} saved" + (f": {v['why']}." if v["status"] == "scheduled" else ".")
+        + (f" Its agent was told the brief changed ({sent})." if sent else "")
+        + (" Its agent couldn't be told; the change is kept for its reviewer." if sent is False else ""))
+
+
+def amend(s, t, args):
+    """FAC-109: `edit --amend` keeps the brief as it was and adds a dated change, which its reviewer judges by too;
+    a running task's agent is told at once. Returns the terminal told, False when the send failed (the change
+    is kept), else None."""
+    text = (getattr(args, "amend", None) or "").strip()
+    if not text:
+        if getattr(args, "amend", None) is not None:
+            raise Fail("--amend needs the change, in words.")
+        return None
+    t.setdefault("amendments", []).append({"at": now(), "text": text})
+    s.dirty = True
+    if t["state"] != "running":
+        return None
+    try:
+        return tell(s, t, f"The brief of {s.ref(t)} changed: {text}\nWork to it from now on; your reviewer judges by it too.",
+                    args, start=False)[0]
+    except Fail:
+        return False
 
 
 def cmd_config(args):
@@ -1806,7 +1835,7 @@ def local_merge_msg(s, t):
     main, wt, br, base = s.loc["folder"], t["worktree"], t["branch"], t.get("base") or "main"
     q = shlex.quote
     return (f"Merge task {s.ref(t)} \"{t['title']}\" now:\n"
-            f"1. In {wt}: commit any remaining work, then rebase {br} onto {base} (git rebase {base}) and resolve conflicts.\n"
+            f"1. In {wt}: commit any remaining work, then merge {base} into {br} (git merge {base}; never rebase) and resolve conflicts.\n"
             f"2. Run the project's checks (tests, build, lint) and fix what fails.\n"
             f"3. Merge into {base}: git -C {q(main)} merge --ff-only {br} when {main} has {base} checked out, else git -C {q(main)} fetch . {br}:{base}. If {main} has uncommitted changes in the way, or another worktree has {base} checked out, stop and tell the person; don't stash or reset their work.\n"
             f"4. Clean up: git -C {q(main)} worktree remove {q(wt)} && git -C {q(main)} branch -d {br}\n"
@@ -1869,6 +1898,8 @@ def merge_now(s, t, accepting=False):
             return WAITS_APPROVAL
         t["pr"].pop("needs_approval", None)
         base = t.get("base") or "main"
+        if not accepting and (held := main_red_hold(s, base)):
+            return held  # FAC-113: not an attention: the tick asks again, and merges once main is green. The person's Accept still merges.
         at = synced or head or v.get("headRefOid") or ""
         merge = lambda *extra: gh("pr", "merge", n, "--repo", repo, "--squash", *extra, "--match-head-commit", at)
         queue = uses_queue(s, base)
@@ -1878,7 +1909,20 @@ def merge_now(s, t, accepting=False):
             return CHECKS_RUNNING  # FAC-98: GitHub still updating it, or its new head's checks yet to show
         # FAC-98 (note 52): checks ran on its head, not on it with its base's tip: brought up to date first (a merge
         # queue tests the combination itself), merged once the new head's checks pass.
-        if not queue and v.get("statusCheckRollup") and at and pr_behind(t, repo, at):
+        # FAC-111: tasks.sync cheap checks it merged with the base here instead, off merges it as it is.
+        mode = sync_mode(s, t)
+        behind = mode != "off" and not queue and v.get("statusCheckRollup") and at and pr_behind(t, repo, at)
+        if behind and (held := main_red_hold(s, base)):
+            return held  # FAC-113: never updated or merged with a red base, an Accept included (an up-to-date one may still merge)
+        if behind and mode == "cheap":
+            checked, why = sync_check(s, t, at, repo)
+            fix = f"Merge {t.get('base') or 'main'} into the branch (never rebase), fix, then say ready again."
+            if checked in ("conflict", "fail"):
+                t["attention"] = f"{UPDATE_CONFLICT}: a conflict in {why}. {fix}" if checked == "conflict" else f"{SYNC_FAILED}: {why}\n{fix}"
+                t["attention_at"] = now()
+                return t["attention"]
+            behind = checked != "pass"  # cheap couldn't check (no fetch, a slow check): full, as before
+        if behind:
             ok, err = pr_update_branch(t, repo, at)
             if not ok:
                 t["attention"], t["attention_at"] = f"{UPDATE_CONFLICT}: {err}", now()
@@ -2011,7 +2055,7 @@ def cmd_accept(args):
     """The person's Accept on a Ready task (the one thing they do in the Tasks panel): Done at
     once when there is nothing to merge, else merged first, as the merge settings say how: a pull
     request is squash-merged on GitHub (or merges once its checks pass); a local branch is
-    fast-forwarded when it can be, else its agent merges it (rebase, checks) and marks it done."""
+    fast-forwarded when it can be, else its agent merges it (merge main in, checks) and marks it done."""
     error, how, sent, started, back, mid = None, "done", None, False, False, False
     owner = (getattr(args, "owner_approved", None) or "").strip()
     with open_store(args) as s:
@@ -2066,9 +2110,9 @@ def cmd_accept(args):
             error = merge_now(s, t, accepting=True)
             if error == IN_QUEUE:
                 how, error = "queue", None
-            elif error in (CHECKS_RUNNING, WAITS_APPROVAL):
-                # Accepted: it merges by itself once they pass, or once it's approved (Merging).
-                t["auto_merge"], how, error = "checks", "checks" if error == CHECKS_RUNNING else "approval", None
+            elif error in (CHECKS_RUNNING, WAITS_APPROVAL) or (error and error == main_red_hold(s, t.get("base") or "main")):
+                # Accepted: it merges by itself once they pass, once it's approved, or once a red base is green (Merging).
+                t["auto_merge"], how, error = "checks", "approval" if error == WAITS_APPROVAL else "checks", None
         elif merged_here(s, t) or in_base(s, t):
             # Its own work already in the base branch, or none of its own: nothing to merge.
             t["merged"] = merged_here(s, t)
@@ -2107,7 +2151,7 @@ def cmd_fix(args):
         problem = args.reason or t.get("attention") or "The pull request can't merge yet."
         main, wt, br, base = s.loc["folder"], t["worktree"], t["branch"], t.get("base") or "main"
         msg = (f"Task {s.ref(t)} \"{t['title']}\" can't merge yet: {problem}\n"
-               f"Fix it in {wt}: for conflicts, rebase {br} onto {base}; for failing checks, find out why and fix them. "
+               f"Fix it in {wt}: for conflicts, merge {base} into {br} (never rebase or force-push); for failing checks, find out why and fix them. "
                f"Run the checks, commit, then run `herdr-task ready {t['id']} --folder {shlex.quote(main)}` to push the fix.")
         # Handed the problem: someone is on it while its agent starts (on_it()).
         t["fix_requested"] = t["handed_at"] = now()

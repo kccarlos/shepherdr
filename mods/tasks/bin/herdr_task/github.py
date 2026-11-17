@@ -365,7 +365,7 @@ BAD = {"FAILURE", "ERROR", "CANCELLED", "TIMED_OUT", "ACTION_REQUIRED", "STARTUP
 PENDING = {"QUEUED", "IN_PROGRESS", "PENDING", "WAITING", "REQUESTED", "EXPECTED"}
 
 
-VIEW = "state,mergeable,headRefOid,mergeCommit,reviewDecision,mergeStateStatus"
+VIEW = "state,mergeable,headRefOid,mergeCommit,reviewDecision,mergeStateStatus,isCrossRepository"
 # SHEP-179: a token that may read a pull request but not its checks (a fine-grained one without Checks: read, as
 # the exe.dev GitHub integration's) gets GitHub's "Resource not accessible" for them: a permission, never a blip.
 DENIED = ("resource not accessible", "http 403", "must have", "not have permission", "insufficient scope")
@@ -401,6 +401,9 @@ def pr_view(task):
         v["statusCheckRollup"] = rows
         if not whole:
             v["checks_unknown"] = True
+    if not rest and not v.get("statusCheckRollup") and v.get("headRefOid"):
+        # FAC-115: no rollup row, yet a run of any event (push, workflow_dispatch) may sit on the head commit
+        v["statusCheckRollup"] = check_rows(repo, v["headRefOid"])[0]
     if v.get("statusCheckRollup"):
         v["statusCheckRollup"] = latest_checks(v["statusCheckRollup"])
     return v
@@ -491,6 +494,13 @@ DRIFTED = (" They failed after Herdr brought the branch up to date with its base
 UPDATE_CONFLICT = "Herdr couldn't bring it up to date with its base branch (a conflict?)"
 
 
+def main_red_hold(s, base):
+    """FAC-113: why merges (and update-branch) into `base` are held while its newest finished GitHub run is red
+    (the watch main_check keeps: ghnews.py), else None. Resumes by itself once main_check sees it green."""
+    red = ((s.data.get("main_watch") or {}).get(base) or {}).get("red")
+    return f"{base} is red since {red[:7]}: merges held until it's green." if red else None
+
+
 def pr_behind(task, repo, head):
     """FAC-98: how many of its base branch's commits the pull request's head lacks (GitHub's compare), or 0 when
     GitHub can't say."""
@@ -531,7 +541,9 @@ def synced_head(task, repo, theirs):
 
 
 # FAC-102 (WukongMind): a check GitHub cancelled or timed out, not superseded (latest_checks()), is CI, not code: no
-# test failed. Re-run once per head; stopped again, it needs the person, its likely cause the job's timeout.
+# test failed. Re-run once per head, but only a check cancelled from outside (runner lost, superseded). FAC-112: one that
+# ran to its own timeout-minutes (conclusion TIMED_OUT, or CANCELLED after about the workflow file's timeout-minutes:
+# GitHub reports a job's own timeout as cancelled) mostly hits it again, so it goes to the Assistant at once, no re-run.
 STOPPED = {"CANCELLED", "TIMED_OUT"}
 CI_STOPPED = 'CI "'  # such a reason's start
 RERUN_SHOW_MS = 10 * 60000  # a re-run whose jobs don't show by then won't
@@ -589,14 +601,22 @@ def job_timeout(folder, job):
     return None
 
 
-def stop_words(task, c):
-    """'CI "check" timed out after 46m: …', with the job's timeout when its workflow file (in the task's worktree) says."""
+def hit_limit(task, c):
+    """(hit its own time limit, minutes it ran, the job's timeout-minutes or None): TIMED_OUT, or it ran to within a
+    minute of the timeout-minutes its workflow file (in the task's worktree) gives it."""
     name = c.get("name") or c.get("context") or "a check"
     a, b = _ms(c.get("startedAt")), _ms(c.get("completedAt"))
     took = int(b - a) // 60000 if a and b and b >= a else None
     limit = job_timeout(task.get("worktree"), name)
-    reached = bool(limit and took is not None and took >= limit - 1)
-    timed = word(c) == "TIMED_OUT" or reached
+    reached = bool((limit or 360) and took is not None and took >= (limit or 360) - 1)  # GitHub's default is 360
+    return word(c) == "TIMED_OUT" or reached, took, limit
+
+
+def stop_words(task, c):
+    """'CI "check" timed out after 46m: …', with the job's timeout when its workflow file (in the task's worktree) says."""
+    name = c.get("name") or c.get("context") or "a check"
+    timed, took, limit = hit_limit(task, c)
+    reached = bool(timed and limit and took is not None and took >= limit - 1)
     text = f'CI "{name}" ' + ("timed out" if timed else "was cancelled")
     if took is not None:
         text += " after " + (f"{took // 60}h {took % 60}m" if took >= 60 else f"{took}m")
@@ -614,6 +634,15 @@ def ci_stopped(task, v, repo):
     def hold():
         for c in stopped:
             c.update(status="IN_PROGRESS", conclusion="")
+    slow = [c for c in stopped if hit_limit(task, c)[0]]
+    if slow:  # FAC-112: its own time limit, not a hiccup: a re-run would mostly take as long again
+        name, _, limit = (slow[0].get("name") or slow[0].get("context") or "a check"), 0, hit_limit(task, slow[0])[2]
+        return (f"{stop_words(task, slow[0])} Job \"{name}\" hit its {limit}-min limit: too long, not a hiccup, so Herdr "
+                "did not re-run it. A CI problem in " + ", ".join(f'"{c.get("name") or c.get("context")}"' for c in slow[:3]) +
+                ": add a fix task to speed up or split the job (or raise its timeout-minutes) instead of sending code back."
+                if limit else
+                f"{stop_words(task, slow[0])} Job \"{name}\" hit its time limit: too long, not a hiccup, so Herdr did not "
+                "re-run it. A CI problem: add a fix task to speed up or split the job instead of sending code back.")
     rr = pr.get("ci_rerun") or {}
     if rr.get("head") != head:
         if pr_pending(v):  # gh refuses a run still in progress: the one re-run waits for it
@@ -627,8 +656,8 @@ def ci_stopped(task, v, repo):
         return hold()  # the stop the re-run was asked for still shows
     names = ", ".join(f'"{c.get("name") or c.get("context")}"' for c in stopped[:3])
     again = "Herdr re-ran it once and it stopped again" if rr.get("ok") else "Herdr couldn't re-run it"
-    return (f"{stop_words(task, stopped[0])} {again}: a CI-infrastructure problem in {names} (likely the job's "
-            "timeout), not a code failure. Add a fix task for the CI job instead of sending code back.")
+    return (f"{stop_words(task, stopped[0])} {again}: a CI-infrastructure problem in {names}, "
+            "not a code failure. Add a fix task for the CI job instead of sending code back.")
 
 
 def task_problem(task, v, repo):
@@ -752,15 +781,22 @@ def runs_on_pr(text, base):
     return False
 
 
-def ci_expected(s, task):
-    """FAC-105: the task's base branch (as fetched here: its remote's copy, else the local branch) has a workflow
-    in .github/workflows that runs on a pull request to it. Cached per base commit."""
+def base_commit(s, task):
+    """The task's base branch as fetched here (its remote's copy, else the local branch): (commit, base) or (None, base)."""
     main, base = s.loc["folder"], task.get("base") or "main"
     for ref in (f"{remote_of(main, task.get('branch'))}/{base}", base):
         ok, sha, _ = git(main, "rev-parse", "--verify", "-q", f"{ref}^{{commit}}")
         if ok and sha:
-            break
-    else:
+            return sha, base
+    return None, base
+
+
+def ci_expected(s, task):
+    """FAC-105: the task's base branch (as fetched here: its remote's copy, else the local branch) has a workflow
+    in .github/workflows that runs on a pull request to it. Cached per base commit."""
+    main = s.loc["folder"]
+    sha, base = base_commit(s, task)
+    if not sha:
         return False
     key = f"{sha}:{base}"
     if key not in _CI_SEEN:
@@ -768,6 +804,50 @@ def ci_expected(s, task):
         _CI_SEEN[key] = ok and any(runs_on_pr(git(main, "show", f"{sha}:{n}")[1], base)
                                    for n in names.splitlines() if n.endswith((".yml", ".yaml")))
     return _CI_SEEN[key]
+
+
+STARTED_CI = "Started CI by hand: no run appeared"
+_DISPATCH = re.compile(r"(?m)^\s*(?:-\s*)?workflow_dispatch\b|^(?:on|true)\s*:.*\bworkflow_dispatch\b")
+
+
+def dispatch_file(s, task):
+    """FAC-115: a workflow file (name) on the base that has workflow_dispatch and runs on pull requests to it."""
+    main = s.loc["folder"]
+    sha, base = base_commit(s, task)
+    if not sha:
+        return None
+    ok, names, _ = git(main, "ls-tree", "--name-only", sha, ".github/workflows/")
+    for n in names.splitlines() if ok else []:
+        if n.endswith((".yml", ".yaml")):
+            text = git(main, "show", f"{sha}:{n}")[1]
+            if _DISPATCH.search(text) and runs_on_pr(text, base):
+                return os.path.basename(n)
+    return None
+
+
+def ci_dispatch(s, task, v):
+    """FAC-115: no run appeared on the head: start its workflow once per head commit (gh workflow run <file> --ref
+    <head branch>) when the repo has one with workflow_dispatch that runs on pull requests to the base and Actions
+    are enabled. Never for a fork's head. Returns STARTED_CI while that run is awaited, else None (FAC-105's wait)."""
+    pr, head = task.setdefault("pr", {}), v.get("headRefOid") or ""
+    done = pr.get("ci_dispatched") or {}
+    if done.get("head") == head:
+        return STARTED_CI if done.get("ok") and now() - (done.get("at") or 0) < UNKNOWN_CHECKS_MS else None
+    branch, repo = pr.get("branch") or task.get("branch") or "", pr_repo(task)
+    if not (head and branch and repo) or v.get("isCrossRepository"):
+        return None
+    ok, out, _ = gh("api", f"repos/{repo}/actions/permissions")
+    try:
+        enabled = ok and bool(json.loads(out).get("enabled"))
+    except (ValueError, AttributeError):
+        enabled = False
+    name = dispatch_file(s, task) if enabled else None
+    if not name:
+        return None
+    ok = gh("workflow", "run", name, "--repo", repo, "--ref", branch)[0]
+    pr["ci_dispatched"] = {"head": head, "file": name, "at": now(), "ok": ok}
+    s.dirty = True
+    return STARTED_CI if ok else None
 
 
 def ci_awaited(s, task, v):

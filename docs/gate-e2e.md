@@ -47,7 +47,7 @@ script), runs it for real and attaches the output as proof. Nothing here touches
 - **Moved head:** (a) after step 4, 5 or 6 the worker commits, then says `ready`: "a new commit to review" (`back_to_work`), `auto_merge`
   cleared, `accept` refuses, and the new head needs 2 new rounds, a new check and a new verdict. (b) With a reviewer/verifier open, the
   worker commits and the fake answers: refused ("moved on from <sha7>"), no record. (c) A commit with no `ready`: `accept` still refuses (gate keys on the exact SHA).
-  Also move `main` after step 6: `accept` sends the task back to its worker to rebase (fresh-base rule), `main` unmoved.
+  Also move `main` after step 6: `accept` sends the task back to its worker to merge main in (fresh-base rule), `main` unmoved.
 - **Failing check:** `check.sh` made to fail on the head: `checks[-1].exit` non-zero with the real output tail, the task does
   not reach the verifier, `accept` refuses with "checks failed". A fixed commit passes only on its own new record.
 - **Failing verdict:** `plan/verdict` = `fail`: `verdicts[-1].verdict` is `fail`, `accept` refuses, the worker is told

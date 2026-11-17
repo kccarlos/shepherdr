@@ -387,9 +387,10 @@ export interface Automation {
   next: string[]
   /** its latest runs, newest first: when (ms), and the task it added or why it couldn't */
   runs?: { at: number; task?: string; error?: string }[]
-  /** why it didn't run as planned (its last error's message), and which way: it didn't run, or didn't start its task */
+  /** why it didn't run as planned (its last error's message), and which way: it didn't run, didn't start its task, or
+   *  the folder it watches on another machine (--from) hasn't answered for a while ("Can't reach vm-b since 23:03") */
   error?: string
-  failed?: 'fire' | 'start'
+  failed?: 'fire' | 'start' | 'from'
   /** when it runs next (ms): none while paused or failed */
   nextAt?: number
   /** the task it added last (its id): a tap on its row opens it */
@@ -1352,6 +1353,8 @@ export type ServerEvent =
   | { type: 'pong' }
   /** an agent shows the person an artifact (herdr-artifact open): this screen, the one they used last, opens it */
   | { type: 'show'; artifact: string }
+  /** a wake word was heard on this screen's device (SHEP-240): it starts a voice call, or shows the one on */
+  | { type: 'voice' }
 
 /** how Shepherdr's last update of itself went (update.json in its folder, written by the supervisor) */
 export interface UpdateStatus {

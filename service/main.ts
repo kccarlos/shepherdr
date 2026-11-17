@@ -7,13 +7,13 @@
 //   SHEPHERDR_WEB=on|off           serve the web app and share it on the tailnet (default on)
 // Serve from (service/host.ts): one machine serves the web app and holds the shared data; on the others the service
 // reads and writes it there, keeps their settings in step (service/sync.ts) and doesn't share /shepherdr.
-import { refusedPage } from "./refused.ts";
+import { refusedPage, NO_OWNERS } from "./refused.ts";
 import { existsSync, readFileSync, writeFileSync, mkdirSync, statSync, rmSync, watchFile } from "node:fs";
 import { join, normalize } from "node:path";
 import { randomBytes } from "node:crypto";
 import { DATA, SOCK, TOKEN, PORT, HOME, ensureData, settingsFile, where } from "./paths.ts";
 import { holdLock } from "./lock.ts";
-import { gate, localCaller, type Gate } from "./auth.ts";
+import { gate, localCaller, ownersIn, OWNERS_UNSET, type Gate } from "./auth.ts";
 import { refusedWhy, trustedPeer } from "./peer.ts";
 import { whoami, share, served, unshare, restoreShare, httpsPort, webLink, webOrigin, deviceOf, forwardedFrom, HTTPS_PORT_FILE, type Me } from "./tailscale.ts";
 import { qrFile } from "./qr.ts";
@@ -120,7 +120,10 @@ await Promise.race([host.start(), Bun.sleep(10_000)]);
 const store = new Store(hub, host);
 new Sync(hub, host).start();
 let me: Me | null = await whoami();
-const g: Gate = { owner: me?.login ?? null, dns: me?.dns ?? null, port: PORT, token };
+// service.owners (auth.ts): who may open the board beside the owner, or instead of one on a tagged machine; read with
+// the rest of the tailnet, and again whenever the settings file changes
+const owners = () => { try { return ownersIn(JSON.parse(readFileSync(settingsFile(), "utf8"))); } catch { return []; } };
+const g: Gate = { owner: me?.login || null, dns: me?.dns ?? null, port: PORT, token, tagged: !!me?.tagged, owners: owners() };
 // the 403 reason last logged for a Mac that can't see who connected (peer.ts refusedWhy), said once
 let saidPeer = "";
 // the tailnet HTTPS port the web app is shared on (tailscale.ts httpsPort: 443 unless this machine set another),
@@ -238,7 +241,7 @@ const readDefaults = async () => {
   } catch {}
 };
 // Settings › Web: what the service last said of the web app (tailnet() below), its QR code as a picture
-let webNow: { on: boolean; link: string | null; why: string | null; qr: string | null; serve?: any } | null = null;
+let webNow: { on: boolean; link: string | null; why: string | null; qr: string | null; serve?: any; owners?: string[]; tagged?: boolean } | null = null;
 // Settings › Secrets, as the window's: each kept secret with where it is, and each agent's waiting ask with its name and
 // its narrowest scope (its space, else its machine), which Give it fills in
 function secretsPage(spaces: any[]) {
@@ -352,7 +355,9 @@ let wasOn: boolean | null = null;
 let moving: { to: string; at: number; error?: string } | null = null;
 async function tailnet() {
   me = await whoami();
-  g.owner = me?.login ?? null;
+  g.owner = me?.login || null;
+  g.tagged = !!me?.tagged;
+  g.owners = owners();
   g.dns = me?.dns ?? null;
   g.httpsPort = hp = httpsPort();
   const on = webOn(), serving = host.serving();
@@ -365,8 +370,10 @@ async function tailnet() {
   let shareWhy: string | null = null;
   if (me && on && serving) {
     const s = await served(me.dns);
-    if (s.funnel) { why = "Funnel is on for this machine: the web app stays off until it's off"; g.owner = null; }
+    if (s.funnel) { why = "Funnel is on for this machine: the web app stays off until it's off"; g.owner = null; g.tagged = false; }
     else why = shareWhy = await share(me.dns, PORT, hp);
+    // shared, but a tagged machine with no service.owners lets nobody in: the Web page says how to fix it
+    if (!why && g.tagged && !g.owners?.length) why = OWNERS_UNSET;
   } else if (me && (!on || !serving) && wasOn !== false) {
     await unshare(me.dns, PORT);
     // moved away: what the move here set aside is shared again (shepherdr web serve-from --take-link)
@@ -377,11 +384,11 @@ async function tailnet() {
   let qr: string | null = null;
   try { if (link && on && !why) qr = qrFile(existsSync(join(APP_DATA, "..")) ? APP_DATA : DATA, link); } catch {}
   const serve = serveNow();
-  writeFileSync(join(DATA, "web.json"), JSON.stringify({ on, link, qr, why, share_error: shareWhy, https_port: hp, serve, at: Date.now() }) + "\n");
+  writeFileSync(join(DATA, "web.json"), JSON.stringify({ on, link, qr, why, share_error: shareWhy, owners_unset: why === OWNERS_UNSET, owners: g.owners ?? [], tagged: !!me?.tagged, https_port: hp, serve, at: Date.now() }) + "\n");
   let picture: string | null = null;
   try { if (qr) picture = `data:image/svg+xml;base64,${Buffer.from(readFileSync(qr)).toString("base64")}`; } catch {}
   const was = JSON.stringify(webNow);
-  webNow = { on, link, why, qr: picture, serve };
+  webNow = { on, link, why, qr: picture, serve, owners: g.owners ?? [], tagged: !!me?.tagged };
   if (JSON.stringify(webNow) !== was) model.rebuild();
   if (why) console.error(why);
 }
@@ -709,7 +716,9 @@ const server = Bun.serve<{ who: string }>({
     if (!pass.ok) {
       const why = refusedWhy(pass.why);
       if (why !== pass.why && why !== saidPeer) console.error(`web: ${(saidPeer = why)}`);
-      return pass.status === 403 && viaTailnet && req.method === "GET" && (req.headers.get("accept") ?? "").includes("text/html") ? refusedPage(pass.status, why, WEB) : new Response(why, { status: pass.status });
+      const page = viaTailnet && req.method === "GET" && (req.headers.get("accept") ?? "").includes("text/html");
+      if (page && pass.status === 503 && pass.why === OWNERS_UNSET) return refusedPage(pass.status, why, WEB, NO_OWNERS);
+      return pass.status === 403 && page ? refusedPage(pass.status, why, WEB) : new Response(why, { status: pass.status });
     }
     if (path === "/api/browser") {
       // a task's browser (2.1's Browser panel): this machine's tasks

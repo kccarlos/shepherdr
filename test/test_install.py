@@ -258,6 +258,46 @@ class Install(unittest.TestCase):
         self.assertNotEqual(p.returncode, 0)
         self.assertIn("65535", p.stdout + p.stderr)
 
+    def test_web_owners(self):
+        """shepherdr web owners (FAC-114): the service.owners setting in the settings file's everywhere, the rest of the
+        file kept; several logins at once; a bad login refused; none clears it. Run in-process on a scratch root (the
+        command itself writes the real home's settings)."""
+        import argparse
+        import contextlib
+        import io
+        from importlib.machinery import SourceFileLoader
+        sh = SourceFileLoader("shepherdr_cli", SHEPHERDR).load_module()
+        sh.real_home = lambda: self.root
+        path = sh.where_for(self.root).path("settings")
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w") as f:
+            json.dump({"version": 1, "everywhere": {"tasks": {"review": "on"}}}, f)
+
+        def web(*words, json_out=True):
+            a = argparse.Namespace(action="owners", machine=words[0] if words else None, more=list(words[1:]), json=json_out)
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                sh.cmd_web(a)
+            return out.getvalue()
+
+        self.assertEqual(json.loads(web())["owners"], [])
+        self.assertEqual(json.loads(web("me@example.com"))["owners"], ["me@example.com"])
+        d = json.load(open(path))
+        self.assertEqual(d["everywhere"]["service"]["owners"], ["me@example.com"])
+        self.assertEqual(d["everywhere"]["tasks"], {"review": "on"}, "the rest of the file stays")
+        web("me@example.com,two@github", "me@example.com")
+        self.assertEqual(json.load(open(path))["everywhere"]["service"]["owners"], ["me@example.com", "two@github"])
+        self.assertIn("me@example.com, two@github", web(json_out=False))
+        with self.assertRaises(sh.Stop):
+            web("not a login")
+        with self.assertRaises(sh.Stop):
+            web("tagged-devices")
+        self.assertEqual(json.load(open(path))["everywhere"]["service"]["owners"], ["me@example.com", "two@github"], "a refused one changes nothing")
+        web("none")
+        d = json.load(open(path))
+        self.assertNotIn("service", d["everywhere"])
+        self.assertIn("No service.owners set", web(json_out=False))
+
     def test_update_retires_what_shepherdr_no_longer_ships(self):
         """#895: an older release shipped a mod and a helper that the next one drops. The update removes the mod's folder
         (its shared copy of lib/ui.js too, which doctor rejects) and the helper; what the person changed in them is in

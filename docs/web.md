@@ -21,6 +21,15 @@ another machine uses that machine's.
 Who gets in: only the tailnet login that owns this machine (Tailscale's own identity header, checked against the
 connection it came on). A page from anywhere else can't change anything: writes need the app's own origin.
 
+A tagged machine (Tailscale tags such as `tag:mac`, e.g. for Tailscale SSH between your Macs) has no user owner, so it
+lets nobody in until you name who may: `shepherdr web owners you@example.com` on that machine (several: separate them
+with spaces; `none` clears it; alone it shows them). Until then the board answers 503 with that command, and Settings →
+Web and `shepherdr doctor` say so. It is the `service.owners` setting (Everywhere, in the settings file, so the window
+pushes it to your other machines); the service reads it within seconds, no restart. On an untagged machine the logins
+named there get in beside the owner, never instead. Settings → Web shows it under "Who may open it"; it is set only on
+the machine, never from a page. Tagged devices' own requests carry no login from Tailscale, so open the board from an
+untagged device signed in as you (your phone, a laptop).
+
 ## How it runs
 
 - One always-on service, `~/.local/share/shepherdr/service/main.ts` on Bun, kept running by `systemctl --user`

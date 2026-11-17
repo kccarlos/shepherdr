@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { gate, localCaller, type Gate } from "./auth.ts";
+import { allowed, gate, localCaller, ownersIn, OWNERS_COMMAND, OWNERS_SETTING, type Gate } from "./auth.ts";
 
 const g: Gate = { owner: "me@example.com", dns: "box.tailnet.example", port: 7788, token: "secret-token" };
 const tailnet = (init: { method?: string; headers?: Record<string, string> } = {}) =>
@@ -151,4 +151,64 @@ describe("health's id only to this machine's callers (GitHub #635)", () => {
     expect(localCaller(tailnet({ headers: { "tailscale-user-login": "" } }), 7788)).toBe(false));
   test("not a browser page", () => expect(localCaller(local({ origin: "http://127.0.0.1:7788" }), 7788)).toBe(false));
   test("not by another port", () => expect(localCaller(local(), 7790)).toBe(false));
+});
+
+// A tagged Tailscale machine (FAC-114): no user owner, so only service.owners gets in, and with none set nobody does.
+describe("a tagged machine (FAC-114)", () => {
+  const tg: Gate = { ...g, owner: null, tagged: true, owners: ["me@example.com"] };
+  const as = (login: string, init: { method?: string; headers?: Record<string, string> } = {}) =>
+    tailnet({ ...init, headers: { "tailscale-user-login": login, ...init.headers } });
+  test("a configured owner gets in", () => expect(gate(as("me@example.com"), tg, false, true)).toMatchObject({ ok: true, who: "me@example.com", via: "tailnet" }));
+  test("one of several configured owners gets in", () =>
+    expect(gate(as("two@example.com"), { ...tg, owners: ["me@example.com", "two@example.com"] }, false, true)).toMatchObject({ ok: true }));
+  test("another login is refused", () => expect(gate(as("other@example.com"), tg, false, true)).toMatchObject({ ok: false, status: 403 }));
+  test("the tagged placeholders never get in", () => {
+    for (const p of ["tagged-devices", "box.tailnet.example", ""]) expect(gate(as(p), tg, false, true)).toMatchObject({ ok: false });
+  });
+  test("a stale machine owner is ignored once tagged", () =>
+    expect(gate(as("old@example.com"), { ...tg, owner: "old@example.com" }, false, true)).toMatchObject({ ok: false, status: 403 }));
+  test("nothing configured: nobody gets in, with a 503 that names the setting and the command", () => {
+    for (const owners of [[], undefined, ["", "  "]]) {
+      const r = gate(as("me@example.com"), { ...tg, owners }, false, true);
+      expect(r).toMatchObject({ ok: false, status: 503 });
+      expect((r as any).why).toContain(OWNERS_SETTING);
+      expect((r as any).why).toContain(OWNERS_COMMAND);
+    }
+  });
+  test("the other checks still hold for a configured owner", () => {
+    expect(gate(as("me@example.com"), tg, false, false)).toMatchObject({ ok: false, status: 403, why: "not from Tailscale" });
+    expect(gate(as("me@example.com"), { ...tg, owners: [] }, false, false)).toMatchObject({ ok: false, status: 403, why: "not from Tailscale" });
+    expect(gate(as("me@example.com", { headers: { host: "evil.example" } }), tg, false, true)).toMatchObject({ ok: false, status: 421 });
+    expect(gate(as("me@example.com", { method: "POST", headers: { origin: "https://evil.example", "x-shepherdr": "1" } }), tg, false, true)).toMatchObject({ ok: false, status: 403 });
+    expect(gate(as("me@example.com", { method: "POST", headers: { origin: "https://box.tailnet.example", "x-shepherdr": "1" } }), tg, false, true)).toMatchObject({ ok: true });
+    expect(gate(as("me@example.com"), { ...tg, dns: null }, false, true)).toMatchObject({ ok: false, status: 503 });
+  });
+  test("closed (Funnel on: no owner, not tagged) stays shut whatever owners says", () =>
+    expect(gate(as("me@example.com"), { ...tg, tagged: false }, false, true)).toMatchObject({ ok: false, status: 503, why: "Tailscale isn't running here" }));
+  test("a request without the login header is still the local token's", () =>
+    expect(gate(new Request("http://box.tailnet.example/api/me", { headers: { host: "box.tailnet.example" } }), tg, false, true)).toMatchObject({ ok: false, status: 421 }));
+});
+
+describe("an untagged machine with service.owners (FAC-114)", () => {
+  test("the owner still gets in, and the named logins beside them", () => {
+    const ug: Gate = { ...g, owners: ["two@example.com"] };
+    expect(gate(tailnet(), ug, false, true)).toMatchObject({ ok: true, who: "me@example.com" });
+    expect(gate(tailnet({ headers: { "tailscale-user-login": "two@example.com" } }), ug, false, true)).toMatchObject({ ok: true, who: "two@example.com" });
+    expect(gate(tailnet({ headers: { "tailscale-user-login": "other@example.com" } }), ug, false, true)).toMatchObject({ ok: false, status: 403 });
+  });
+  test("with none set, only the owner, as before", () => {
+    expect(allowed(g)).toEqual(["me@example.com"]);
+    expect(allowed({ ...g, owner: null })).toEqual([]);
+    expect(allowed({ ...g, owner: "me@example.com", tagged: true })).toEqual([]);
+  });
+});
+
+describe("service.owners in the settings file", () => {
+  test("a list, a string, commas and spaces; blanks and repeats dropped", () => {
+    expect(ownersIn({ everywhere: { service: { owners: ["a@x.com", " b@x.com ", "", "a@x.com"] } } })).toEqual(["a@x.com", "b@x.com"]);
+    expect(ownersIn({ everywhere: { service: { owners: "a@x.com, b@x.com c@x.com" } } })).toEqual(["a@x.com", "b@x.com", "c@x.com"]);
+  });
+  test("missing or junk is none", () => {
+    for (const s of [null, {}, { everywhere: {} }, { everywhere: { service: { owners: 3 } } }, { everywhere: { service: { owners: [1, null] } } }]) expect(ownersIn(s)).toEqual([]);
+  });
 });

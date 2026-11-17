@@ -272,7 +272,7 @@ watchdog (no model): the tick restarts a stuck Assistant with a handoff, or aler
 3. **Shepherdr fixes** (notes 13–16, 20, 22, 24–26):
    - agy workers start with permissions skipped by default for unattended spaces (done for WukongMind by setting);
    - the gate tells the worker each verdict ("round 3 passed, 1 more needed") and starts the next round itself; a reviewer that ended with a verdict exits cleanly;
-   - a reviewer that dies without a verdict does not use a round, and falls back to another reviewer;
+   - a reviewer that dies without a verdict does not use a round, and falls back to another reviewer whose quota has room (three tries on different CLIs; all out of quota: it waits for the soonest reset, FAC-101);
    - the sandboxed agy reviewer gets agy's sign-in, or the unsandboxed flag becomes a setting;
    - queued messages reach a busy worker, and "waiting on a background job" is its own status, not Needs you;
    - a simulator lease per task from the fixed pool, like the device lock;
